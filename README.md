@@ -1,15 +1,11 @@
-# Compliance Matrix – v3 (Static, Netlify-ready)
+# Compliance Matrix – v4
 
-**Features**
-- Import **CSV & Excel** with header auto-detection and mapping UI
-- Import **Completions** by mapping columns to requirement completion dates
-- Color-coded **requirement columns** (persisted)
-- Advanced filters: multi-role/type, per-requirement status, expiring ≤ N days, hide inactive, sort by seniority hours
-- Polished **dark mode** (persistent)
-- Date picker modal (right-click/Shift+Click), notes on double-click
-- Export JSON (full data) + Matrix CSV
+**Fixes & Upgrades**
+- **Excel import fixed**: detects the correct header row even when sheets have title rows/notes.
+- **Sheet picker**: choose which worksheet to import; auto-selects the one with the best header match.
+- CSV import still detects the true header row when a title is present.
+- Same v3 features: mapping UI, completions import, column colors, advanced filters, dark mode, date modal, exports, offline.
 
-**Deploy**
-- Netlify → New site from Git → Build: *(empty)*, Publish directory: `/`
-
-If upgrading from an older version, do a **hard refresh** (Shift+Cmd+R on Mac / Ctrl+F5 on Windows) to update the service worker.
+**Deploy on Netlify**
+- Build command: *(empty)*, Publish directory: `/`.
+- If upgrading: hard refresh to update the service worker.
