@@ -1,9 +1,12 @@
-# Compliance Matrix – v4.1
+# Compliance Matrix – v4.2
 
-**Why your import showed “0 processed”**
-- The app now **validates mappings** and shows how many rows are eligible **before** import.
-- Added a **Name Format** selector (Auto / “Last, First” / “First Last”). If your Excel uses “Payroll Name”, pick the right format.
-- Clear warnings: missing name columns, unmapped fields, or no requirement columns for completions.
+**What’s new (to fix 0-row imports):**
+- **Presets:** One-click mapping for your two files:
+  - *Maplewood Seniority (CSV)*
+  - *Education Tracker — Name sheet (XLSX)*
+- **Name Format:** Auto / Last, First / First Last (affects Payroll/Employee Name parsing).
+- **Dry Run:** Shows how many rows will be added/updated and lists first skipped reasons.
+- **Post-Import Result:** Toast shows added/updated counts; also displays total employees now in the DB.
+- **Clear All Data:** For quick re-tests.
 
-**Deploy**
-- Netlify: build command empty, publish `/`. Hard refresh after updates.
+Deploy: Netlify build command = empty; publish dir = `.`

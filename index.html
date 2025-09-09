@@ -34,8 +34,14 @@
       <h1 class="text-2xl font-bold">Compliance Matrix</h1>
       <div class="flex gap-2">
         <button @click="showImportModal = true" class="btn"><i data-feather="upload" class="w-4 h-4"></i><span>Import</span></button>
+        <button @click="exportData" class="btn"><i data-feather="download" class="w-4 h-4"></i><span>Export</span></button>
+        <button @click="clearAllData" class="btn"><i data-feather="trash-2" class="w-4 h-4"></i><span>Clear</span></button>
         <button @click="toggleDarkMode()" class="btn"><i :data-feather="darkMode ? 'sun' : 'moon'"></i></button>
       </div>
+    </div>
+
+    <div class="mb-3 text-sm" :style="'color:var(--muted)'">
+      <span>Total employees: </span><strong x-text="employees.length"></strong>
     </div>
 
     <div class="card rounded-lg shadow overflow-hidden">
@@ -52,7 +58,7 @@
             </tr>
           </thead>
           <tbody class="divide-y virtual-scroll">
-            <template x-for="emp in filteredEmployees" :key="emp.id">
+            <template x-for="emp in employees" :key="emp.id">
               <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
                 <td class="sticky-col px-6 py-4">
                   <div class="text-sm font-semibold" x-text="`${emp.firstName} ${emp.lastName}`"></div>
@@ -77,9 +83,14 @@
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
       <div @click="showImportModal=false" class="fixed inset-0 bg-black/40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
+      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
         <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <h3 class="text-lg font-semibold mb-3">Import Data</h3>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold mb-3">Import Data</h3>
+            <div class="text-xs" :style="'color:var(--muted)'">
+              <span x-text="'Headers: ' + importHeaders.length + ' • Rows: ' + importData.length + ' • Eligible: ' + previewEligible"></span>
+            </div>
+          </div>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
@@ -116,7 +127,15 @@
               <select x-model="importSheetName" @change="selectExcelSheet(importSheetName)" class="border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)">
                 <template x-for="s in importSheets" :key="s"><option :value="s" x-text="s"></option></template>
               </select>
-              <span class="text-xs" style="color:var(--muted)" x-text="'Headers: ' + importHeaders.length + ' • Rows: ' + importData.length"></span>
+            </div>
+          </div>
+
+          <!-- Preset mapping -->
+          <div class="mb-3">
+            <label class="block text-sm font-semibold">Quick Map (presets)</label>
+            <div class="flex flex-wrap gap-2 mt-1">
+              <button class="btn" @click="applyPreset('maplewood_csv')">Maplewood Seniority (CSV)</button>
+              <button class="btn" @click="applyPreset('education_name')">Education Tracker — Name sheet</button>
             </div>
           </div>
 
@@ -136,9 +155,9 @@
               <h4 class="font-semibold mb-2">Field Mapping — Employees</h4>
               <template x-for="(label, key) in fieldLabels" :key="key">
                 <div class="flex items-center gap-2 mb-2">
-                  <label class="w-44 text-sm" x-text="label"></label>
+                  <label class="w-52 text-sm" x-text="label"></label>
                   <select class="flex-1 border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)"
-                          x-model="columnMap[key]">
+                          x-model="columnMap[key]" @change="updateEligibilityPreview()">
                     <option value="">-- Not Mapped --</option>
                     <template x-for="h in importHeaders" :key="h"><option :value="h" x-text="h"></option></template>
                   </select>
@@ -151,7 +170,7 @@
               <div class="max-h-64 overflow-auto pr-1">
                 <template x-for="r in requirements" :key="r.id">
                   <div class="flex items-center gap-2 mb-2">
-                    <label class="w-44 text-sm truncate" :title="r.name" x-text="r.name"></label>
+                    <label class="w-52 text-sm truncate" :title="r.name" x-text="r.name"></label>
                     <select class="flex-1 border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)"
                             x-model="completionMap[r.id]">
                       <option value="">-- Not Mapped --</option>
@@ -167,8 +186,8 @@
           <div x-show="importData.length" class="mt-4">
             <div class="flex items-center justify-between">
               <label class="block text-sm font-semibold">Preview (first 6 rows)</label>
-              <div class="text-xs" :style="'color:var(--muted)'">
-                <span x-text="previewEligible"></span> eligible rows
+              <div class="space-x-2">
+                <button class="btn" @click="dryRun()">Dry Run</button>
               </div>
             </div>
             <div class="overflow-auto max-h-60 border rounded-md" style="border-color:var(--line)">
@@ -191,7 +210,7 @@
             </div>
           </div>
 
-          <!-- Warnings -->
+          <!-- Warnings / Errors -->
           <template x-if="importWarning">
             <div class="mt-3 p-3 rounded border" style="border-color:var(--warn); color:var(--warn)">
               <div class="font-semibold">Heads up</div>
@@ -202,6 +221,18 @@
             <div class="mt-3 p-3 rounded border" style="border-color:var(--danger); color:var(--danger)">
               <div class="font-semibold">Import blocked</div>
               <div class="text-sm" x-text="importError"></div>
+            </div>
+          </template>
+          <template x-if="dryRunDetails.length">
+            <div class="mt-3 p-3 rounded border" style="border-color:var(--line)">
+              <div class="font-semibold mb-1">Dry Run result</div>
+              <div class="text-sm" x-text="'Would add: ' + dryRunSummary.added + ', update: ' + dryRunSummary.updated + ', skip: ' + dryRunSummary.skipped"></div>
+              <ul class="list-disc ml-5 mt-2 text-sm">
+                <template x-for="(d, idx) in dryRunDetails.slice(0,8)" :key="idx">
+                  <li x-text="d"></li>
+                </template>
+                <template x-if="dryRunDetails.length>8"><li>…and more</li></template>
+              </ul>
             </div>
           </template>
         </div>
@@ -221,10 +252,10 @@
     document.addEventListener('alpine:init', () => {
       Alpine.data('app', () => ({
         darkMode:false, showImportModal:false,
-        db:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), filteredEmployees:[], visibleRequirements:[],
+        db:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
         // Import UI state
         importType:'excel', importMode:'employees', importData:[], importHeaders:[], importSheets:[], importSheetName:'', importWarning:'', importError:'',
-        nameFormat:'auto', previewEligible:0,
+        nameFormat:'auto', previewEligible:0, dryRunDetails:[], dryRunSummary:{added:0,updated:0,skipped:0},
         fieldLabels:{ firstName:'First Name', lastName:'Last Name', payrollName:'Payroll/Employee Name', role:'Role / Job Title', employmentType:'Employment Type / Class', employeeId:'Employee ID / Position ID', status:'Position Status', seniorityHours:'Seniority Hours' },
         columnMap:{ firstName:'', lastName:'', payrollName:'', role:'', employmentType:'', employeeId:'', status:'', seniorityHours:'' },
         completionMap:{},
@@ -241,7 +272,7 @@
 
         initDB(){
           this.db = new Dexie('ComplianceMatrixDB');
-          this.db.version(6).stores({
+          this.db.version(7).stores({
             employees:'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
             requirements:'id, name, defaultExpiryDays, color',
             employeeRequirements:'id, [employeeId+requirementId], status, completedOn, expiresOn, notes',
@@ -262,6 +293,10 @@
           });
         },
 
+        async clearAllData(){
+          await this.db.delete(); this.initDB(); await this.loadData(); this.notify('All data cleared');
+        },
+
         async loadData(){
           this.employees = await this.db.employees.toArray();
           this.requirements = await this.db.requirements.toArray();
@@ -272,21 +307,20 @@
             this.erMap.get(er.employeeId).set(er.requirementId, er);
           }
           this.visibleRequirements = [...this.requirements];
-          this.filteredEmployees = [...this.employees];
         },
 
-        // Status helpers (minimal for demo)
+        // Status helpers (minimal)
         getER(eId,rId){ return this.erMap.get(eId)?.get(rId) || null; },
         getStatus(eId,rId){ const er=this.getER(eId,rId); if(!er||er.status==='NotCompleted') return 'NotCompleted'; if(er.expiresOn){ const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000); if(d<=0) return 'Expired'; } return 'Completed'; },
         async toggleStatus(emp, req){ const er=this.getER(emp.id, req.id); if(!er){ await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'Completed',completedOn:new Date().toISOString().slice(0,10)}); } else { await this.db.employeeRequirements.update(er.id,{status: er.status==='Completed'?'NotCompleted':'Completed'}); } await this.loadData(); },
 
         // UI helpers
-        notify(msg,color='var(--success)'){ this.toastMessage=msg; this.toastColor=color; this.showToast=true; setTimeout(()=>this.showToast=false,2500); },
+        notify(msg,color='var(--success)'){ this.toastMessage=msg; this.toastColor=color; this.showToast=true; setTimeout(()=>this.showToast=false,3000); },
         async toggleDarkMode(){ this.darkMode=!this.darkMode; document.documentElement.classList.toggle('dark', this.darkMode); const prev=await this.db.settings.get('app')||{id:'app'}; await this.db.settings.put({...prev, darkMode:this.darkMode}); },
 
         // ---------- Import ----------
         handleFileUpload(event){
-          this.importError=''; this.importWarning=''; this.importData=[]; this.importHeaders=[]; this.importSheets=[]; this.importSheetName=''; this.previewEligible=0;
+          this.importError=''; this.importWarning=''; this.importData=[]; this.importHeaders=[]; this.importSheets=[]; this.importSheetName=''; this.previewEligible=0; this.dryRunDetails=[];
           const file = event.target.files[0]; if(!file) return;
           if (this.importType === 'csv') {
             file.text().then(text => {
@@ -294,8 +328,7 @@
               const body = this.stripTitleLines(lines);
               const res = Papa.parse(body, { header:true, skipEmptyLines:true });
               this.importData = res.data; this.importHeaders = res.meta.fields || [];
-              this.autofillMappings();
-              this.updateEligibilityPreview();
+              this.autofillMappings(); this.updateEligibilityPreview();
               if (!this.importHeaders.length) this.importError = 'No headers detected — check the CSV file.';
             });
           } else {
@@ -311,12 +344,9 @@
                   if (score > best.score) best = { name, score, headers, rows };
                 }
                 this.importSheetName = best.name; this.importHeaders = best.headers; this.importData = best.rows;
-                this.autofillMappings();
-                this.updateEligibilityPreview();
+                this.autofillMappings(); this.updateEligibilityPreview();
                 if (!this.importHeaders.length) this.importError = 'Could not detect headers in Excel sheet. Try selecting a different worksheet above.';
-              }catch(err){
-                console.error(err); this.importError = 'Failed to read Excel file. Ensure it is .xlsx or .xls and not password protected.';
-              }
+              }catch(err){ console.error(err); this.importError = 'Failed to read Excel file. Ensure it is .xlsx or .xls and not password protected.'; }
             };
             reader.readAsArrayBuffer(file);
           }
@@ -333,10 +363,9 @@
           reader.readAsArrayBuffer(file);
         },
         stripTitleLines(lines){
-          // Keep from best header row onward
           let bestIdx=0, bestScore=-1;
           for(let i=0;i<Math.min(30,lines.length);i++){ const cols=(lines[i]||'').split(',').map(s=>s.replace(/\"/g,'').trim()); const sc=this.scoreHeaderRow(cols); if(sc>bestScore){bestScore=sc;bestIdx=i;} }
-          return lines.slice(bestIdx).join('\n');
+          return lines.slice(bestIdx).join('\\n');
         },
         extractFromSheet(sheet){
           const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows:false });
@@ -356,21 +385,47 @@
           return { headers, rows, score: bestScore };
         },
         scoreHeaderRow(cols){
-          const patterns=[/first/i,/last/i,/employee\s*name/i,/payroll\s*name/i,/job\s*title|role/i,/employment\s*type|class/i,/position\s*id|employee\s*id/i,/status/i,/seniority|total.*hours/i];
+          const patterns=[/first/i,/last/i,/employee\\s*name/i,/payroll\\s*name/i,/job\\s*title|role/i,/employment\\s*type|class/i,/position\\s*id|employee\\s*id/i,/status/i,/seniority|total.*hours/i];
           let score=0; for(const c of cols){ const s=String(c||''); for(const p of patterns) if(p.test(s)) score++; } return score;
         },
         autofillMappings(){
           const H = (this.importHeaders||[]).map(h=>String(h));
           const find = (regexArr) => H.find(h => regexArr.some(r => r.test(h)));
           const setIf = (key, regexArr) => { const h=find(regexArr); if(h && !this.columnMap[key]) this.columnMap[key]=h; };
-          setIf('firstName', [/^first\b/i]);
-          setIf('lastName', [/^last\b/i]);
-          setIf('payrollName', [/payroll\s*name/i, /employee\s*name/i, /^name$/i]);
-          setIf('role', [/job\s*title/i, /^role$/i]);
-          setIf('employmentType', [/employment\s*type/i, /class\s*code/i]);
-          setIf('employeeId', [/position\s*id/i, /employee\s*id/i, /file\s*#/i]);
-          setIf('status', [/status/i]);
+          setIf('firstName', [/^first\\b/i]);
+          setIf('lastName', [/^last\\b/i]);
+          setIf('payrollName', [/payroll\\s*name/i, /employee\\s*name/i, /^name$/i]);
+          setIf('role', [/job\\s*title/i, /^role$/i]);
+          setIf('employmentType', [/employment\\s*type/i, /class\\s*code/i]);
+          setIf('employeeId', [/position\\s*id/i, /employee\\s*id/i, /file\\s*#/i]);
+          setIf('status', [/status/i, /active\\?/i]);
           setIf('seniorityHours', [/seniority/i, /total.*hours/i]);
+        },
+
+        // Presets
+        applyPreset(key){
+          if (key==='maplewood_csv'){
+            this.importType='csv';
+            this.columnMap = {
+              firstName:'', lastName:'',
+              payrollName:'Payroll Name',
+              role:'Job Title Description',
+              employmentType:'Job Class Code',
+              employeeId:'Position ID',
+              status:'Position Status',
+              seniorityHours:'Total Seniority Hours as at June 30, 2025'
+            };
+            this.nameFormat='last_first';
+          } else if (key==='education_name'){
+            this.importType='excel';
+            this.columnMap = {
+              firstName:'', lastName:'',
+              payrollName:'Employee Name',
+              role:'', employmentType:'', employeeId:'EE#', status:'Active?', seniorityHours:''
+            };
+            this.nameFormat='first_last';
+          }
+          this.updateEligibilityPreview();
         },
 
         // Eligibility & parsing
@@ -383,7 +438,7 @@
             if (this.nameFormat==='last_first' || (this.nameFormat==='auto' && s.includes(','))){
               const parts = s.split(','); last = (parts[0]||'').trim(); first = (parts.slice(1).join(',')||'').trim();
             } else {
-              const parts = s.split(/\s+/);
+              const parts = s.split(/\\s+/);
               if (parts.length>=2){ first = parts[0].trim(); last = parts.slice(1).join(' ').trim(); }
             }
           }
@@ -397,8 +452,25 @@
           }
           this.previewEligible = eligible;
           if (eligible===0) this.importWarning = 'No rows have usable names. Map First/Last or Payroll Name, and set Name Format if needed.';
-          else if (missing>0) this.importWarning = `${missing} rows missing names will be skipped.`;
+          else if (missing>0) this.importWarning = `${missing} row(s) missing names will be skipped.`;
           else this.importWarning = '';
+        },
+
+        async dryRun(){
+          // Simulate import and list first skipped reasons
+          const existing = await this.db.employees.toArray();
+          const byEmpId = new Map(existing.filter(e=>e.employeeId).map(e=>[String(e.employeeId), e]));
+          const keyOf = (e) => e.employeeId || `${e.firstName}|${e.lastName}|${e.role}`;
+          let added=0, updated=0, skipped=0; const details=[];
+          for (const row of this.importData){
+            const a = this.analyzeRow(row);
+            if (!a.first || !a.last){ skipped++; if(details.length<15) details.push('Skipped row: missing name'); continue; }
+            const emp = { id:'-', firstName:a.first, lastName:a.last, role:a.role||'Other', employmentType:a.type||'FT', employeeId:a.empId||'', status:/inactive|leave/i.test(a.status||'')?'Inactive':'Active' };
+            const match = emp.employeeId ? byEmpId.get(String(emp.employeeId)) : existing.find(e=>keyOf(e)===keyOf(emp));
+            if (match) updated++; else added++;
+          }
+          this.dryRunSummary = { added, updated, skipped };
+          this.dryRunDetails = details;
         },
 
         async processImport(){
@@ -410,27 +482,29 @@
             }
             const res = await this.importEmployees();
             this.showImportModal=false;
-            this.notify(`Employees: ${res.added} added, ${res.updated} updated`);
+            await this.loadData();
+            this.notify(`Employees: ${res.added} added, ${res.updated} updated • Total now: ${this.employees.length}`);
           } else {
             const hasAny = Object.values(this.completionMap).some(Boolean);
             if (!hasAny){ this.importError='Select at least one requirement column on the right to import completions.'; return; }
             const cnt = await this.importCompletions();
             this.showImportModal=false;
+            await this.loadData();
             this.notify(`Completions updated: ${cnt}`);
           }
         },
 
         async importEmployees(){
-          const incoming=[];
+          const incoming=[]; const skipped=[];
           for (const row of this.importData){
             const a = this.analyzeRow(row);
-            if (!a.first || !a.last) continue;
+            if (!a.first || !a.last){ skipped.push(row); continue; }
             const role = (/licen[cs]ed/i.test(a.role) && /practical/i.test(a.role)) ? 'LPN'
-                        : /care\s*aide|rca/i.test(a.role) ? 'RCA'
+                        : /care\\s*aide|rca/i.test(a.role) ? 'RCA'
                         : /recreation|activity/i.test(a.role) ? 'Recreation'
                         : /reception/i.test(a.role) ? 'Reception'
                         : /rehab/i.test(a.role) ? 'RehabAssistant' : (a.role || 'Other');
-            const type = /\bpt\b|part/i.test(a.type) ? 'PT' : (/\bcas|casual|ca\b/i.test(a.type) ? 'Casual' : 'FT');
+            const type = /\\bpt\\b|part/i.test(a.type) ? 'PT' : (/\\bcas|casual|ca\\b/i.test(a.type) ? 'Casual' : 'FT');
             const status = /inactive|leave/i.test(a.status||'') ? 'Inactive' : 'Active';
             incoming.push({ id:crypto.randomUUID(), firstName:a.first, lastName:a.last, role, employmentType:type, status, employeeId:a.empId, seniorityHours:a.hours, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
           }
@@ -451,8 +525,7 @@
               added++;
             }
           }
-          await this.loadData();
-          return { added, updated };
+          return { added, updated, skipped: skipped.length };
         },
 
         async importCompletions(){
@@ -483,18 +556,23 @@
               updates++;
             }
           }
-          await this.loadData();
           return updates;
         },
 
         normalizeDate(v){
-          if (!v) return null; const s=String(v).trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+          if (!v) return null; const s=String(v).trim(); if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;
           const d=new Date(s); if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
           const n=Number(s); if(!isNaN(n)&&n>25569){ const ms=(n-25569)*86400*1000; return new Date(ms).toISOString().slice(0,10); }
           return null;
         },
-
         addDays(dateOnly, days){ if(!dateOnly) return null; const [y,m,d]=dateOnly.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+Number(days)); return dt.toISOString().slice(0,10); },
+        exportData: async function(){
+          const data={ employees:await this.db.employees.toArray(), requirements:await this.db.requirements.toArray(), employeeRequirements:await this.db.employeeRequirements.toArray(), settings:await this.db.settings.toArray() };
+          const jsonBlob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+          this.downloadBlob(jsonBlob, `compliance-matrix-${new Date().toISOString().split('T')[0]}.json`);
+          this.notify('Exported JSON');
+        },
+        downloadBlob(blob, filename){ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); },
       }));
     });
   </script>
