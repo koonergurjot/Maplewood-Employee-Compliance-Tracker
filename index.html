@@ -8,103 +8,180 @@
   <meta name="theme-color" content="#111827"/>
   <link rel="manifest" href="/manifest.webmanifest"/>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script> tailwind.config = { darkMode: 'class' } </script>
   <script src="https://unpkg.com/feather-icons"></script>
   <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/6.6.2/fuse.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
+    :root{
+      --bg:#f3f4f6; --card:#ffffff; --line:#e5e7eb; --text:#111827;
+      --text-muted:#6b7280; --accent:#2563eb; --success:#10b981; --warn:#f59e0b; --danger:#ef4444;
+    }
+    .dark:root, .dark {
+      --bg:#0b1220; --card:#111827; --line:#1f2937; --text:#f3f4f6; --text-muted:#9ca3af;
+      --accent:#60a5fa; --success:#34d399; --warn:#fbbf24; --danger:#f87171;
+    }
+    body{ background:var(--bg); color:var(--text); }
     [x-cloak]{display:none!important}
-    .sticky-col{position:sticky;left:0;z-index:10;background:white}
-    .checkbox-3-state{appearance:none;width:1.25rem;height:1.25rem;border:2px solid #d1d5db;border-radius:.25rem;cursor:pointer;position:relative;outline:none}
-    .checkbox-3-state.completed{background-color:#10b981;border-color:#10b981}
-    .checkbox-3-state.expired{background-color:#f59e0b;border-color:#f59e0b}
-    .checkbox-3-state.completed::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-60%) rotate(-45deg);width:.75rem;height:.4rem;border-left:2px solid #fff;border-bottom:2px solid #fff}
-    .expired-dot{width:6px;height:6px;background-color:#ef4444;border-radius:50%;position:absolute;top:2px;right:2px}
+    .sticky-col{position:sticky;left:0;z-index:10;background:var(--card)}
+    .checkbox{appearance:none;width:1.25rem;height:1.25rem;border:2px solid var(--line);border-radius:.25rem;cursor:pointer;position:relative;outline:none;background:var(--card)}
+    .checkbox.completed{background-color:var(--success);border-color:var(--success)}
+    .checkbox.expired{background-color:var(--warn);border-color:var(--warn)}
+    .checkbox.completed::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-60%) rotate(-45deg);width:.75rem;height:.4rem;border-left:2px solid #fff;border-bottom:2px solid #fff}
+    .expired-dot{width:6px;height:6px;background-color:var(--danger);border-radius:50%;position:absolute;top:2px;right:2px}
     .badge-90{background:#fef3c7;color:#92400e}.badge-60{background:#fde68a;color:#92400e}.badge-30{background:#fbbf24;color:#92400e}
-    .virtual-scroll{overflow-y:auto;contain:strict;max-height:calc(100vh - 220px)}
+    .virtual-scroll{overflow-y:auto;contain:strict;max-height:calc(100vh - 260px)}
+    .card{background:var(--card); border:1px solid var(--line)}
+    .muted{color:var(--text-muted)}
+    .btn{display:inline-flex;align-items:center;gap:.4rem;border-radius:.5rem;padding:.5rem .75rem;border:1px solid var(--line);background:var(--card)}
+    .btn-primary{background:var(--accent);border-color:var(--accent);color:white}
+    .btn-ghost{background:transparent;border-color:transparent}
+    .table th,.table td{border-color:var(--line)}
   </style>
 </head>
-<body class="bg-gray-50" x-data="app()" x-init="init()" x-cloak>
+<body x-data="app()" x-init="init()" x-cloak :class="{'dark': darkMode}">
   <div class="container mx-auto px-4 py-6">
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-bold text-gray-800">Compliance Matrix</h1>
-      <div class="flex gap-2">
-        <button @click="showAddEmployee = true" class="flex items-center px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700"><i data-feather="user-plus" class="w-4 h-4 mr-2"></i> Add Employee</button>
-        <button @click="showAddRequirement = true" class="flex items-center px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"><i data-feather="plus" class="w-4 h-4 mr-2"></i> Add Requirement</button>
-        <button @click="showImportModal = true" class="flex items-center px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"><i data-feather="upload" class="w-4 h-4 mr-2"></i> Import</button>
-        <button @click="exportData" class="flex items-center px-3 py-2 bg-gray-700 text-white rounded hover:bg-gray-800"><i data-feather="download" class="w-4 h-4 mr-2"></i> Export</button>
+    <div class="flex justify-between items-center mb-4">
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-bold">Compliance Matrix</h1>
+        <span class="text-xs muted">Offline • Private • Netlify</span>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button @click="showAddEmployee = true" class="btn btn-primary"><i data-feather="user-plus" class="w-4 h-4"></i><span>Add Employee</span></button>
+        <button @click="showAddRequirement = true" class="btn"><i data-feather="plus" class="w-4 h-4"></i><span>Add Requirement</span></button>
+        <button @click="showImportModal = true" class="btn"><i data-feather="upload" class="w-4 h-4"></i><span>Import</span></button>
+        <button @click="exportData" class="btn"><i data-feather="download" class="w-4 h-4"></i><span>Export</span></button>
+        <button @click="showFilters = !showFilters" class="btn"><i data-feather="filter" class="w-4 h-4"></i><span>Filters</span></button>
+        <button @click="toggleDarkMode()" class="btn"><i :data-feather="darkMode ? 'sun' : 'moon'"></i><span x-text="darkMode ? 'Light' : 'Dark'"></span></button>
       </div>
     </div>
 
-    <div class="bg-white rounded-lg shadow p-4 mb-4">
-      <div class="flex flex-wrap items-center gap-4">
+    <div class="card rounded-lg shadow p-4 mb-4">
+      <div class="flex flex-wrap items-center gap-3">
         <div class="relative flex-1 min-w-[220px]">
-          <i data-feather="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-          <input x-model="searchQuery" @input.debounce.250ms="filterEmployees" type="text" placeholder="Search employees..." class="pl-10 pr-4 py-2 w-full border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"/>
+          <i data-feather="search" class="absolute left-3 top-1/2 -translate-y-1/2 muted"></i>
+          <input x-model="searchQuery" @input.debounce.250ms="filterEmployees" type="text" placeholder="Search names, roles, notes..." class="pl-10 pr-3 py-2 w-full border rounded bg-transparent" style="border-color: var(--line);" />
         </div>
-        <select x-model="filters.role" @change="filterEmployees" class="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500">
-          <option value="">All Roles</option>
-          <template x-for="role in allRoles" :key="role"><option x-text="role" :value="role"></option></template>
-        </select>
-        <select x-model="filters.employmentType" @change="filterEmployees" class="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500">
-          <option value="">All Types</option><option value="FT">Full-Time</option><option value="PT">Part-Time</option><option value="Casual">Casual</option>
-        </select>
-        <select x-model="filters.status" @change="filterEmployees" class="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500">
-          <option value="">All Statuses</option>
-          <option value="Missing">Missing</option><option value="Completed">Completed</option><option value="Expired">Expired</option>
-          <option value="Expiring30">Expiring in 30 days</option><option value="Expiring60">Expiring in 60 days</option><option value="Expiring90">Expiring in 90 days</option>
-        </select>
-        <button @click="resetFilters" class="flex items-center px-3 py-2 text-gray-600 hover:text-gray-800"><i data-feather="refresh-ccw" class="w-4 h-4 mr-1"></i> Reset</button>
-        <button @click="toggleDarkMode()" class="ml-auto flex items-center px-3 py-2 text-gray-700 hover:text-gray-900"><i data-feather="sun" class="w-4 h-4 mr-2"></i> Theme</button>
+        <div class="flex items-center gap-2 muted text-sm">
+          <span x-text="filteredEmployees.length"></span>
+          <span>of</span>
+          <span x-text="employees.length"></span>
+          <span>employees</span>
+        </div>
       </div>
     </div>
 
-    <div class="bg-white rounded-lg shadow overflow-hidden">
+    <div x-show="showFilters" class="card rounded-lg shadow p-4 mb-4">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <h3 class="font-semibold mb-2">Roles</h3>
+          <div class="flex flex-wrap gap-2">
+            <template x-for="role in allRoles" :key="role">
+              <label class="inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" :value="role" x-model="filters.roles" @change="filterEmployees()"> <span x-text="role"></span>
+              </label>
+            </template>
+          </div>
+        </div>
+        <div>
+          <h3 class="font-semibold mb-2">Employment Type</h3>
+          <div class="flex flex-wrap gap-2">
+            <template x-for="t in ['FT','PT','Casual']" :key="t">
+              <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" :value="t" x-model="filters.types" @change="filterEmployees()"><span x-text="t"></span></label>
+            </template>
+          </div>
+        </div>
+        <div>
+          <h3 class="font-semibold mb-2">Per-Requirement Status</h3>
+          <div class="flex items-center gap-2 mb-2">
+            <select x-model="filters.reqForStatus" @change="filterEmployees()" class="border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)">
+              <option value="">Any Requirement</option>
+              <template x-for="r in requirements" :key="r.id"><option :value="r.id" x-text="r.name"></option></template>
+            </select>
+            <select x-model="filters.status" @change="filterEmployees()" class="border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)">
+              <option value="">Any Status</option>
+              <option value="Missing">Missing</option>
+              <option value="Completed">Completed</option>
+              <option value="Expired">Expired</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-2 text-sm">
+            <label class="inline-flex items-center gap-2"><input type="checkbox" x-model="filters.missingAny" @change="filterEmployees()"> Missing any required</label>
+            <label class="inline-flex items-center gap-2"><input type="checkbox" x-model="filters.hideInactive" @change="filterEmployees()"> Hide inactive</label>
+          </div>
+        </div>
+        <div>
+          <h3 class="font-semibold mb-2">Expiry</h3>
+          <div class="flex items-center gap-2">
+            <input type="number" min="1" x-model.number="filters.expiringWithin" @input="filterEmployees()" placeholder="Days (e.g., 60)" class="border rounded px-2 py-1 bg-transparent w-28" style="border-color:var(--line)" />
+            <span class="muted text-sm">days</span>
+          </div>
+          <div class="mt-3">
+            <h3 class="font-semibold mb-2">Sort</h3>
+            <select x-model="filters.sortBy" @change="filterEmployees()" class="border rounded px-2 py-1 bg-transparent w-full" style="border-color:var(--line)">
+              <option value="name">Name A→Z</option>
+              <option value="role">Role</option>
+              <option value="type">Employment Type</option>
+              <option value="seniority_desc">Seniority Hours (High→Low)</option>
+              <option value="seniority_asc">Seniority Hours (Low→High)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card rounded-lg shadow overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200" role="grid">
-          <thead class="bg-gray-50">
+        <table class="min-w-full table divide-y" style="border-color: var(--line)" role="grid">
+          <thead class="bg-gray-50 dark:bg-gray-900">
             <tr>
-              <th class="sticky-col px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+              <th class="sticky-col px-6 py-3 text-left text-xs font-medium uppercase tracking-wider muted">Employee</th>
               <template x-for="req in visibleRequirements" :key="req.id">
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider group">
+                <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider group" :style="`background:${req.color || '#f8fafc'};`">
                   <div class="flex items-center justify-between">
                     <span x-text="req.name" class="truncate max-w-[140px]"></span>
                     <div class="opacity-0 group-hover:opacity-100 flex">
-                      <button @click="editRequirement(req)" class="text-gray-400 hover:text-gray-500 ml-2" title="Edit"><i data-feather="edit-2" class="w-4 h-4"></i></button>
-                      <button @click="hideRequirement(req.id)" class="text-gray-400 hover:text-gray-500 ml-2" title="Hide"><i data-feather="eye-off" class="w-4 h-4"></i></button>
+                      <button @click="editRequirement(req)" class="text-gray-600 dark:text-gray-300 hover:opacity-80 ml-2" title="Edit"><i data-feather="edit-2" class="w-4 h-4"></i></button>
+                      <button @click="hideRequirement(req.id)" class="text-gray-600 dark:text-gray-300 hover:opacity-80 ml-2" title="Hide"><i data-feather="eye-off" class="w-4 h-4"></i></button>
                     </div>
                   </div>
                 </th>
               </template>
             </tr>
           </thead>
-          <tbody class="bg-white divide-y divide-gray-200 virtual-scroll">
+          <tbody class="divide-y virtual-scroll" style="border-color: var(--line)">
             <template x-for="emp in filteredEmployees" :key="emp.id">
-              <tr class="hover:bg-gray-50">
-                <td class="sticky-col px-6 py-4 whitespace-nowrap bg-white">
+              <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                <td class="sticky-col px-6 py-4 whitespace-nowrap">
                   <div class="flex items-center">
-                    <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center"><i data-feather="user" class="text-gray-500"></i></div>
+                    <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center"><i data-feather="user" class="text-gray-500"></i></div>
                     <div class="ml-4">
-                      <div class="text-sm font-medium text-gray-900" x-text="`${emp.firstName} ${emp.lastName}`"></div>
-                      <div class="flex gap-1 mt-1">
-                        <span x-text="emp.role" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800"></span>
-                        <span x-text="emp.employmentType" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800"></span>
+                      <div class="text-sm font-semibold" x-text="`${emp.firstName} ${emp.lastName}`"></div>
+                      <div class="flex flex-wrap gap-1 mt-1 text-xs">
+                        <span x-text="emp.role" class="px-2 inline-flex leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"></span>
+                        <span x-text="emp.employmentType" class="px-2 inline-flex leading-5 font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"></span>
+                        <template x-if="emp.seniorityHours">
+                          <span class="px-2 inline-flex leading-5 rounded-full bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200" x-text="`Hrs: ${emp.seniorityHours}`"></span>
+                        </template>
                       </div>
                     </div>
                   </div>
                 </td>
                 <template x-for="req in visibleRequirements" :key="req.id">
-                  <td class="px-6 py-4 whitespace-nowrap" role="gridcell">
-                    <div class="relative inline-block">
+                  <td class="px-4 py-3 whitespace-nowrap" role="gridcell">
+                    <div class="relative inline-flex items-center gap-2">
                       <button role="checkbox" tabindex="0"
                         @click="$event.detail === 2 ? openNotes(emp, req) : toggleStatus(emp, req, $event)"
+                        @contextmenu.prevent="openDateModal(emp,req)"
                         @keydown.space.prevent="toggleStatus(emp, req, $event)"
                         @keydown.enter.prevent="toggleStatus(emp, req, $event)"
-                        class="checkbox-3-state"
+                        class="checkbox"
+                        :style="req.color ? `border-color:${req.color}` : ''"
                         :class="{ 'completed': getStatus(emp.id, req.id) === 'Completed', 'expired': getStatus(emp.id, req.id) === 'Expired' }"
                         :aria-checked="getStatus(emp.id, req.id) === 'Completed' ? 'true' : (getStatus(emp.id, req.id) === 'Expired' ? 'mixed' : 'false')"
-                        title="Click: complete today • Shift+Click: set date • Alt+Click: clear">
+                        title="Click: complete today • Right-click or Shift+Click: set date • Alt+Click: clear">
                         <template x-if="getStatus(emp.id, req.id) === 'Expired'"><span class="expired-dot"></span></template>
                         <template x-if="isExpiringSoon(emp.id, req.id)">
                           <span class="absolute -top-2 -right-2 text-xs px-1 rounded" :class="getExpiringBadgeClass(emp.id, req.id)" x-text="getDaysUntilExpire(emp.id, req.id)"></span>
@@ -116,158 +193,222 @@
               </tr>
             </template>
             <template x-if="filteredEmployees.length === 0">
-              <tr><td colspan="100" class="px-6 py-4 text-center text-gray-500">No employees found</td></tr>
+              <tr><td colspan="100" class="px-6 py-6 text-center muted">No employees match filters</td></tr>
             </template>
           </tbody>
         </table>
       </div>
     </div>
+  </div>
 
-    <!-- Modals and Toast below (trimmed for brevity in this snippet) -->
+  <!-- Modals and Toasts (same as earlier build) -->
 
-    <!-- Add Employee Modal -->
-    <div x-show="showAddEmployee" class="fixed inset-0 z-50" role="dialog" aria-modal="true">
-      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div @click="showAddEmployee=false" class="fixed inset-0 bg-gray-500 bg-opacity-75"></div>
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Add New Employee</h3>
-            <div class="grid grid-cols-2 gap-4">
-              <div><label class="block text-sm font-medium">First Name</label><input x-model="newEmployee.firstName" class="mt-1 w-full border rounded px-3 py-2"/></div>
-              <div><label class="block text-sm font-medium">Last Name</label><input x-model="newEmployee.lastName" class="mt-1 w-full border rounded px-3 py-2"/></div>
-              <div><label class="block text-sm font-medium">Role</label><select x-model="newEmployee.role" class="mt-1 w-full border rounded px-3 py-2"><option>LPN</option><option>RCA</option><option>Recreation</option><option>Reception</option><option>RehabAssistant</option><option>Other</option></select></div>
-              <div><label class="block text-sm font-medium">Employment Type</label><select x-model="newEmployee.employmentType" class="mt-1 w-full border rounded px-3 py-2"><option>FT</option><option>PT</option><option>Casual</option></select></div>
-            </div>
+  <div x-show="showAddEmployee" class="fixed inset-0 z-50" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div @click="showAddEmployee=false" class="fixed inset-0 bg-black/40"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <h3 class="text-lg font-semibold mb-3">Add New Employee</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div><label class="block text-sm">First Name</label><input x-model="newEmployee.firstName" class="mt-1 w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)"/></div>
+            <div><label class="block text-sm">Last Name</label><input x-model="newEmployee.lastName" class="mt-1 w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)"/></div>
+            <div><label class="block text-sm">Role</label><select x-model="newEmployee.role" class="mt-1 w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)"><option>LPN</option><option>RCA</option><option>Recreation</option><option>Reception</option><option>RehabAssistant</option><option>Other</option></select></div>
+            <div><label class="block text-sm">Employment Type</label><select x-model="newEmployee.employmentType" class="mt-1 w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)"><option>FT</option><option>PT</option><option>Casual</option></select></div>
           </div>
-          <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button @click="addEmployee" class="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Add Employee</button>
-            <button @click="showAddEmployee=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 border rounded">Cancel</button>
-          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button @click="addEmployee" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Add</button>
+          <button @click="showAddEmployee=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Add Requirement Modal -->
-    <div x-show="showAddRequirement" class="fixed inset-0 z-50" role="dialog" aria-modal="true">
-      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div @click="showAddRequirement=false" class="fixed inset-0 bg-gray-500 bg-opacity-75"></div>
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Add New Requirement</h3>
-            <div class="space-y-4">
-              <div><label class="block text-sm font-medium">Requirement Name</label><input x-model="newRequirement.name" class="mt-1 w-full border rounded px-3 py-2"/></div>
-              <div><label class="block text-sm font-medium">Default Expiry (days)</label><input x-model.number="newRequirement.defaultExpiryDays" type="number" class="mt-1 w-full border rounded px-3 py-2" placeholder="Leave blank for no expiry"/></div>
-            </div>
+  <div x-show="showAddRequirement" class="fixed inset-0 z-50" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div @click="showAddRequirement=false" class="fixed inset-0 bg-black/40"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <h3 class="text-lg font-semibold mb-3">Add New Requirement</h3>
+          <div class="space-y-3">
+            <div><label class="block text-sm">Requirement Name</label><input x-model="newRequirement.name" class="mt-1 w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)"/></div>
+            <div><label class="block text-sm">Default Expiry (days)</label><input x-model.number="newRequirement.defaultExpiryDays" type="number" min="0" class="mt-1 w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)" placeholder="Leave blank for none"/></div>
+            <div><label class="block text-sm">Column Color</label><input type="color" x-model="newRequirement.color" class="mt-1 w-16 h-8 border rounded" style="border-color:var(--line)"/></div>
           </div>
-          <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button @click="addRequirement" class="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Add Requirement</button>
-            <button @click="showAddRequirement=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 border rounded">Cancel</button>
-          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button @click="addRequirement" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Add</button>
+          <button @click="showAddRequirement=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Edit Requirement Modal -->
-    <div x-show="showEditRequirement" class="fixed inset-0 z-50" role="dialog" aria-modal="true">
-      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div @click="showEditRequirement=false" class="fixed inset-0 bg-gray-500 bg-opacity-75"></div>
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Edit Requirement</h3>
-            <div class="space-y-4">
-              <div><label class="block text-sm font-medium">Requirement Name</label><input x-model="editingRequirement.name" class="mt-1 w-full border rounded px-3 py-2"/></div>
-              <div><label class="block text-sm font-medium">Default Expiry (days)</label><input x-model.number="editingRequirement.defaultExpiryDays" type="number" class="mt-1 w-full border rounded px-3 py-2" placeholder="Leave blank for no expiry"/></div>
-            </div>
+  <div x-show="showEditRequirement" class="fixed inset-0 z-50" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div @click="showEditRequirement=false" class="fixed inset-0 bg-black/40"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <h3 class="text-lg font-semibold mb-3">Edit Requirement</h3>
+          <div class="space-y-3">
+            <div><label class="block text-sm">Requirement Name</label><input x-model="editingRequirement.name" class="mt-1 w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)"/></div>
+            <div><label class="block text-sm">Default Expiry (days)</label><input x-model.number="editingRequirement.defaultExpiryDays" type="number" min="0" class="mt-1 w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)" placeholder="Leave blank for none"/></div>
+            <div><label class="block text-sm">Column Color</label><input type="color" x-model="editingRequirement.color" class="mt-1 w-16 h-8 border rounded" style="border-color:var(--line)"/></div>
           </div>
-          <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button @click="updateRequirement" class="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Update Requirement</button>
-            <button @click="showEditRequirement=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 border rounded">Cancel</button>
-          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button @click="updateRequirement" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Update</button>
+          <button @click="showEditRequirement=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Import Modal -->
-    <div x-show="showImportModal" class="fixed inset-0 z-50" role="dialog" aria-modal="true">
-      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div @click="showImportModal=false" class="fixed inset-0 bg-gray-500 bg-opacity-75"></div>
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-          <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Import Data</h3>
-            <div class="space-y-4">
-              <div>
-                <label class="block text-sm font-medium">File Type</label>
-                <div class="mt-1 flex gap-4">
-                  <label class="inline-flex items-center"><input type="radio" x-model="importType" value="csv" class="h-4 w-4 text-blue-600 border-gray-300"> <span class="ml-2">CSV</span></label>
-                  <label class="inline-flex items-center"><input type="radio" x-model="importType" value="excel" class="h-4 w-4 text-blue-600 border-gray-300"> <span class="ml-2">Excel</span></label>
-                </div>
+  <div x-show="showDateModal" class="fixed inset-0 z-50">
+    <div class="flex items-center justify-center min-height-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div @click="showDateModal=false" class="fixed inset-0 bg-black/40"></div>
+      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
+        <div class="px-4 pt-5 pb-4 sm:p-6">
+          <h3 class="text-lg font-semibold mb-3">Set Completion Date</h3>
+          <div class="space-y-3">
+            <div><label class="block text-sm">Completed On</label><input type="date" x-model="dateModal.completedOn" class="mt-1 w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)"/></div>
+            <div class="text-xs muted">Expiry will auto-calc from the requirement's default expiry, if set.</div>
+          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:flex sm:flex-row-reverse">
+          <button @click="saveDateModal()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save</button>
+          <button @click="showDateModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div x-show="showImportModal" class="fixed inset-0 z-50" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div @click="showImportModal=false" class="fixed inset-0 bg-black/40"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
+        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <h3 class="text-lg font-semibold mb-4">Import Data</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <label class="block text-sm">File Type</label>
+              <div class="mt-1 flex gap-4">
+                <label class="inline-flex items-center"><input type="radio" x-model="importType" value="csv"> <span class="ml-2">CSV</span></label>
+                <label class="inline-flex items-center"><input type="radio" x-model="importType" value="excel"> <span class="ml-2">Excel</span></label>
               </div>
-              <div>
-                <label class="block text-sm font-medium">File</label>
-                <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md">
-                  <div class="space-y-1 text-center">
-                    <div class="flex text-sm text-gray-600">
-                      <label for="file-upload" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500">
-                        <span>Upload a file</span>
-                        <input id="file-upload" type="file" class="sr-only" @change="handleFileUpload">
-                      </label>
-                      <p class="pl-1">or drag and drop</p>
-                    </div>
-                    <p class="text-xs text-gray-500">CSV or Excel files up to 10MB</p>
+            </div>
+            <div>
+              <label class="block text-sm">Import Mode</label>
+              <div class="mt-1 flex gap-4">
+                <label class="inline-flex items-center"><input type="radio" x-model="importMode" value="employees"> <span class="ml-2">Employees</span></label>
+                <label class="inline-flex items-center"><input type="radio" x-model="importMode" value="completions"> <span class="ml-2">Completions</span></label>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm">File</label>
+              <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md" style="border-color:var(--line)">
+                <div class="space-y-1 text-center">
+                  <div class="flex text-sm">
+                    <label for="file-upload" class="relative cursor-pointer rounded-md font-medium text-blue-600 hover:opacity-80">
+                      <span>Upload a file</span>
+                      <input id="file-upload" type="file" class="sr-only" @change="handleFileUpload">
+                    </label>
+                    <p class="pl-1">or drag and drop</p>
                   </div>
-                </div>
-              </div>
-              <div x-show="importData.length > 0">
-                <label class="block text-sm font-medium">Preview (first 5 rows)</label>
-                <div class="mt-1 overflow-auto max-h-60 border rounded-md">
-                  <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50"><tr>
-                      <template x-for="(header, index) in importHeaders" :key="index"><th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"><span x-text="header"></span></th></template>
-                    </tr></thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                      <template x-for="(row, rowIndex) in importData.slice(0,5)" :key="rowIndex">
-                        <tr><template x-for="(header, headerIndex) in importHeaders" :key="headerIndex"><td class="px-3 py-2 whitespace-nowrap text-sm text-gray-500" x-text="row[header]"></td></template></tr>
-                      </template>
-                    </tbody>
-                  </table>
+                  <p class="text-xs muted">CSV or Excel up to 10MB</p>
                 </div>
               </div>
             </div>
           </div>
-          <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button @click="processImport" x-show="importData.length > 0" class="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Process Import</button>
-            <button @click="showImportModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 border rounded">Cancel</button>
+
+          <div x-show="importHeaders.length" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+            <div>
+              <h4 class="font-semibold mb-2">Field Mapping – <span class="muted text-sm">Employees</span></h4>
+              <template x-for="(label, key) in fieldLabels" :key="key">
+                <div class="flex items-center gap-2 mb-2">
+                  <label class="w-44 text-sm" x-text="label"></label>
+                  <select class="flex-1 border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)"
+                          x-model="columnMap[key]">
+                    <option value="">-- Not Mapped --</option>
+                    <template x-for="h in importHeaders" :key="h"><option :value="h" x-text="h"></option></template>
+                  </select>
+                </div>
+              </template>
+            </div>
+
+            <div>
+              <h4 class="font-semibold mb-2">Requirement Columns – <span class="muted text-sm">Completions</span></h4>
+              <div class="text-xs muted mb-2">Optionally map sheet columns to requirement “Completed On” dates. Unmapped ones are ignored.</div>
+              <div class="max-h-64 overflow-auto pr-1">
+                <template x-for="r in requirements" :key="r.id">
+                  <div class="flex items-center gap-2 mb-2">
+                    <label class="w-44 text-sm truncate" :title="r.name" x-text="r.name"></label>
+                    <select class="flex-1 border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)"
+                            x-model="completionMap[r.id]">
+                      <option value="">-- Not Mapped --</option>
+                      <template x-for="h in importHeaders" :key="h"><option :value="h" x-text="h"></option></template>
+                    </select>
+                  </div>
+                </template>
+              </div>
+            </div>
           </div>
+
+          <div x-show="importData.length" class="mt-4">
+            <label class="block text-sm font-semibold mb-1">Preview (first 6 rows)</label>
+            <div class="overflow-auto max-h-60 border rounded-md" style="border-color:var(--line)">
+              <table class="min-w-full divide-y" style="border-color:var(--line)">
+                <thead class="bg-gray-50 dark:bg-gray-900"><tr>
+                  <template x-for="(header, index) in importHeaders" :key="index">
+                    <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider"><span x-text="header"></span></th>
+                  </template>
+                </tr></thead>
+                <tbody class="divide-y" style="border-color:var(--line)">
+                  <template x-for="(row, rowIndex) in importData.slice(0,6)" :key="rowIndex">
+                    <tr>
+                      <template x-for="(header, headerIndex) in importHeaders" :key="headerIndex">
+                        <td class="px-3 py-2 whitespace-nowrap text-sm" x-text="row[header]"></td>
+                      </template>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button @click="processImport" x-show="importData.length" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Process Import</button>
+          <button @click="showImportModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Notes Modal -->
-    <div x-show="showNotesModal" class="fixed inset-0 z-50">
-      <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div @click="showNotesModal=false" class="fixed inset-0 bg-gray-500 bg-opacity-75"></div>
-        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div class="px-4 pt-5 pb-4 sm:p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Notes</h3>
-            <textarea x-model="notesContent" class="w-full h-40 border rounded p-2"></textarea>
-          </div>
-          <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse">
-            <button @click="saveNotes()" class="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
-            <button @click="showNotesModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 border rounded">Cancel</button>
-          </div>
+  <div x-show="showNotesModal" class="fixed inset-0 z-50">
+    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div @click="showNotesModal=false" class="fixed inset-0 bg-black/40"></div>
+      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div class="px-4 pt-5 pb-4 sm:p-6">
+          <h3 class="text-lg font-semibold mb-4">Notes</h3>
+          <p class="muted text-sm mb-2" x-text="notesEmployee.firstName + ' ' + notesEmployee.lastName + ' – ' + notesRequirement.name"></p>
+          <textarea x-model="notesContent" class="w-full h-40 border rounded p-2 bg-transparent" style="border-color:var(--line)"></textarea>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:flex sm:flex-row-reverse">
+          <button @click="saveNotes()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save</button>
+          <button @click="showNotesModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Toast -->
-    <div x-show="showToast" class="fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded shadow-lg flex items-center">
-      <span x-text="toastMessage"></span>
-      <button @click="showToast=false" class="ml-2"><i data-feather="x" class="w-4 h-4"></i></button>
-    </div>
+  <div x-show="showToast" class="fixed bottom-4 right-4 px-4 py-2 rounded shadow-lg flex items-center"
+       :style="`background:${toastColor}; color:white`">
+    <span x-text="toastMessage"></span>
+    <button @click="showToast=false" class="ml-2"><i data-feather="x" class="w-4 h-4"></i></button>
   </div>
 
   <script>
@@ -277,61 +418,74 @@
         db:null,
         employees:[], requirements:[], employeeRequirements:[], erMap:new Map(),
         filteredEmployees:[], allRoles:[], visibleRequirements:[],
-        searchQuery:'', filters:{role:'', employmentType:'', status:''},
-        showAddEmployee:false, showAddRequirement:false, showEditRequirement:false, showImportModal:false,
-        showNotesModal:false, showToast:false, toastMessage:'',
+        searchQuery:'',
+        filters:{ roles:[], types:[], status:'', reqForStatus:'', expiringWithin:null, sortBy:'name', missingAny:false, hideInactive:true },
+        showAddEmployee:false, showAddRequirement:false, showEditRequirement:false, showImportModal:false, showFilters:false,
+        showNotesModal:false, showToast:false, toastMessage:'', toastColor:'var(--success)',
+        showDateModal:false, dateModal:{ employeeId:null, requirementId:null, completedOn:null },
         newEmployee:{ firstName:'', lastName:'', role:'LPN', employmentType:'FT' },
-        newRequirement:{ name:'', defaultExpiryDays:null },
-        editingRequirement:{ id:null, name:'', defaultExpiryDays:null },
+        newRequirement:{ name:'', defaultExpiryDays:null, color:'#fef3c7' },
+        editingRequirement:{ id:null, name:'', defaultExpiryDays:null, color:'#fef3c7' },
         notesEmployee:{}, notesRequirement:{}, notesContent:'', currentNotesId:null,
-        importType:'csv', importData:[], importHeaders:[],
+
+        // Import state
+        importType:'csv', importMode:'employees', importData:[], importHeaders:[],
+        fieldLabels: { firstName:'First Name', lastName:'Last Name', payrollName:'Payroll/Employee Name', role:'Role / Job Title', employmentType:'Employment Type / Class', employeeId:'Employee ID / Position ID', status:'Position Status', seniorityHours:'Seniority Hours' },
+        columnMap:{ firstName:'First Name', lastName:'Last Name', payrollName:'Payroll Name', role:'Job Title Description', employmentType:'Employment Type', employeeId:'Position ID', status:'Position Status', seniorityHours:'Total Seniority Hours as at June 30, 2025' },
+        completionMap:{},
 
         async init(){
           this.initDB();
           await this.loadData();
-          const s = await this.db.settings.get('app'); 
-          if (s?.darkMode) { this.darkMode = true; document.documentElement.classList.add('dark'); }
-          this.filterEmployees(); feather.replace();
+          const s = await this.db.settings.get('app');
+          if (s?.darkMode) this.darkMode = true;
+          document.documentElement.classList.toggle('dark', this.darkMode);
+          feather.replace();
           if ('serviceWorker' in navigator) try{ await navigator.serviceWorker.register('/sw.js'); }catch(e){}
         },
 
         initDB(){
           this.db = new Dexie('ComplianceMatrixDB');
-          this.db.version(3).stores({
-            employees:'id, lastName, firstName, role, employmentType, status, employeeId',
-            requirements:'id, name, defaultExpiryDays',
+          this.db.version(4).stores({
+            employees:'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
+            requirements:'id, name, defaultExpiryDays, color',
             employeeRequirements:'id, [employeeId+requirementId], status, completedOn, expiresOn, notes',
-            settings:'id',
-            auditLog:'++id, entity, entityId, at'
-          }).upgrade(async tx => {
-            const fix = async (tbl) => {
-              const rows = await tx.table(tbl).toArray();
-              for (const r of rows) { if (!r.id) { r.id = (crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`); await tx.table(tbl).put(r);} }
-            };
-            await fix('employees'); await fix('requirements'); await fix('employeeRequirements');
+            settings:'id'
           });
           this.db.on('populate', async () => {
             const now = new Date().toISOString();
-            const seed = (name, days=null)=>({id:crypto.randomUUID(),name,defaultExpiryDays:days,createdAt:now,updatedAt:now});
-            await this.db.requirements.bulkAdd([seed('Resume'),seed('References'),seed('First Aid',1095),seed('CPR',365),seed('FoodSafe',1825),seed('Violence Prevention',365)]);
+            const seed = (name, days=null, color='#fef3c7')=>({id:crypto.randomUUID(),name,defaultExpiryDays:days,color,createdAt:now,updatedAt:now});
+            await this.db.requirements.bulkAdd([
+              seed('Resume', null, '#e5e7eb'),
+              seed('References', null, '#e5e7eb'),
+              seed('First Aid', 1095, '#ffd6a5'),
+              seed('CPR', 365, '#caffbf'),
+              seed('FoodSafe', 1825, '#9bf6ff'),
+              seed('Violence Prevention', 365, '#bdb2ff')
+            ]);
             await this.db.settings.put({id:'app',darkMode:false,hiddenRequirementIds:[],requirementOrder:[]});
           });
         },
-
-        async saveSettings(partial){ const prev = await this.db.settings.get('app') || {id:'app'}; await this.db.settings.put({...prev,...partial}); },
 
         async loadData(){
           this.employees = await this.db.employees.toArray();
           this.requirements = await this.db.requirements.toArray();
           this.employeeRequirements = await this.db.employeeRequirements.toArray();
           this.erMap = new Map();
-          for (const er of this.employeeRequirements){ if(!this.erMap.has(er.employeeId)) this.erMap.set(er.employeeId,new Map()); this.erMap.get(er.employeeId).set(er.requirementId, er); }
+          for (const er of this.employeeRequirements){
+            if(!this.erMap.has(er.employeeId)) this.erMap.set(er.employeeId,new Map());
+            this.erMap.get(er.employeeId).set(er.requirementId, er);
+          }
           this.allRoles = [...new Set(this.employees.map(e=>e.role))].sort();
           const s = await this.db.settings.get('app') || {hiddenRequirementIds:[],requirementOrder:[]};
           let ordered = [...this.requirements];
-          if (s.requirementOrder?.length){ const om = new Map(s.requirementOrder.map((id,i)=>[id,i])); ordered.sort((a,b)=>(om.get(a.id)??9999)-(om.get(b.id)??9999)); }
+          if (s.requirementOrder?.length){
+            const om = new Map(s.requirementOrder.map((id,i)=>[id,i]));
+            ordered.sort((a,b)=>(om.get(a.id)??9999)-(om.get(b.id)??9999));
+          }
           const hidden = new Set(s.hiddenRequirementIds || []);
           this.visibleRequirements = ordered.filter(r=>!hidden.has(r.id));
+          this.filterEmployees();
         },
 
         toDateOnly(d=new Date()){ const dt=(d instanceof Date)?d:new Date(d); const y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,'0'),dd=String(dt.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; },
@@ -347,55 +501,89 @@
         getDaysUntilExpire(eId,rId){ const er=this.getER(eId,rId); if(!er?.expiresOn) return null; return this.daysUntil(er.expiresOn); },
         getExpiringBadgeClass(eId,rId){ const d=this.getDaysUntilExpire(eId,rId); if(d===null) return ''; if(d<=30) return 'badge-30'; if(d<=60) return 'badge-60'; return 'badge-90'; },
 
+        notify(msg, color='var(--success)'){ this.toastMessage=msg; this.toastColor=color; this.showToast=true; setTimeout(()=>this.showToast=false, 2500); },
+        async saveSettings(partial){ const prev = await this.db.settings.get('app') || {id:'app'}; await this.db.settings.put({...prev,...partial}); },
+
         filterEmployees(){
           let filtered=[...this.employees];
-          if(this.searchQuery){ const fuse=new Fuse(filtered,{keys:['firstName','lastName','role','employmentType'],threshold:0.3}); filtered=fuse.search(this.searchQuery).map(r=>r.item); }
-          if(this.filters.role) filtered=filtered.filter(e=>e.role===this.filters.role);
-          if(this.filters.employmentType) filtered=filtered.filter(e=>e.employmentType===this.filters.employmentType);
-          if(this.filters.status){
-            filtered=filtered.filter(emp => this.visibleRequirements.some(req => {
-              const status=this.getStatus(emp.id, req.id); const days=this.getDaysUntilExpire(emp.id, req.id);
-              switch(this.filters.status){
-                case 'Missing': return status==='NotCompleted';
-                case 'Completed': return status==='Completed';
-                case 'Expired': return status==='Expired';
-                case 'Expiring30': return days!==null && days>0 && days<=30;
-                case 'Expiring60': return days!==null && days>30 && days<=60;
-                case 'Expiring90': return days!==null && days>60 && days<=90;
-                default: return true;
-              }
+          if(this.searchQuery){
+            const query=this.searchQuery.toLowerCase();
+            filtered = filtered.filter(e => {
+              if ((e.firstName+' '+e.lastName).toLowerCase().includes(query)) return true;
+              if ((e.role||'').toLowerCase().includes(query)) return true;
+              const erForEmp = this.erMap.get(e.id);
+              if (erForEmp) for (const er of erForEmp.values()) if ((er.notes||'').toLowerCase().includes(query)) return true;
+              return false;
+            });
+          }
+          if(this.filters.hideInactive) filtered = filtered.filter(e => (e.status||'Active')!=='Inactive');
+          if(this.filters.roles?.length) filtered = filtered.filter(e => this.filters.roles.includes(e.role));
+          if(this.filters.types?.length) filtered = filtered.filter(e => this.filters.types.includes(e.employmentType));
+          const reqId = this.filters.reqForStatus || null;
+          const status = this.filters.status || null;
+          if (status){
+            filtered = filtered.filter(emp => {
+              const reqs = reqId ? this.visibleRequirements.filter(r=>r.id===reqId) : this.visibleRequirements;
+              return reqs.some(req => {
+                const s=this.getStatus(emp.id, req.id);
+                if(status==='Missing') return s==='NotCompleted';
+                if(status==='Completed') return s==='Completed';
+                if(status==='Expired') return s==='Expired';
+                return true;
+              });
+            });
+          }
+          if (this.filters.missingAny){
+            filtered = filtered.filter(emp => this.visibleRequirements.some(req => this.getStatus(emp.id, req.id)==='NotCompleted'));
+          }
+          if (this.filters.expiringWithin && Number(this.filters.expiringWithin)>0){
+            const N = Number(this.filters.expiringWithin);
+            filtered = filtered.filter(emp => this.visibleRequirements.some(req => {
+              const d=this.getDaysUntilExpire(emp.id, req.id);
+              return d!==null && d>0 && d<=N;
             }));
           }
+          const by = this.filters.sortBy || 'name';
+          filtered.sort((a,b)=>{
+            if (by==='name') return (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||'');
+            if (by==='role') return (a.role||'').localeCompare(b.role||'') || (a.lastName||'').localeCompare(b.lastName||'');
+            if (by==='type') return (a.employmentType||'').localeCompare(b.employmentType||'') || (a.lastName||'').localeCompare(b.lastName||'');
+            if (by==='seniority_desc') return (Number(b.seniorityHours||0) - Number(a.seniorityHours||0));
+            if (by==='seniority_asc') return (Number(a.seniorityHours||0) - Number(b.seniorityHours||0));
+            return 0;
+          });
           this.filteredEmployees = filtered;
         },
-        resetFilters(){ this.searchQuery=''; this.filters={role:'',employmentType:'',status:''}; this.filterEmployees(); },
+        resetFilters(){ this.searchQuery=''; this.filters={ roles:[], types:[], status:'', reqForStatus:'', expiringWithin:null, sortBy:'name', missingAny:false, hideInactive:true }; this.filterEmployees(); },
 
-        async hideRequirement(id){ const s=await this.db.settings.get('app')||{id:'app',hiddenRequirementIds:[]}; const hidden=new Set(s.hiddenRequirementIds||[]); hidden.add(id); await this.saveSettings({hiddenRequirementIds:Array.from(hidden)}); await this.loadData(); this.showToastMessage('Requirement hidden'); },
-        async toggleDarkMode(){ this.darkMode=!this.darkMode; document.documentElement.classList.toggle('dark', this.darkMode); await this.saveSettings({darkMode:this.darkMode}); this.showToastMessage(this.darkMode?'Dark mode enabled':'Dark mode disabled'); },
+        async toggleDarkMode(){ this.darkMode=!this.darkMode; document.documentElement.classList.toggle('dark', this.darkMode); await this.saveSettings({darkMode:this.darkMode}); this.notify(this.darkMode?'Dark mode enabled':'Dark mode disabled'); },
 
-        async addEmployee(){ try{ const emp={id:crypto.randomUUID(),...this.newEmployee,status:'Active',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}; await this.db.employees.add(emp); const rows=this.requirements.map(r=>({id:crypto.randomUUID(),employeeId:emp.id,requirementId:r.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()})); if(rows.length) await this.db.employeeRequirements.bulkAdd(rows); this.newEmployee={firstName:'',lastName:'',role:'LPN',employmentType:'FT'}; this.showAddEmployee=false; await this.loadData(); this.filterEmployees(); this.showToastMessage('Employee added'); }catch(e){console.error(e);this.showToastMessage('Error adding employee');} },
-        async addRequirement(){ try{ const req={id:crypto.randomUUID(),...this.newRequirement,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}; await this.db.requirements.add(req); const rows=this.employees.map(emp=>({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()})); if(rows.length) await this.db.employeeRequirements.bulkAdd(rows); this.newRequirement={name:'',defaultExpiryDays:null}; this.showAddRequirement=false; await this.loadData(); this.filterEmployees(); this.showToastMessage('Requirement added'); }catch(e){console.error(e);this.showToastMessage('Error adding requirement');} },
-        editRequirement(req){ this.editingRequirement={id:req.id,name:req.name,defaultExpiryDays:req.defaultExpiryDays}; this.showEditRequirement=true; },
-        async updateRequirement(){ try{ await this.db.requirements.update(this.editingRequirement.id,{name:this.editingRequirement.name,defaultExpiryDays:this.editingRequirement.defaultExpiryDays,updatedAt:new Date().toISOString()}); this.showEditRequirement=false; await this.loadData(); this.filterEmployees(); this.showToastMessage('Requirement updated'); }catch(e){console.error(e);this.showToastMessage('Error updating requirement');} },
+        async addEmployee(){ try{ const emp={id:crypto.randomUUID(),...this.newEmployee,status:'Active',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}; await this.db.employees.add(emp); const rows=this.requirements.map(r=>({id:crypto.randomUUID(),employeeId:emp.id,requirementId:r.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()})); if(rows.length) await this.db.employeeRequirements.bulkAdd(rows); this.newEmployee={firstName:'',lastName:'',role:'LPN',employmentType:'FT'}; this.showAddEmployee=false; await this.loadData(); this.notify('Employee added'); }catch(e){console.error(e);this.notify('Error adding employee','var(--danger)');} },
+
+        async addRequirement(){ try{ const req={id:crypto.randomUUID(),...this.newRequirement,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}; await this.db.requirements.add(req); const rows=this.employees.map(emp=>({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()})); if(rows.length) await this.db.employeeRequirements.bulkAdd(rows); this.newRequirement={name:'',defaultExpiryDays:null,color:'#fef3c7'}; this.showAddRequirement=false; await this.loadData(); this.notify('Requirement added'); }catch(e){console.error(e);this.notify('Error adding requirement','var(--danger)');} },
+        editRequirement(req){ this.editingRequirement={id:req.id,name:req.name,defaultExpiryDays:req.defaultExpiryDays,color:req.color||'#fef3c7'}; this.showEditRequirement=true; },
+        async updateRequirement(){ try{ await this.db.requirements.update(this.editingRequirement.id,{name:this.editingRequirement.name,defaultExpiryDays:this.editingRequirement.defaultExpiryDays,color:this.editingRequirement.color,updatedAt:new Date().toISOString()}); this.showEditRequirement=false; await this.loadData(); this.notify('Requirement updated'); }catch(e){console.error(e);this.notify('Error updating requirement','var(--danger)');} },
+        async hideRequirement(id){ const s=await this.db.settings.get('app')||{id:'app',hiddenRequirementIds:[]}; const hidden=new Set(s.hiddenRequirementIds||[]); hidden.add(id); await this.saveSettings({hiddenRequirementIds:Array.from(hidden)}); await this.loadData(); this.notify('Requirement hidden'); },
 
         openNotes(emp, req){ this.notesEmployee=emp; this.notesRequirement=req; const r=this.getER(emp.id, req.id); this.notesContent=r?.notes||''; this.currentNotesId=r?.id||null; this.showNotesModal=true; },
-        async saveNotes(){ try{ const empId=this.notesEmployee.id, reqId=this.notesRequirement.id; const existing=this.getER(empId, reqId); if(existing){ await this.db.employeeRequirements.update(existing.id,{notes:this.notesContent,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:empId,requirementId:reqId,status:'NotCompleted',notes:this.notesContent,updatedAt:new Date().toISOString()}); } await this.loadData(); this.showNotesModal=false; this.showToastMessage('Notes saved'); }catch(e){console.error(e);this.showToastMessage('Error saving notes');} },
+        async saveNotes(){ try{ const empId=this.notesEmployee.id, reqId=this.notesRequirement.id; const existing=this.getER(empId, reqId); if(existing){ await this.db.employeeRequirements.update(existing.id,{notes:this.notesContent,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:empId,requirementId:reqId,status:'NotCompleted',notes:this.notesContent,updatedAt:new Date().toISOString()}); } await this.loadData(); this.showNotesModal=false; this.notify('Notes saved'); }catch(e){console.error(e);this.notify('Error saving notes','var(--danger)');} },
 
-        async toggleStatus(emp, req, event){ try{ const existing=this.getER(emp.id, req.id); const now=this.toDateOnly(new Date()); if(event.altKey){ if(existing){ await this.db.employeeRequirements.update(existing.id,{status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}); } await this.loadData(); this.filterEmployees(); this.showToastMessage('Cleared'); return; } if(event.shiftKey){ const dateStr=prompt('Enter completion date (YYYY-MM-DD):', now); if(!dateStr) return; const completedOn=dateStr; const expiresOn=req.defaultExpiryDays?this.addDays(completedOn, req.defaultExpiryDays):null; if(existing){ await this.db.employeeRequirements.update(existing.id,{status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } await this.loadData(); this.filterEmployees(); this.showToastMessage('Saved'); return; } const current=this.getStatus(emp.id, req.id); if(current==='NotCompleted' || current==='Expired'){ const completedOn=now; const expiresOn=req.defaultExpiryDays?this.addDays(completedOn, req.defaultExpiryDays):null; if(existing){ await this.db.employeeRequirements.update(existing.id,{status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } } else { await this.db.employeeRequirements.update(existing.id,{status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}); } await this.loadData(); this.filterEmployees(); this.showToastMessage('Status updated'); }catch(e){console.error(e);this.showToastMessage('Error updating status');} },
+        openDateModal(emp, req){ this.dateModal={ employeeId:emp.id, requirementId:req.id, completedOn:this.toDateOnly(new Date()) }; this.showDateModal=true; },
+        async saveDateModal(){ try{ const {employeeId, requirementId, completedOn} = this.dateModal; const req = this.requirements.find(r=>r.id===requirementId); const expiresOn = req?.defaultExpiryDays ? this.addDays(completedOn, req.defaultExpiryDays) : null; const existing=this.getER(employeeId, requirementId); if(existing){ await this.db.employeeRequirements.update(existing.id,{status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId,requirementId,status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } this.showDateModal=false; await this.loadData(); this.notify('Date saved'); }catch(e){console.error(e);this.notify('Error saving date','var(--danger)');} },
+
+        async toggleStatus(emp, req, event){ try{ const existing=this.getER(emp.id, req.id); const now=this.toDateOnly(new Date()); if(event?.altKey){ if(existing){ await this.db.employeeRequirements.update(existing.id,{status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}); } await this.loadData(); this.notify('Cleared'); return; } if(event?.shiftKey){ this.openDateModal(emp, req); return; } const current=this.getStatus(emp.id, req.id); if(current==='NotCompleted' || current==='Expired'){ const completedOn=now; const expiresOn=req.defaultExpiryDays?this.addDays(completedOn, req.defaultExpiryDays):null; if(existing){ await this.db.employeeRequirements.update(existing.id,{status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } } else { await this.db.employeeRequirements.update(existing.id,{status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}); } await this.loadData(); this.notify('Status updated'); }catch(e){console.error(e);this.notify('Error updating status','var(--danger)');} },
 
         handleFileUpload(event){
           const file = event.target.files[0]; if(!file) return;
-
           if (this.importType === 'csv') {
-            // Read as text and find the header line that contains Position ID + Payroll Name
             file.text().then(text => {
               const lines = text.split(/\r?\n/);
-              const headerIdx = lines.findIndex(l => /Position ID/i.test(l) && /Payroll Name/i.test(l));
+              const headerIdx = lines.findIndex(l => /Position ID/i.test(l) && /Payroll Name|Employee Name/i.test(l));
               const csvBody = headerIdx >= 0 ? lines.slice(headerIdx).join('\n') : text;
-
               const res = Papa.parse(csvBody, { header:true, skipEmptyLines:true });
               this.importData = res.data;
-              this.importHeaders = res.meta.fields;
+              this.importHeaders = res.meta.fields || [];
+              this.autofillMappings();
             });
           } else {
             const reader = new FileReader();
@@ -403,18 +591,169 @@
               const data = new Uint8Array(e.target.result);
               const wb = XLSX.read(data, { type:'array' });
               const first = wb.Sheets[wb.SheetNames[0]];
-              const json = XLSX.utils.sheet_to_json(first);
+              const json = XLSX.utils.sheet_to_json(first, { raw: false });
               this.importData = json;
-              this.importHeaders = Object.keys(json[0] || {});
+              this.importHeaders = Object.keys(json[0]||{});
+              this.autofillMappings();
             };
             reader.readAsArrayBuffer(file);
           }
         },
-        async processImport(){ try{ if(!this.importData?.length) return; const mapField=(row,keys)=>{ for(const k of keys) if(row[k]!=null && row[k]!=='') return row[k]; return ''; }; const incoming=[]; for(const row of this.importData){ let firstName=mapField(row,['First Name','firstName']); let lastName=mapField(row,['Last Name','lastName']); const payrollName=mapField(row,['Payroll Name']); if((!firstName || !lastName) && payrollName){ const parts=payrollName.split(','); if(parts.length>=2){ lastName=parts[0].trim(); firstName=parts[1].trim(); } } const roleRaw=mapField(row,['Role','Job Title Description','jobTitle']); const role=((/licen[cs]ed/i.test(roleRaw) && /practical/i.test(roleRaw)) ? 'LPN' : /care\s*aide|rca/i.test(roleRaw) ? 'RCA' : /recreation|activity/i.test(roleRaw) ? 'Recreation' : /reception/i.test(roleRaw) ? 'Reception' : /rehab/i.test(roleRaw) ? 'RehabAssistant' : 'Other'); const typeRaw=mapField(row,['Employment Type','Job Class Code','employmentType']); const employmentType=(/pt|tp/i.test(typeRaw)) ? 'PT' : (/\bcas|\bca\b/i.test(typeRaw) ? 'Casual' : 'FT'); const employeeId=mapField(row,['Position ID','Employee ID','employeeId']); const status=(mapField(row,['Position Status','status'])||'Active').match(/inactive/i)?'Inactive':'Active'; const seniorityHours=mapField(row,['Total Seniority Hours as at June 30, 2025','Seniority Hours','Total Seniority Hours']); if(!firstName || !lastName) continue; incoming.push({ id:crypto.randomUUID(), firstName,lastName,role,employmentType,status,employeeId,seniorityHours, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() }); } const existing=await this.db.employees.toArray(); const byId=new Map(existing.filter(e=>e.employeeId).map(e=>[e.employeeId,e])); const keyOf=(e)=> e.employeeId || `${e.firstName}|${e.lastName}|${e.role}`; for(const emp of incoming){ let match= emp.employeeId ? byId.get(emp.employeeId) : existing.find(e=>keyOf(e)===keyOf(emp)); if(match){ await this.db.employees.update(match.id,{...match,...emp,id:match.id,updatedAt:new Date().toISOString()}); } else { const id=await this.db.employees.add(emp); const reqs=await this.db.requirements.toArray(); const rows=reqs.map(r=>({id:crypto.randomUUID(),employeeId:id,requirementId:r.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()})); if(rows.length) await this.db.employeeRequirements.bulkAdd(rows); } } this.showImportModal=false; await this.loadData(); this.filterEmployees(); this.showToastMessage(`Processed ${incoming.length} rows`); }catch(e){ console.error('Import failed', e); this.showToastMessage('Import failed'); } },
 
-        async exportData(){ try{ const data={ employees:await this.db.employees.toArray(), requirements:await this.db.requirements.toArray(), employeeRequirements:await this.db.employeeRequirements.toArray(), settings:await this.db.settings.toArray() }; const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`compliance-matrix-${new Date().toISOString().split('T')[0]}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); this.showToastMessage('Export completed'); }catch(e){ console.error(e); this.showToastMessage('Error exporting'); } },
+        autofillMappings(){
+          const H = (this.importHeaders || []).map(h=>String(h));
+          const find = (regexArr) => H.find(h => regexArr.some(r => r.test(h)));
+          const setIf = (key, regexArr) => { const h=find(regexArr); if(h) this.columnMap[key]=h; };
+          setIf('firstName', [/^first\b/i]);
+          setIf('lastName', [/^last\b/i]);
+          setIf('payrollName', [/payroll\s*name/i, /employee\s*name/i, /^name$/i]);
+          setIf('role', [/job\s*title/i, /^role$/i]);
+          setIf('employmentType', [/employment\s*type/i, /class\s*code/i]);
+          setIf('employeeId', [/position\s*id/i, /employee\s*id/i]);
+          setIf('status', [/status/i]);
+          setIf('seniorityHours', [/seniority/i, /total.*hours/i]);
+        },
 
-        showToastMessage(m){ this.toastMessage=m; this.showToast=true; setTimeout(()=>this.showToast=false, 2500); }
+        async processImport(){
+          try{
+            if (!this.importData?.length) { this.notify('Nothing to import','var(--warn)'); return; }
+            if (this.importMode === 'employees') { await this.importEmployees(); }
+            else { await this.importCompletions(); }
+          }catch(e){ console.error('Import failed', e); this.notify('Import failed','var(--danger)'); }
+        },
+
+        async importEmployees(){
+          const mapField = (row, key) => { const col = this.columnMap[key]; return col ? (row[col] ?? '') : ''; };
+          const incoming = [];
+          for (const row of this.importData){
+            let firstName = mapField(row, 'firstName');
+            let lastName  = mapField(row, 'lastName');
+            const payrollName = mapField(row, 'payrollName');
+            if ((!firstName || !lastName) && payrollName){
+              const parts = payrollName.split(',');
+              if (parts.length >= 2) { lastName = parts[0].trim(); firstName = parts[1].trim(); }
+              else {
+                const p2 = payrollName.trim().split(/\s+/);
+                if (p2.length >= 2) { firstName = p2[0]; lastName = p2.slice(1).join(' '); }
+              }
+            }
+            const roleRaw = mapField(row, 'role');
+            const role = ((/licen[cs]ed/i.test(roleRaw) && /practical/i.test(roleRaw)) ? 'LPN'
+                         : /care\s*aide|rca/i.test(roleRaw) ? 'RCA'
+                         : /recreation|activity/i.test(roleRaw) ? 'Recreation'
+                         : /reception/i.test(roleRaw) ? 'Reception'
+                         : /rehab/i.test(roleRaw) ? 'RehabAssistant'
+                         : 'Other');
+            const typeRaw = mapField(row, 'employmentType');
+            const employmentType = (/pt|tp/i.test(typeRaw)) ? 'PT' : (/\bcas|\bca\b/i.test(typeRaw) ? 'Casual' : 'FT');
+            const employeeId = mapField(row, 'employeeId');
+            const status = (mapField(row, 'status') || 'Active').match(/inactive|leave/i) ? 'Inactive' : 'Active';
+            const seniorityHours = mapField(row, 'seniorityHours');
+            if (!firstName || !lastName) continue;
+            incoming.push({ id: crypto.randomUUID(), firstName, lastName, role, employmentType, status, employeeId, seniorityHours, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+          }
+          const existing = await this.db.employees.toArray();
+          const byEmpId = new Map(existing.filter(e=>e.employeeId).map(e=>[e.employeeId, e]));
+          const keyOf = (e) => e.employeeId || `${e.firstName}|${e.lastName}|${e.role}`;
+          let added = 0, updated = 0;
+          for (const emp of incoming){
+            const match = emp.employeeId ? byEmpId.get(emp.employeeId) : existing.find(e=>keyOf(e)===keyOf(emp));
+            if (match){
+              await this.db.employees.update(match.id, { ...match, ...emp, id: match.id, updatedAt:new Date().toISOString() });
+              updated++;
+            } else {
+              const id = await this.db.employees.add(emp);
+              const reqs = await this.db.requirements.toArray();
+              const rows = reqs.map(r => ({ id: crypto.randomUUID(), employeeId: id, requirementId: r.id, status:'NotCompleted', completedOn:null, expiresOn:null, updatedAt:new Date().toISOString() }));
+              if (rows.length) await this.db.employeeRequirements.bulkAdd(rows);
+              added++;
+            }
+          }
+          await this.loadData();
+          this.showImportModal=false;
+          this.notify(`Employees: ${added} added, ${updated} updated`);
+        },
+
+        async importCompletions(){
+          const requirements = await this.db.requirements.toArray();
+          const reqById = new Map(requirements.map(r=>[r.id,r]));
+          const employees = await this.db.employees.toArray();
+          const byEmpId = new Map(employees.filter(e=>e.employeeId).map(e=>[String(e.employeeId).trim().toLowerCase(), e]));
+          const byName = new Map(employees.map(e=>[(e.lastName+','+e.firstName).trim().toLowerCase(), e]));
+          let updates = 0;
+          for (const row of this.importData){
+            let emp = null;
+            if (this.columnMap.employeeId){
+              const key = String(row[this.columnMap.employeeId]||'').trim().toLowerCase();
+              emp = byEmpId.get(key) || null;
+            }
+            if (!emp && this.columnMap.payrollName){
+              const name = String(row[this.columnMap.payrollName]||'').trim().toLowerCase();
+              emp = byName.get(name) || null;
+            }
+            if (!emp && this.columnMap.firstName && this.columnMap.lastName){
+              const key = (String(row[this.columnMap.lastName]||'').trim()+','+String(row[this.columnMap.firstName]||'').trim()).toLowerCase();
+              emp = byName.get(key) || null;
+            }
+            if (!emp) continue;
+            for (const [rid, col] of Object.entries(this.completionMap)){
+              if (!col) continue;
+              const dateVal = row[col];
+              if (!dateVal) continue;
+              const completedOn = this.normalizeDate(dateVal);
+              if (!completedOn) continue;
+              const req = reqById.get(rid);
+              const expiresOn = req?.defaultExpiryDays ? this.addDays(completedOn, req.defaultExpiryDays) : null;
+              const existing = this.erMap.get(emp.id)?.get(rid);
+              if (existing){
+                await this.db.employeeRequirements.update(existing.id,{status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()});
+              } else {
+                await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:rid,status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()});
+              }
+              updates++;
+            }
+          }
+          await this.loadData();
+          this.showImportModal=false;
+          this.notify(`Completions updated: ${updates}`);
+        },
+
+        normalizeDate(v){
+          if (!v) return null;
+          let s = String(v).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+          const d = new Date(s);
+          if (!isNaN(d.getTime())) return this.toDateOnly(d);
+          const n = Number(s);
+          if (!isNaN(n) && n > 25569) {
+            const ms = (n - 25569) * 86400 * 1000;
+            const dd = new Date(ms);
+            return this.toDateOnly(dd);
+          }
+          return null;
+        },
+
+        async exportData(){
+          const data={ employees:await this.db.employees.toArray(), requirements:await this.db.requirements.toArray(), employeeRequirements:await this.db.employeeRequirements.toArray(), settings:await this.db.settings.toArray() };
+          const jsonBlob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+          this.downloadBlob(jsonBlob, `compliance-matrix-${new Date().toISOString().split('T')[0]}.json`);
+          const headers = ['First Name','Last Name','Role','Type', ...this.visibleRequirements.map(r=>r.name)];
+          const rows = this.filteredEmployees.map(emp => {
+            const base = [emp.firstName, emp.lastName, emp.role, emp.employmentType];
+            const cells = this.visibleRequirements.map(req => {
+              const s=this.getStatus(emp.id, req.id);
+              const c=this.getCompletedDate(emp.id, req.id);
+              const e=this.getExpiresDate(emp.id, req.id);
+              return s + (c?` (${c}${e?`→${e}`:''})`:'');
+            });
+            return base.concat(cells);
+          });
+          const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))].join('\n');
+          const csvBlob = new Blob([csv], {type:'text/csv'});
+          this.downloadBlob(csvBlob, `compliance-matrix-${new Date().toISOString().split('T')[0]}.csv`);
+          this.notify('Exported JSON and CSV');
+        },
+        downloadBlob(blob, filename){ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); },
       }));
     });
   </script>

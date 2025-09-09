@@ -1,18 +1,15 @@
-# Compliance Matrix (Static)
+# Compliance Matrix – v3 (Static, Netlify-ready)
 
-A single-file, offline-first employee compliance tracker (rows = employees, columns = requirements). Click cells to toggle completion. Shift+Click to set a specific date. Alt+Click to clear.
+**Features**
+- Import **CSV & Excel** with header auto-detection and mapping UI
+- Import **Completions** by mapping columns to requirement completion dates
+- Color-coded **requirement columns** (persisted)
+- Advanced filters: multi-role/type, per-requirement status, expiring ≤ N days, hide inactive, sort by seniority hours
+- Polished **dark mode** (persistent)
+- Date picker modal (right-click/Shift+Click), notes on double-click
+- Export JSON (full data) + Matrix CSV
 
-## Deploy on Netlify
-1) Create a new repo and add these files.
-2) Connect the repo to Netlify. Build command can be empty. Publish directory: `/`.
-3) Deploy.
+**Deploy**
+- Netlify → New site from Git → Build: *(empty)*, Publish directory: `/`
 
-## Local
-Open `index.html` via a simple static server (service worker requires http). On macOS/Linux: `python3 -m http.server`.
-
-## Files
-- index.html – app (Alpine.js + Dexie + Tailwind CDN)
-- manifest.webmanifest – PWA manifest
-- sw.js – service worker (offline shell cache)
-- netlify.toml – SPA redirect
-- icons/ – PWA icons
+If upgrading from an older version, do a **hard refresh** (Shift+Cmd+R on Mac / Ctrl+F5 on Windows) to update the service worker.
