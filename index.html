@@ -384,7 +384,70 @@
         async toggleStatus(emp, req, event){ try{ const existing=this.getER(emp.id, req.id); const now=this.toDateOnly(new Date()); if(event.altKey){ if(existing){ await this.db.employeeRequirements.update(existing.id,{status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}); } await this.loadData(); this.filterEmployees(); this.showToastMessage('Cleared'); return; } if(event.shiftKey){ const dateStr=prompt('Enter completion date (YYYY-MM-DD):', now); if(!dateStr) return; const completedOn=dateStr; const expiresOn=req.defaultExpiryDays?this.addDays(completedOn, req.defaultExpiryDays):null; if(existing){ await this.db.employeeRequirements.update(existing.id,{status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } await this.loadData(); this.filterEmployees(); this.showToastMessage('Saved'); return; } const current=this.getStatus(emp.id, req.id); if(current==='NotCompleted' || current==='Expired'){ const completedOn=now; const expiresOn=req.defaultExpiryDays?this.addDays(completedOn, req.defaultExpiryDays):null; if(existing){ await this.db.employeeRequirements.update(existing.id,{status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } } else { await this.db.employeeRequirements.update(existing.id,{status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}); } await this.loadData(); this.filterEmployees(); this.showToastMessage('Status updated'); }catch(e){console.error(e);this.showToastMessage('Error updating status');} },
 
         handleFileUpload(event){ const file=event.target.files[0]; if(!file) return; if(this.importType==='csv'){ Papa.parse(file,{header:true,skipEmptyLines:true,complete:(res)=>{ this.importData=res.data; this.importHeaders=res.meta.fields; }}); } else { const reader=new FileReader(); reader.onload=(e)=>{ const data=new Uint8Array(e.target.result); const wb=XLSX.read(data,{type:'array'}); const first=wb.Sheets[wb.SheetNames[0]]; const json=XLSX.utils.sheet_to_json(first); this.importData=json; this.importHeaders=Object.keys(json[0]||{}); }; reader.readAsArrayBuffer(file);} },
-        async processImport(){ try{ if(!this.importData?.length) return; const mapField=(row,keys)=>{ for(const k of keys) if(row[k]!=null && row[k]!=='') return row[k]; return ''; }; const incoming=[]; for(const row of this.importData){ let firstName=mapField(row,['First Name','firstName']); let lastName=mapField(row,['Last Name','lastName']); const payrollName=mapField(row,['Payroll Name']); if((!firstName || !lastName) && payrollName){ const parts=payrollName.split(','); if(parts.length>=2){ lastName=parts[0].trim(); firstName=parts[1].trim(); } } const roleRaw=mapField(row,['Role','Job Title Description','jobTitle']); const role=/licensed/i.test(roleRaw)?'LPN':/care aide|rca/i.test(roleRaw)?'RCA':/recreation/i.test(roleRaw)?'Recreation':/reception/i.test(roleRaw)?'Reception':/rehab/i.test(roleRaw)?'RehabAssistant':'Other'; const typeRaw=mapField(row,['Employment Type','Job Class Code','employmentType']); const employmentType=/pt/i.test(typeRaw)?'PT':(/cas/i.test(typeRaw)?'Casual':'FT'); const employeeId=mapField(row,['Position ID','Employee ID','employeeId']); const status=(mapField(row,['Position Status','status'])||'Active').match(/inactive/i)?'Inactive':'Active'; if(!firstName || !lastName) continue; incoming.push({ id:crypto.randomUUID(), firstName,lastName,role,employmentType,status,employeeId, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() }); } const existing=await this.db.employees.toArray(); const byId=new Map(existing.filter(e=>e.employeeId).map(e=>[e.employeeId,e])); const keyOf=(e)=> e.employeeId || `${e.firstName}|${e.lastName}|${e.role}`; for(const emp of incoming){ let match= emp.employeeId ? byId.get(emp.employeeId) : existing.find(e=>keyOf(e)===keyOf(emp)); if(match){ await this.db.employees.update(match.id,{...match,...emp,id:match.id,updatedAt:new Date().toISOString()}); } else { const id=await this.db.employees.add(emp); const reqs=await this.db.requirements.toArray(); const rows=reqs.map(r=>({id:crypto.randomUUID(),employeeId:id,requirementId:r.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()})); if(rows.length) await this.db.employeeRequirements.bulkAdd(rows); } } this.showImportModal=false; await this.loadData(); this.filterEmployees(); this.showToastMessage(`Processed ${incoming.length} rows`); }catch(e){ console.error('Import failed', e); this.showToastMessage('Import failed'); } },
+        async processImport(){
+          try{
+            if(!this.importData?.length) return;
+            const mapField=(row,keys)=>{ for(const k of keys) if(row[k]!=null && row[k]!=='') return row[k]; return ''; };
+            const incoming=[];
+            for(const row of this.importData){
+              let firstName=mapField(row,['First Name','firstName']);
+              let lastName=mapField(row,['Last Name','lastName']);
+              const payrollName=mapField(row,['Payroll Name']);
+              if((!firstName || !lastName) && payrollName){
+                const parts=payrollName.split(',');
+                if(parts.length>=2){
+                  lastName=parts[0].trim();
+                  firstName=parts[1].trim();
+                }
+              }
+              const roleRaw=mapField(row,['Role','Job Title Description','jobTitle']);
+              const role=((/licen[cs]ed/i.test(roleRaw) && /practical/i.test(roleRaw)) ? 'LPN'
+                         : /care\s*aide|rca/i.test(roleRaw) ? 'RCA'
+                         : /recreation|activity/i.test(roleRaw) ? 'Recreation'
+                         : /reception/i.test(roleRaw) ? 'Reception'
+                         : /rehab/i.test(roleRaw) ? 'RehabAssistant'
+                         : 'Other');
+              const typeRaw=mapField(row,['Employment Type','Job Class Code','employmentType']);
+              const employmentType=(/pt|tp/i.test(typeRaw)) ? 'PT'
+                                   : ( /\bcas|\bca\b/i.test(typeRaw) ? 'Casual' : 'FT');
+              const employeeId=mapField(row,['Position ID','Employee ID','employeeId']);
+              const status=(mapField(row,['Position Status','status'])||'Active').match(/inactive/i)?'Inactive':'Active';
+              const seniorityHours = mapField(row,[
+                'Total Seniority Hours as at June 30, 2025',
+                'Seniority Hours',
+                'Total Seniority Hours'
+              ]);
+              if(!firstName || !lastName) continue;
+              incoming.push({
+                id:crypto.randomUUID(),
+                firstName,lastName,role,employmentType,status,employeeId,seniorityHours,
+                createdAt:new Date().toISOString(),
+                updatedAt:new Date().toISOString()
+              });
+            }
+            const existing=await this.db.employees.toArray();
+            const byId=new Map(existing.filter(e=>e.employeeId).map(e=>[e.employeeId,e]));
+            const keyOf=(e)=> e.employeeId || `${e.firstName}|${e.lastName}|${e.role}`;
+            for(const emp of incoming){
+              let match= emp.employeeId ? byId.get(emp.employeeId) : existing.find(e=>keyOf(e)===keyOf(emp));
+              if(match){
+                await this.db.employees.update(match.id,{...match,...emp,id:match.id,updatedAt:new Date().toISOString()});
+              } else {
+                const id=await this.db.employees.add(emp);
+                const reqs=await this.db.requirements.toArray();
+                const rows=reqs.map(r=>({id:crypto.randomUUID(),employeeId:id,requirementId:r.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}));
+                if(rows.length) await this.db.employeeRequirements.bulkAdd(rows);
+              }
+            }
+            this.showImportModal=false;
+            await this.loadData();
+            this.filterEmployees();
+            this.showToastMessage(`Processed ${incoming.length} rows`);
+          }catch(e){
+            console.error('Import failed', e);
+            this.showToastMessage('Import failed');
+          }
+        },
 
         async exportData(){ try{ const data={ employees:await this.db.employees.toArray(), requirements:await this.db.requirements.toArray(), employeeRequirements:await this.db.employeeRequirements.toArray(), settings:await this.db.settings.toArray() }; const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`compliance-matrix-${new Date().toISOString().split('T')[0]}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); this.showToastMessage('Export completed'); }catch(e){ console.error(e); this.showToastMessage('Error exporting'); } },
 
