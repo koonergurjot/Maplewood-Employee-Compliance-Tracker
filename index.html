@@ -4,190 +4,67 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Compliance Matrix</title>
-  <meta name="description" content="Offline-first employee compliance tracking"/>
   <meta name="theme-color" content="#111827"/>
   <link rel="manifest" href="/manifest.webmanifest"/>
   <script src="https://cdn.tailwindcss.com"></script>
   <script> tailwind.config = { darkMode: 'class' } </script>
   <script src="https://unpkg.com/feather-icons"></script>
   <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/6.6.2/fuse.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
-    :root{ --bg:#f3f4f6; --card:#ffffff; --line:#e5e7eb; --text:#111827; --text-muted:#6b7280; --accent:#2563eb; --success:#10b981; --warn:#f59e0b; --danger:#ef4444; }
-    .dark:root, .dark{ --bg:#0b1220; --card:#111827; --line:#1f2937; --text:#f3f4f6; --text-muted:#9ca3af; --accent:#60a5fa; --success:#34d399; --warn:#fbbf24; --danger:#f87171; }
+    :root{ --bg:#f3f4f6; --card:#ffffff; --line:#e5e7eb; --text:#111827; --muted:#6b7280; --accent:#2563eb; --success:#10b981; --warn:#f59e0b; --danger:#ef4444; }
+    .dark:root, .dark{ --bg:#0b1220; --card:#111827; --line:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --accent:#60a5fa; --success:#34d399; --warn:#fbbf24; --danger:#f87171; }
     body{ background:var(--bg); color:var(--text); }
     [x-cloak]{display:none!important}
+    .card{background:var(--card);border:1px solid var(--line)}
+    .btn{display:inline-flex;align-items:center;gap:.4rem;border-radius:.5rem;padding:.5rem .75rem;border:1px solid var(--line);background:var(--card)}
+    .btn-primary{background:var(--accent);border-color:var(--accent);color:white}
     .sticky-col{position:sticky;left:0;z-index:10;background:var(--card)}
-    .checkbox{appearance:none;width:1.25rem;height:1.25rem;border:2px solid var(--line);border-radius:.25rem;cursor:pointer;position:relative;outline:none;background:var(--card)}
+    .checkbox{appearance:none;width:1.25rem;height:1.25rem;border:2px solid var(--line);border-radius:.25rem;cursor:pointer;position:relative;background:var(--card)}
     .checkbox.completed{background-color:var(--success);border-color:var(--success)}
     .checkbox.expired{background-color:var(--warn);border-color:var(--warn)}
     .checkbox.completed::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-60%) rotate(-45deg);width:.75rem;height:.4rem;border-left:2px solid #fff;border-bottom:2px solid #fff}
-    .expired-dot{width:6px;height:6px;background-color:var(--danger);border-radius:50%;position:absolute;top:2px;right:2px}
-    .badge-90{background:#fef3c7;color:#92400e}.badge-60{background:#fde68a;color:#92400e}.badge-30{background:#fbbf24;color:#92400e}
-    .virtual-scroll{overflow-y:auto;contain:strict;max-height:calc(100vh - 260px)}
-    .card{background:var(--card); border:1px solid var(--line)}
-    .muted{color:var(--text-muted)}
-    .btn{display:inline-flex;align-items:center;gap:.4rem;border-radius:.5rem;padding:.5rem .75rem;border:1px solid var(--line);background:var(--card)}
-    .btn-primary{background:var(--accent);border-color:var(--accent);color:white}
-    .btn-ghost{background:transparent;border-color:transparent}
-    .table th,.table td{border-color:var(--line)}
+    .virtual-scroll{overflow-y:auto;max-height:calc(100vh - 260px)}
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak :class="{'dark': darkMode}">
   <div class="container mx-auto px-4 py-6">
     <div class="flex justify-between items-center mb-4">
-      <div class="flex items-center gap-3">
-        <h1 class="text-2xl font-bold">Compliance Matrix</h1>
-        <span class="text-xs muted">Offline • Private • Netlify</span>
-      </div>
-      <div class="flex flex-wrap gap-2">
-        <button @click="showAddEmployee = true" class="btn btn-primary"><i data-feather="user-plus" class="w-4 h-4"></i><span>Add Employee</span></button>
-        <button @click="showAddRequirement = true" class="btn"><i data-feather="plus" class="w-4 h-4"></i><span>Add Requirement</span></button>
+      <h1 class="text-2xl font-bold">Compliance Matrix</h1>
+      <div class="flex gap-2">
         <button @click="showImportModal = true" class="btn"><i data-feather="upload" class="w-4 h-4"></i><span>Import</span></button>
-        <button @click="exportData" class="btn"><i data-feather="download" class="w-4 h-4"></i><span>Export</span></button>
-        <button @click="showFilters = !showFilters" class="btn"><i data-feather="filter" class="w-4 h-4"></i><span>Filters</span></button>
-        <button @click="toggleDarkMode()" class="btn"><i :data-feather="darkMode ? 'sun' : 'moon'"></i><span x-text="darkMode ? 'Light' : 'Dark'"></span></button>
-      </div>
-    </div>
-
-    <div class="card rounded-lg shadow p-4 mb-4">
-      <div class="flex flex-wrap items-center gap-3">
-        <div class="relative flex-1 min-w-[220px]">
-          <i data-feather="search" class="absolute left-3 top-1/2 -translate-y-1/2 muted"></i>
-          <input x-model="searchQuery" @input.debounce.250ms="filterEmployees" type="text" placeholder="Search names, roles, notes..." class="pl-10 pr-3 py-2 w-full border rounded bg-transparent" style="border-color: var(--line);" />
-        </div>
-        <div class="flex items-center gap-2 muted text-sm">
-          <span x-text="filteredEmployees.length"></span>
-          <span>of</span>
-          <span x-text="employees.length"></span>
-          <span>employees</span>
-        </div>
-      </div>
-    </div>
-
-    <div x-show="showFilters" class="card rounded-lg shadow p-4 mb-4">
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div>
-          <h3 class="font-semibold mb-2">Roles</h3>
-          <div class="flex flex-wrap gap-2">
-            <template x-for="role in allRoles" :key="role">
-              <label class="inline-flex items-center gap-2 text-sm">
-                <input type="checkbox" :value="role" x-model="filters.roles" @change="filterEmployees()"> <span x-text="role"></span>
-              </label>
-            </template>
-          </div>
-        </div>
-        <div>
-          <h3 class="font-semibold mb-2">Employment Type</h3>
-          <div class="flex flex-wrap gap-2">
-            <template x-for="t in ['FT','PT','Casual']" :key="t">
-              <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" :value="t" x-model="filters.types" @change="filterEmployees()"><span x-text="t"></span></label>
-            </template>
-          </div>
-        </div>
-        <div>
-          <h3 class="font-semibold mb-2">Per-Requirement Status</h3>
-          <div class="flex items-center gap-2 mb-2">
-            <select x-model="filters.reqForStatus" @change="filterEmployees()" class="border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)">
-              <option value="">Any Requirement</option>
-              <template x-for="r in requirements" :key="r.id"><option :value="r.id" x-text="r.name"></option></template>
-            </select>
-            <select x-model="filters.status" @change="filterEmployees()" class="border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)">
-              <option value="">Any Status</option>
-              <option value="Missing">Missing</option>
-              <option value="Completed">Completed</option>
-              <option value="Expired">Expired</option>
-            </select>
-          </div>
-          <div class="flex items-center gap-2 text-sm">
-            <label class="inline-flex items-center gap-2"><input type="checkbox" x-model="filters.missingAny" @change="filterEmployees()"> Missing any required</label>
-            <label class="inline-flex items-center gap-2"><input type="checkbox" x-model="filters.hideInactive" @change="filterEmployees()"> Hide inactive</label>
-          </div>
-        </div>
-        <div>
-          <h3 class="font-semibold mb-2">Expiry</h3>
-          <div class="flex items-center gap-2">
-            <input type="number" min="1" x-model.number="filters.expiringWithin" @input="filterEmployees()" placeholder="Days (e.g., 60)" class="border rounded px-2 py-1 bg-transparent w-28" style="border-color:var(--line)" />
-            <span class="muted text-sm">days</span>
-          </div>
-          <div class="mt-3">
-            <h3 class="font-semibold mb-2">Sort</h3>
-            <select x-model="filters.sortBy" @change="filterEmployees()" class="border rounded px-2 py-1 bg-transparent w-full" style="border-color:var(--line)">
-              <option value="name">Name A→Z</option>
-              <option value="role">Role</option>
-              <option value="type">Employment Type</option>
-              <option value="seniority_desc">Seniority Hours (High→Low)</option>
-              <option value="seniority_asc">Seniority Hours (Low→High)</option>
-            </select>
-          </div>
-        </div>
+        <button @click="toggleDarkMode()" class="btn"><i :data-feather="darkMode ? 'sun' : 'moon'"></i></button>
       </div>
     </div>
 
     <div class="card rounded-lg shadow overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="min-w-full table divide-y" style="border-color: var(--line)" role="grid">
+        <table class="min-w-full divide-y" style="border-color:var(--line)">
           <thead class="bg-gray-50 dark:bg-gray-900">
             <tr>
-              <th class="sticky-col px-6 py-3 text-left text-xs font-medium uppercase tracking-wider muted">Employee</th>
+              <th class="sticky-col px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style="color:var(--muted)">Employee</th>
               <template x-for="req in visibleRequirements" :key="req.id">
-                <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider group" :style="`background:${req.color || '#f8fafc'};`">
-                  <div class="flex items-center justify-between">
-                    <span x-text="req.name" class="truncate max-w-[140px]"></span>
-                    <div class="opacity-0 group-hover:opacity-100 flex">
-                      <button @click="editRequirement(req)" class="text-gray-600 dark:text-gray-300 hover:opacity-80 ml-2" title="Edit"><i data-feather="edit-2" class="w-4 h-4"></i></button>
-                      <button @click="hideRequirement(req.id)" class="text-gray-600 dark:text-gray-300 hover:opacity-80 ml-2" title="Hide"><i data-feather="eye-off" class="w-4 h-4"></i></button>
-                    </div>
-                  </div>
+                <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider" :style="`background:${req.color || '#f8fafc'};`">
+                  <span x-text="req.name"></span>
                 </th>
               </template>
             </tr>
           </thead>
-          <tbody class="divide-y virtual-scroll" style="border-color: var(--line)">
+          <tbody class="divide-y virtual-scroll">
             <template x-for="emp in filteredEmployees" :key="emp.id">
               <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
-                <td class="sticky-col px-6 py-4 whitespace-nowrap">
-                  <div class="flex items-center">
-                    <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center"><i data-feather="user" class="text-gray-500"></i></div>
-                    <div class="ml-4">
-                      <div class="text-sm font-semibold" x-text="`${emp.firstName} ${emp.lastName}`"></div>
-                      <div class="flex flex-wrap gap-1 mt-1 text-xs">
-                        <span x-text="emp.role" class="px-2 inline-flex leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"></span>
-                        <span x-text="emp.employmentType" class="px-2 inline-flex leading-5 font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"></span>
-                        <template x-if="emp.seniorityHours">
-                          <span class="px-2 inline-flex leading-5 rounded-full bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200" x-text="`Hrs: ${emp.seniorityHours}`"></span>
-                        </template>
-                      </div>
-                    </div>
-                  </div>
+                <td class="sticky-col px-6 py-4">
+                  <div class="text-sm font-semibold" x-text="`${emp.firstName} ${emp.lastName}`"></div>
+                  <div class="text-xs" style="color:var(--muted)" x-text="`${emp.role||''} • ${emp.employmentType||''}`"></div>
                 </td>
                 <template x-for="req in visibleRequirements" :key="req.id">
-                  <td class="px-4 py-3 whitespace-nowrap" role="gridcell">
-                    <div class="relative inline-flex items-center gap-2">
-                      <button role="checkbox" tabindex="0"
-                        @click="$event.detail === 2 ? openNotes(emp, req) : toggleStatus(emp, req, $event)"
-                        @contextmenu.prevent="openDateModal(emp,req)"
-                        @keydown.space.prevent="toggleStatus(emp, req, $event)"
-                        @keydown.enter.prevent="toggleStatus(emp, req, $event)"
-                        class="checkbox"
-                        :style="req.color ? `border-color:${req.color}` : ''"
-                        :class="{ 'completed': getStatus(emp.id, req.id) === 'Completed', 'expired': getStatus(emp.id, req.id) === 'Expired' }"
-                        :aria-checked="getStatus(emp.id, req.id) === 'Completed' ? 'true' : (getStatus(emp.id, req.id) === 'Expired' ? 'mixed' : 'false')"
-                        title="Click: complete today • Right-click or Shift+Click: set date • Alt+Click: clear">
-                        <template x-if="getStatus(emp.id, req.id) === 'Expired'"><span class="expired-dot"></span></template>
-                        <template x-if="isExpiringSoon(emp.id, req.id)">
-                          <span class="absolute -top-2 -right-2 text-xs px-1 rounded" :class="getExpiringBadgeClass(emp.id, req.id)" x-text="getDaysUntilExpire(emp.id, req.id)"></span>
-                        </template>
-                      </button>
-                    </div>
+                  <td class="px-4 py-3">
+                    <button class="checkbox" :class="{ 'completed': getStatus(emp.id, req.id) === 'Completed', 'expired': getStatus(emp.id, req.id) === 'Expired' }"
+                      @click="toggleStatus(emp, req, $event)"></button>
                   </td>
                 </template>
               </tr>
-            </template>
-            <template x-if="filteredEmployees.length === 0">
-              <tr><td colspan="100" class="px-6 py-6 text-center muted">No employees match filters</td></tr>
             </template>
           </tbody>
         </table>
@@ -196,25 +73,25 @@
   </div>
 
   <!-- Import Modal -->
-  <div x-show="showImportModal" class="fixed inset-0 z-50" role="dialog" aria-modal="true">
+  <div x-show="showImportModal" class="fixed inset-0 z-50">
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
       <div @click="showImportModal=false" class="fixed inset-0 bg-black/40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
       <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
         <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <h3 class="text-lg font-semibold mb-4">Import Data</h3>
+          <h3 class="text-lg font-semibold mb-3">Import Data</h3>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
               <label class="block text-sm">File Type</label>
-              <div class="mt-1 flex gap-4">
+              <div class="mt-1 flex gap-4 text-sm">
                 <label class="inline-flex items-center"><input type="radio" x-model="importType" value="csv"> <span class="ml-2">CSV</span></label>
                 <label class="inline-flex items-center"><input type="radio" x-model="importType" value="excel"> <span class="ml-2">Excel</span></label>
               </div>
             </div>
             <div>
               <label class="block text-sm">Import Mode</label>
-              <div class="mt-1 flex gap-4">
+              <div class="mt-1 flex gap-4 text-sm">
                 <label class="inline-flex items-center"><input type="radio" x-model="importMode" value="employees"> <span class="ml-2">Employees</span></label>
                 <label class="inline-flex items-center"><input type="radio" x-model="importMode" value="completions"> <span class="ml-2">Completions</span></label>
               </div>
@@ -223,34 +100,40 @@
               <label class="block text-sm">File</label>
               <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md" style="border-color:var(--line)">
                 <div class="space-y-1 text-center">
-                  <div class="flex text-sm">
-                    <label for="file-upload" class="relative cursor-pointer rounded-md font-medium text-blue-600 hover:opacity-80">
-                      <span>Upload a file</span>
-                      <input id="file-upload" type="file" class="sr-only" @change="handleFileUpload">
-                    </label>
-                    <p class="pl-1">or drag and drop</p>
-                  </div>
-                  <p class="text-xs muted">CSV or Excel up to 10MB</p>
+                  <label for="file-upload" class="relative cursor-pointer rounded-md font-medium text-blue-600 hover:opacity-80">
+                    <span>Upload a file</span>
+                    <input id="file-upload" type="file" class="sr-only" @change="handleFileUpload">
+                  </label>
+                  <p class="text-xs" style="color:var(--muted)">CSV or Excel up to 10MB</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Sheet picker (Excel) + diagnostics -->
           <div x-show="importSheets.length" class="mb-3">
             <div class="flex items-center gap-3">
               <label class="text-sm">Worksheet:</label>
               <select x-model="importSheetName" @change="selectExcelSheet(importSheetName)" class="border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)">
                 <template x-for="s in importSheets" :key="s"><option :value="s" x-text="s"></option></template>
               </select>
-              <span class="text-xs muted" x-text="'Headers detected: ' + importHeaders.length + ' • Rows: ' + importData.length"></span>
+              <span class="text-xs" style="color:var(--muted)" x-text="'Headers: ' + importHeaders.length + ' • Rows: ' + importData.length"></span>
             </div>
           </div>
 
-          <!-- Mapping UI -->
-          <div x-show="importHeaders.length" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+          <!-- Name format control -->
+          <div class="mb-4">
+            <label class="block text-sm font-semibold">Name Format (for Payroll/Employee Name)</label>
+            <select x-model="nameFormat" class="mt-1 border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)">
+              <option value="auto">Auto-detect</option>
+              <option value="last_first">Last, First</option>
+              <option value="first_last">First Last</option>
+            </select>
+          </div>
+
+          <!-- Mapping -->
+          <div x-show="importHeaders.length" class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <h4 class="font-semibold mb-2">Field Mapping – <span class="muted text-sm">Employees</span></h4>
+              <h4 class="font-semibold mb-2">Field Mapping — Employees</h4>
               <template x-for="(label, key) in fieldLabels" :key="key">
                 <div class="flex items-center gap-2 mb-2">
                   <label class="w-44 text-sm" x-text="label"></label>
@@ -263,8 +146,8 @@
               </template>
             </div>
             <div>
-              <h4 class="font-semibold mb-2">Requirement Columns – <span class="muted text-sm">Completions</span></h4>
-              <div class="text-xs muted mb-2">Map sheet columns to requirement “Completed On” dates (optional).</div>
+              <h4 class="font-semibold mb-2">Requirement Columns — Completions</h4>
+              <div class="text-xs" style="color:var(--muted)">Map sheet columns to requirement completion dates (optional).</div>
               <div class="max-h-64 overflow-auto pr-1">
                 <template x-for="r in requirements" :key="r.id">
                   <div class="flex items-center gap-2 mb-2">
@@ -282,7 +165,12 @@
 
           <!-- Preview -->
           <div x-show="importData.length" class="mt-4">
-            <label class="block text-sm font-semibold mb-1">Preview (first 6 rows)</label>
+            <div class="flex items-center justify-between">
+              <label class="block text-sm font-semibold">Preview (first 6 rows)</label>
+              <div class="text-xs" :style="'color:var(--muted)'">
+                <span x-text="previewEligible"></span> eligible rows
+              </div>
+            </div>
             <div class="overflow-auto max-h-60 border rounded-md" style="border-color:var(--line)">
               <table class="min-w-full divide-y" style="border-color:var(--line)">
                 <thead class="bg-gray-50 dark:bg-gray-900"><tr>
@@ -290,7 +178,7 @@
                     <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider"><span x-text="header"></span></th>
                   </template>
                 </tr></thead>
-                <tbody class="divide-y" style="border-color:var(--line)">
+                <tbody class="divide-y">
                   <template x-for="(row, rowIndex) in importData.slice(0,6)" :key="rowIndex">
                     <tr>
                       <template x-for="(header, headerIndex) in importHeaders" :key="headerIndex">
@@ -303,9 +191,16 @@
             </div>
           </div>
 
+          <!-- Warnings -->
+          <template x-if="importWarning">
+            <div class="mt-3 p-3 rounded border" style="border-color:var(--warn); color:var(--warn)">
+              <div class="font-semibold">Heads up</div>
+              <div class="text-sm" x-text="importWarning"></div>
+            </div>
+          </template>
           <template x-if="importError">
-            <div class="mt-4 p-3 rounded border" style="border-color:var(--danger); color:var(--danger)">
-              <div class="font-semibold">Import diagnostic</div>
+            <div class="mt-3 p-3 rounded border" style="border-color:var(--danger); color:var(--danger)">
+              <div class="font-semibold">Import blocked</div>
               <div class="text-sm" x-text="importError"></div>
             </div>
           </template>
@@ -318,30 +213,20 @@
     </div>
   </div>
 
-  <!-- Notes, Add/Edit Requirement, Date Modal, Toasts (same as v3) -->
-  <!-- (omitted here for brevity; functionality unchanged) -->
+  <div x-show="showToast" class="fixed bottom-4 right-4 px-4 py-2 rounded shadow-lg" :style="'background:'+toastColor+';color:white'">
+    <span x-text="toastMessage"></span>
+  </div>
 
   <script>
     document.addEventListener('alpine:init', () => {
       Alpine.data('app', () => ({
-        darkMode:false, db:null,
-        employees:[], requirements:[], employeeRequirements:[], erMap:new Map(),
-        filteredEmployees:[], allRoles:[], visibleRequirements:[],
-        searchQuery:'',
-        filters:{ roles:[], types:[], status:'', reqForStatus:'', expiringWithin:null, sortBy:'name', missingAny:false, hideInactive:true },
-        showAddEmployee:false, showAddRequirement:false, showEditRequirement:false, showImportModal:false, showFilters:false,
-        showNotesModal:false, showToast:false, toastMessage:'', toastColor:'var(--success)',
-        showDateModal:false, dateModal:{ employeeId:null, requirementId:null, completedOn:null },
-        newEmployee:{ firstName:'', lastName:'', role:'LPN', employmentType:'FT' },
-        newRequirement:{ name:'', defaultExpiryDays:null, color:'#fef3c7' },
-        editingRequirement:{ id:null, name:'', defaultExpiryDays:null, color:'#fef3c7' },
-        notesEmployee:{}, notesRequirement:{}, notesContent:'', currentNotesId:null,
-
-        // Import state
-        importType:'csv', importMode:'employees', importData:[], importHeaders:[],
-        importSheets:[], importSheetName:'', importError:'',
-        fieldLabels: { firstName:'First Name', lastName:'Last Name', payrollName:'Payroll/Employee Name', role:'Role / Job Title', employmentType:'Employment Type / Class', employeeId:'Employee ID / Position ID', status:'Position Status', seniorityHours:'Seniority Hours' },
-        columnMap:{ firstName:'First Name', lastName:'Last Name', payrollName:'Payroll Name', role:'Job Title Description', employmentType:'Employment Type', employeeId:'Position ID', status:'Position Status', seniorityHours:'Total Seniority Hours as at June 30, 2025' },
+        darkMode:false, showImportModal:false,
+        db:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), filteredEmployees:[], visibleRequirements:[],
+        // Import UI state
+        importType:'excel', importMode:'employees', importData:[], importHeaders:[], importSheets:[], importSheetName:'', importWarning:'', importError:'',
+        nameFormat:'auto', previewEligible:0,
+        fieldLabels:{ firstName:'First Name', lastName:'Last Name', payrollName:'Payroll/Employee Name', role:'Role / Job Title', employmentType:'Employment Type / Class', employeeId:'Employee ID / Position ID', status:'Position Status', seniorityHours:'Seniority Hours' },
+        columnMap:{ firstName:'', lastName:'', payrollName:'', role:'', employmentType:'', employeeId:'', status:'', seniorityHours:'' },
         completionMap:{},
 
         async init(){
@@ -356,7 +241,7 @@
 
         initDB(){
           this.db = new Dexie('ComplianceMatrixDB');
-          this.db.version(5).stores({
+          this.db.version(6).stores({
             employees:'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
             requirements:'id, name, defaultExpiryDays, color',
             employeeRequirements:'id, [employeeId+requirementId], status, completedOn, expiresOn, notes',
@@ -373,7 +258,7 @@
               seed('FoodSafe', 1825, '#9bf6ff'),
               seed('Violence Prevention', 365, '#bdb2ff')
             ]);
-            await this.db.settings.put({id:'app',darkMode:false,hiddenRequirementIds:[],requirementOrder:[]});
+            await this.db.settings.put({id:'app',darkMode:false});
           });
         },
 
@@ -386,120 +271,32 @@
             if(!this.erMap.has(er.employeeId)) this.erMap.set(er.employeeId,new Map());
             this.erMap.get(er.employeeId).set(er.requirementId, er);
           }
-          this.allRoles = [...new Set(this.employees.map(e=>e.role))].sort();
-          const s = await this.db.settings.get('app') || {hiddenRequirementIds:[],requirementOrder:[]};
-          let ordered = [...this.requirements];
-          if (s.requirementOrder?.length){
-            const om = new Map(s.requirementOrder.map((id,i)=>[id,i]));
-            ordered.sort((a,b)=>(om.get(a.id)??9999)-(om.get(b.id)??9999));
-          }
-          const hidden = new Set(s.hiddenRequirementIds || []);
-          this.visibleRequirements = ordered.filter(r=>!hidden.has(r.id));
-          this.filterEmployees();
+          this.visibleRequirements = [...this.requirements];
+          this.filteredEmployees = [...this.employees];
         },
 
-        // ---------- Utils ----------
-        toDateOnly(d=new Date()){ const dt=(d instanceof Date)?d:new Date(d); const y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,'0'),dd=String(dt.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; },
-        addDays(dateOnly, days){ if(!dateOnly) return null; const [y,m,d]=dateOnly.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+Number(days)); return this.toDateOnly(dt); },
-        daysUntil(dateOnly){ if(!dateOnly) return null; const [y,m,d]=dateOnly.split('-').map(Number); const target=Date.UTC(y,m-1,d); const now=new Date(); const today=Date.UTC(now.getFullYear(),now.getMonth(),now.getDate()); return Math.ceil((target-today)/(1000*60*60*24)); },
-
+        // Status helpers (minimal for demo)
         getER(eId,rId){ return this.erMap.get(eId)?.get(rId) || null; },
-        getStatus(eId,rId){ const er=this.getER(eId,rId); if(!er||er.status==='NotCompleted') return 'NotCompleted'; if(er.completedOn){ const req=this.requirements.find(r=>r.id===rId); if(req?.defaultExpiryDays&&er.expiresOn){ const d=this.daysUntil(er.expiresOn); if(d!==null&&d<=0) return 'Expired'; } } return 'Completed'; },
-        getCompletedDate(eId,rId){ return this.getER(eId,rId)?.completedOn || null; },
-        getExpiresDate(eId,rId){ return this.getER(eId,rId)?.expiresOn || null; },
-        getNotes(eId,rId){ return this.getER(eId,rId)?.notes || ''; },
-        isExpiringSoon(eId,rId){ const d=this.getDaysUntilExpire(eId,rId); return d!==null && d>0 && d<=90; },
-        getDaysUntilExpire(eId,rId){ const er=this.getER(eId,rId); if(!er?.expiresOn) return null; return this.daysUntil(er.expiresOn); },
-        getExpiringBadgeClass(eId,rId){ const d=this.getDaysUntilExpire(eId,rId); if(d===null) return ''; if(d<=30) return 'badge-30'; if(d<=60) return 'badge-60'; return 'badge-90'; },
+        getStatus(eId,rId){ const er=this.getER(eId,rId); if(!er||er.status==='NotCompleted') return 'NotCompleted'; if(er.expiresOn){ const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000); if(d<=0) return 'Expired'; } return 'Completed'; },
+        async toggleStatus(emp, req){ const er=this.getER(emp.id, req.id); if(!er){ await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'Completed',completedOn:new Date().toISOString().slice(0,10)}); } else { await this.db.employeeRequirements.update(er.id,{status: er.status==='Completed'?'NotCompleted':'Completed'}); } await this.loadData(); },
 
-        notify(msg, color='var(--success)'){ this.toastMessage=msg; this.toastColor=color; this.showToast=true; setTimeout(()=>this.showToast=false, 2500); },
-        async saveSettings(partial){ const prev = await this.db.settings.get('app') || {id:'app'}; await this.db.settings.put({...prev,...partial}); },
+        // UI helpers
+        notify(msg,color='var(--success)'){ this.toastMessage=msg; this.toastColor=color; this.showToast=true; setTimeout(()=>this.showToast=false,2500); },
+        async toggleDarkMode(){ this.darkMode=!this.darkMode; document.documentElement.classList.toggle('dark', this.darkMode); const prev=await this.db.settings.get('app')||{id:'app'}; await this.db.settings.put({...prev, darkMode:this.darkMode}); },
 
-        // ---------- Filtering ----------
-        filterEmployees(){
-          let filtered=[...this.employees];
-          if(this.searchQuery){
-            const query=this.searchQuery.toLowerCase();
-            filtered = filtered.filter(e => {
-              if ((e.firstName+' '+e.lastName).toLowerCase().includes(query)) return true;
-              if ((e.role||'').toLowerCase().includes(query)) return true;
-              const erForEmp = this.erMap.get(e.id);
-              if (erForEmp) for (const er of erForEmp.values()) if ((er.notes||'').toLowerCase().includes(query)) return true;
-              return false;
-            });
-          }
-          if(this.filters.hideInactive) filtered = filtered.filter(e => (e.status||'Active')!=='Inactive');
-          if(this.filters.roles?.length) filtered = filtered.filter(e => this.filters.roles.includes(e.role));
-          if(this.filters.types?.length) filtered = filtered.filter(e => this.filters.types.includes(e.employmentType));
-          const reqId = this.filters.reqForStatus || null;
-          const status = this.filters.status || null;
-          if (status){
-            filtered = filtered.filter(emp => {
-              const reqs = reqId ? this.visibleRequirements.filter(r=>r.id===reqId) : this.visibleRequirements;
-              return reqs.some(req => {
-                const s=this.getStatus(emp.id, req.id);
-                if(status==='Missing') return s==='NotCompleted';
-                if(status==='Completed') return s==='Completed';
-                if(status==='Expired') return s==='Expired';
-                return true;
-              });
-            });
-          }
-          if (this.filters.missingAny){
-            filtered = filtered.filter(emp => this.visibleRequirements.some(req => this.getStatus(emp.id, req.id)==='NotCompleted'));
-          }
-          if (this.filters.expiringWithin && Number(this.filters.expiringWithin)>0){
-            const N = Number(this.filters.expiringWithin);
-            filtered = filtered.filter(emp => this.visibleRequirements.some(req => {
-              const d=this.getDaysUntilExpire(emp.id, req.id);
-              return d!==null && d>0 && d<=N;
-            }));
-          }
-          const by = this.filters.sortBy || 'name';
-          filtered.sort((a,b)=>{
-            if (by==='name') return (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||'');
-            if (by==='role') return (a.role||'').localeCompare(b.role||'') || (a.lastName||'').localeCompare(b.lastName||'');
-            if (by==='type') return (a.employmentType||'').localeCompare(b.employmentType||'') || (a.lastName||'').localeCompare(b.lastName||'');
-            if (by==='seniority_desc') return (Number(b.seniorityHours||0) - Number(a.seniorityHours||0));
-            if (by==='seniority_asc') return (Number(a.seniorityHours||0) - Number(b.seniorityHours||0));
-            return 0;
-          });
-          this.filteredEmployees = filtered;
-        },
-        resetFilters(){ this.searchQuery=''; this.filters={ roles:[], types:[], status:'', reqForStatus:'', expiringWithin:null, sortBy:'name', missingAny:false, hideInactive:true }; this.filterEmployees(); },
-
-        // ---------- Dark mode ----------
-        async toggleDarkMode(){ this.darkMode=!this.darkMode; document.documentElement.classList.toggle('dark', this.darkMode); await this.saveSettings({darkMode:this.darkMode}); this.notify(this.darkMode?'Dark mode enabled':'Dark mode disabled'); },
-
-        // ---------- Employees & Requirements (same APIs as v3) ----------
-        async addEmployee(){ try{ const emp={id:crypto.randomUUID(),...this.newEmployee,status:'Active',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}; await this.db.employees.add(emp); const rows=this.requirements.map(r=>({id:crypto.randomUUID(),employeeId:emp.id,requirementId:r.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()})); if(rows.length) await this.db.employeeRequirements.bulkAdd(rows); this.newEmployee={firstName:'',lastName:'',role:'LPN',employmentType:'FT'}; this.showAddEmployee=false; await this.loadData(); this.notify('Employee added'); }catch(e){console.error(e);this.notify('Error adding employee','var(--danger)');} },
-        async addRequirement(){ try{ const req={id:crypto.randomUUID(),...this.newRequirement,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}; await this.db.requirements.add(req); const rows=this.employees.map(emp=>({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()})); if(rows.length) await this.db.employeeRequirements.bulkAdd(rows); this.newRequirement={name:'',defaultExpiryDays:null,color:'#fef3c7'}; this.showAddRequirement=false; await this.loadData(); this.notify('Requirement added'); }catch(e){console.error(e);this.notify('Error adding requirement','var(--danger)');} },
-        editRequirement(req){ this.editingRequirement={id:req.id,name:req.name,defaultExpiryDays:req.defaultExpiryDays,color:req.color||'#fef3c7'}; this.showEditRequirement=true; },
-        async updateRequirement(){ try{ await this.db.requirements.update(this.editingRequirement.id,{name:this.editingRequirement.name,defaultExpiryDays:this.editingRequirement.defaultExpiryDays,color:this.editingRequirement.color,updatedAt:new Date().toISOString()}); this.showEditRequirement=false; await this.loadData(); this.notify('Requirement updated'); }catch(e){console.error(e);this.notify('Error updating requirement','var(--danger)');} },
-        async hideRequirement(id){ const s=await this.db.settings.get('app')||{id:'app',hiddenRequirementIds:[]}; const hidden=new Set(s.hiddenRequirementIds||[]); hidden.add(id); await this.saveSettings({hiddenRequirementIds:Array.from(hidden)}); await this.loadData(); this.notify('Requirement hidden'); },
-
-        // ---------- Notes & Dates ----------
-        openNotes(emp, req){ this.notesEmployee=emp; this.notesRequirement=req; const r=this.getER(emp.id, req.id); this.notesContent=r?.notes||''; this.currentNotesId=r?.id||null; this.showNotesModal=true; },
-        async saveNotes(){ try{ const empId=this.notesEmployee.id, reqId=this.notesRequirement.id; const existing=this.getER(empId, reqId); if(existing){ await this.db.employeeRequirements.update(existing.id,{notes:this.notesContent,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:empId,requirementId:reqId,status:'NotCompleted',notes:this.notesContent,updatedAt:new Date().toISOString()}); } await this.loadData(); this.showNotesModal=false; this.notify('Notes saved'); }catch(e){console.error(e);this.notify('Error saving notes','var(--danger)');} },
-        openDateModal(emp, req){ this.dateModal={ employeeId:emp.id, requirementId:req.id, completedOn:this.toDateOnly(new Date()) }; this.showDateModal=true; },
-        async saveDateModal(){ try{ const {employeeId, requirementId, completedOn} = this.dateModal; const req = this.requirements.find(r=>r.id===requirementId); const expiresOn = req?.defaultExpiryDays ? this.addDays(completedOn, req.defaultExpiryDays) : null; const existing=this.getER(employeeId, requirementId); if(existing){ await this.db.employeeRequirements.update(existing.id,{status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId,requirementId,status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } this.showDateModal=false; await this.loadData(); this.notify('Date saved'); }catch(e){console.error(e);this.notify('Error saving date','var(--danger)');} },
-
-        async toggleStatus(emp, req, event){ try{ const existing=this.getER(emp.id, req.id); const now=this.toDateOnly(new Date()); if(event?.altKey){ if(existing){ await this.db.employeeRequirements.update(existing.id,{status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}); } await this.loadData(); this.notify('Cleared'); return; } if(event?.shiftKey){ this.openDateModal(emp, req); return; } const current=this.getStatus(emp.id, req.id); if(current==='NotCompleted' || current==='Expired'){ const completedOn=now; const expiresOn=req.defaultExpiryDays?this.addDays(completedOn, req.defaultExpiryDays):null; if(existing){ await this.db.employeeRequirements.update(existing.id,{status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } else { await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()}); } } else { await this.db.employeeRequirements.update(existing.id,{status:'NotCompleted',completedOn:null,expiresOn:null,updatedAt:new Date().toISOString()}); } await this.loadData(); this.notify('Status updated'); }catch(e){console.error(e);this.notify('Error updating status','var(--danger)');} },
-
-        // ---------- Import pipeline ----------
+        // ---------- Import ----------
         handleFileUpload(event){
-          this.importError=''; this.importData=[]; this.importHeaders=[]; this.importSheets=[]; this.importSheetName='';
+          this.importError=''; this.importWarning=''; this.importData=[]; this.importHeaders=[]; this.importSheets=[]; this.importSheetName=''; this.previewEligible=0;
           const file = event.target.files[0]; if(!file) return;
           if (this.importType === 'csv') {
             file.text().then(text => {
               const lines = text.split(/\r?\n/);
-              const headerIdx = this.findHeaderRowFromLines(lines);
-              const body = headerIdx >= 0 ? lines.slice(headerIdx).join('\n') : text;
+              const body = this.stripTitleLines(lines);
               const res = Papa.parse(body, { header:true, skipEmptyLines:true });
               this.importData = res.data; this.importHeaders = res.meta.fields || [];
-              this.importSheets = []; this.importSheetName = '';
               this.autofillMappings();
-              if (!this.importHeaders.length) this.importError = 'Could not detect headers in CSV. Please check the file.';
+              this.updateEligibilityPreview();
+              if (!this.importHeaders.length) this.importError = 'No headers detected — check the CSV file.';
             });
           } else {
             const reader = new FileReader();
@@ -508,57 +305,40 @@
                 const data = new Uint8Array(e.target.result);
                 const wb = XLSX.read(data, { type:'array' });
                 this.importSheets = wb.SheetNames;
-                // auto-pick best sheet
                 let best = { name: wb.SheetNames[0], score: -1, headers: [], rows: [] };
                 for (const name of wb.SheetNames){
-                  const sheet = wb.Sheets[name];
-                  const { headers, rows, score } = this.extractFromSheet(sheet);
+                  const { headers, rows, score } = this.extractFromSheet(wb.Sheets[name]);
                   if (score > best.score) best = { name, score, headers, rows };
                 }
-                this.importSheetName = best.name;
-                this.importHeaders = best.headers;
-                this.importData = best.rows;
+                this.importSheetName = best.name; this.importHeaders = best.headers; this.importData = best.rows;
                 this.autofillMappings();
-                if (!this.importHeaders.length) this.importError = 'Could not detect headers in Excel sheet. Try choosing a different worksheet above.';
+                this.updateEligibilityPreview();
+                if (!this.importHeaders.length) this.importError = 'Could not detect headers in Excel sheet. Try selecting a different worksheet above.';
               }catch(err){
-                console.error(err);
-                this.importError = 'Failed to read Excel file. Make sure it is .xlsx or .xls and not password protected.';
+                console.error(err); this.importError = 'Failed to read Excel file. Ensure it is .xlsx or .xls and not password protected.';
               }
             };
             reader.readAsArrayBuffer(file);
           }
         },
-
         selectExcelSheet(name){
-          // Re-parse a specific sheet after user picks one
-          const input = document.getElementById('file-upload');
-          const file = input?.files?.[0]; if(!file || !name) return;
+          const input = document.getElementById('file-upload'); const file = input?.files?.[0]; if(!file || !name) return;
           const reader = new FileReader();
           reader.onload = (e) => {
             const data = new Uint8Array(e.target.result);
             const wb = XLSX.read(data, { type:'array' });
-            const sheet = wb.Sheets[name];
-            const { headers, rows } = this.extractFromSheet(sheet);
-            this.importHeaders = headers;
-            this.importData = rows;
-            this.autofillMappings();
+            const { headers, rows } = this.extractFromSheet(wb.Sheets[name]);
+            this.importHeaders = headers; this.importData = rows; this.autofillMappings(); this.updateEligibilityPreview();
           };
           reader.readAsArrayBuffer(file);
         },
-
-        // --- Header detection helpers ---
-        findHeaderRowFromLines(lines){
-          // look for row with at least two strong fields
-          let bestIdx = -1, bestScore = -1;
-          for (let i=0; i<Math.min(30, lines.length); i++){
-            const cols = (lines[i]||'').split(',').map(s=>s.replace(/\"/g,'').trim());
-            const score = this.scoreHeaderRow(cols);
-            if (score > bestScore){ bestScore = score; bestIdx = i; }
-          }
-          return bestScore > 0 ? bestIdx : 0;
+        stripTitleLines(lines){
+          // Keep from best header row onward
+          let bestIdx=0, bestScore=-1;
+          for(let i=0;i<Math.min(30,lines.length);i++){ const cols=(lines[i]||'').split(',').map(s=>s.replace(/\"/g,'').trim()); const sc=this.scoreHeaderRow(cols); if(sc>bestScore){bestScore=sc;bestIdx=i;} }
+          return lines.slice(bestIdx).join('\n');
         },
         extractFromSheet(sheet){
-          // convert to array-of-arrays first
           const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows:false });
           let bestIdx = 0, bestScore = -1;
           for (let i=0; i<Math.min(30, aoa.length); i++){
@@ -566,90 +346,100 @@
             const score = this.scoreHeaderRow(row);
             if (score > bestScore){ bestScore = score; bestIdx = i; }
           }
-          const headers = (aoa[bestIdx] || []).map(v => String(v||'').trim()).filter(x=>x!==''); // drop empty headers
+          const headers = (aoa[bestIdx] || []).map(v => String(v||'').trim()).filter(x=>x!=='');
           const rows = [];
-          for (let r = bestIdx+1; r < aoa.length; r++){
+          for (let r=bestIdx+1; r<aoa.length; r++){
             const row = aoa[r]; if (!row || row.every(v => v==null || String(v).trim()==='')) continue;
-            const obj = {}; for (let c=0; c<headers.length; c++){ obj[headers[c]] = row[c]; }
+            const obj={}; for (let c=0;c<headers.length;c++){ obj[headers[c]] = row[c]; }
             rows.push(obj);
           }
           return { headers, rows, score: bestScore };
         },
         scoreHeaderRow(cols){
-          // scoring: presence of key fields increases confidence
-          const patterns = [
-            /first/i, /last/i, /employee\s*name/i, /payroll\s*name/i,
-            /job\s*title|role/i, /employment\s*type|class/i,
-            /position\s*id|employee\s*id/i, /status/i,
-            /seniority|total.*hours/i
-          ];
-          let score = 0;
-          for (const c of cols){
-            const s = String(c||'');
-            for (const p of patterns) if (p.test(s)) score++;
-          }
-          return score;
+          const patterns=[/first/i,/last/i,/employee\s*name/i,/payroll\s*name/i,/job\s*title|role/i,/employment\s*type|class/i,/position\s*id|employee\s*id/i,/status/i,/seniority|total.*hours/i];
+          let score=0; for(const c of cols){ const s=String(c||''); for(const p of patterns) if(p.test(s)) score++; } return score;
         },
-
-        // ---------- Mapping & Processing ----------
         autofillMappings(){
-          const H = (this.importHeaders || []).map(h=>String(h));
+          const H = (this.importHeaders||[]).map(h=>String(h));
           const find = (regexArr) => H.find(h => regexArr.some(r => r.test(h)));
-          const setIf = (key, regexArr) => { const h=find(regexArr); if(h) this.columnMap[key]=h; };
+          const setIf = (key, regexArr) => { const h=find(regexArr); if(h && !this.columnMap[key]) this.columnMap[key]=h; };
           setIf('firstName', [/^first\b/i]);
           setIf('lastName', [/^last\b/i]);
           setIf('payrollName', [/payroll\s*name/i, /employee\s*name/i, /^name$/i]);
           setIf('role', [/job\s*title/i, /^role$/i]);
           setIf('employmentType', [/employment\s*type/i, /class\s*code/i]);
-          setIf('employeeId', [/position\s*id/i, /employee\s*id/i]);
+          setIf('employeeId', [/position\s*id/i, /employee\s*id/i, /file\s*#/i]);
           setIf('status', [/status/i]);
           setIf('seniorityHours', [/seniority/i, /total.*hours/i]);
         },
 
+        // Eligibility & parsing
+        analyzeRow(row){
+          const g = (k) => { const c=this.columnMap[k]; return c? (row[c] ?? '') : ''; };
+          let first = g('firstName'); let last = g('lastName');
+          const payroll = g('payrollName');
+          if ((!first || !last) && payroll){
+            const s = String(payroll).trim();
+            if (this.nameFormat==='last_first' || (this.nameFormat==='auto' && s.includes(','))){
+              const parts = s.split(','); last = (parts[0]||'').trim(); first = (parts.slice(1).join(',')||'').trim();
+            } else {
+              const parts = s.split(/\s+/);
+              if (parts.length>=2){ first = parts[0].trim(); last = parts.slice(1).join(' ').trim(); }
+            }
+          }
+          return { first, last, role: g('role'), type: g('employmentType'), empId: g('employeeId'), status: g('status'), hours: g('seniorityHours') };
+        },
+        updateEligibilityPreview(){
+          let eligible=0, missing=0;
+          for (const row of this.importData){
+            const a = this.analyzeRow(row);
+            if (a.first && a.last) eligible++; else missing++;
+          }
+          this.previewEligible = eligible;
+          if (eligible===0) this.importWarning = 'No rows have usable names. Map First/Last or Payroll Name, and set Name Format if needed.';
+          else if (missing>0) this.importWarning = `${missing} rows missing names will be skipped.`;
+          else this.importWarning = '';
+        },
+
         async processImport(){
-          try{
-            if (!this.importData?.length || !this.importHeaders?.length) { this.notify('Nothing to import or headers missing','var(--warn)'); return; }
-            if (this.importMode === 'employees') { await this.importEmployees(); }
-            else { await this.importCompletions(); }
-          }catch(e){ console.error('Import failed', e); this.notify('Import failed','var(--danger)'); }
+          this.importError='';
+          if (!this.importData.length || !this.importHeaders.length){ this.importError='Nothing to import'; return; }
+          if (this.importMode==='employees'){
+            if (!(this.columnMap.firstName || this.columnMap.lastName || this.columnMap.payrollName)){
+              this.importError='Map at least First/Last or Payroll Name before importing.'; return;
+            }
+            const res = await this.importEmployees();
+            this.showImportModal=false;
+            this.notify(`Employees: ${res.added} added, ${res.updated} updated`);
+          } else {
+            const hasAny = Object.values(this.completionMap).some(Boolean);
+            if (!hasAny){ this.importError='Select at least one requirement column on the right to import completions.'; return; }
+            const cnt = await this.importCompletions();
+            this.showImportModal=false;
+            this.notify(`Completions updated: ${cnt}`);
+          }
         },
 
         async importEmployees(){
-          const mapField = (row, key) => { const col = this.columnMap[key]; return col ? (row[col] ?? '') : ''; };
-          const incoming = [];
+          const incoming=[];
           for (const row of this.importData){
-            let firstName = mapField(row, 'firstName');
-            let lastName  = mapField(row, 'lastName');
-            const payrollName = mapField(row, 'payrollName');
-            if ((!firstName || !lastName) && payrollName){
-              const parts = String(payrollName).split(',');
-              if (parts.length >= 2) { lastName = parts[0].trim(); firstName = parts[1].trim(); }
-              else {
-                const p2 = String(payrollName).trim().split(/\s+/);
-                if (p2.length >= 2) { firstName = p2[0]; lastName = p2.slice(1).join(' '); }
-              }
-            }
-            const roleRaw = mapField(row, 'role');
-            const role = ((/licen[cs]ed/i.test(roleRaw) && /practical/i.test(roleRaw)) ? 'LPN'
-                         : /care\s*aide|rca/i.test(roleRaw) ? 'RCA'
-                         : /recreation|activity/i.test(roleRaw) ? 'Recreation'
-                         : /reception/i.test(roleRaw) ? 'Reception'
-                         : /rehab/i.test(roleRaw) ? 'RehabAssistant'
-                         : 'Other');
-            const typeRaw = mapField(row, 'employmentType');
-            const employmentType = (/pt|tp/i.test(typeRaw)) ? 'PT' : (/\bcas|\bca\b/i.test(typeRaw) ? 'Casual' : 'FT');
-            const employeeId = mapField(row, 'employeeId');
-            const status = (mapField(row, 'status') || 'Active').match(/inactive|leave/i) ? 'Inactive' : 'Active';
-            const seniorityHours = mapField(row, 'seniorityHours');
-            if (!firstName || !lastName) continue;
-            incoming.push({ id: crypto.randomUUID(), firstName, lastName, role, employmentType, status, employeeId, seniorityHours, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+            const a = this.analyzeRow(row);
+            if (!a.first || !a.last) continue;
+            const role = (/licen[cs]ed/i.test(a.role) && /practical/i.test(a.role)) ? 'LPN'
+                        : /care\s*aide|rca/i.test(a.role) ? 'RCA'
+                        : /recreation|activity/i.test(a.role) ? 'Recreation'
+                        : /reception/i.test(a.role) ? 'Reception'
+                        : /rehab/i.test(a.role) ? 'RehabAssistant' : (a.role || 'Other');
+            const type = /\bpt\b|part/i.test(a.type) ? 'PT' : (/\bcas|casual|ca\b/i.test(a.type) ? 'Casual' : 'FT');
+            const status = /inactive|leave/i.test(a.status||'') ? 'Inactive' : 'Active';
+            incoming.push({ id:crypto.randomUUID(), firstName:a.first, lastName:a.last, role, employmentType:type, status, employeeId:a.empId, seniorityHours:a.hours, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
           }
           const existing = await this.db.employees.toArray();
-          const byEmpId = new Map(existing.filter(e=>e.employeeId).map(e=>[e.employeeId, e]));
+          const byEmpId = new Map(existing.filter(e=>e.employeeId).map(e=>[String(e.employeeId), e]));
           const keyOf = (e) => e.employeeId || `${e.firstName}|${e.lastName}|${e.role}`;
-          let added = 0, updated = 0;
+          let added=0, updated=0;
           for (const emp of incoming){
-            const match = emp.employeeId ? byEmpId.get(emp.employeeId) : existing.find(e=>keyOf(e)===keyOf(emp));
+            const match = emp.employeeId ? byEmpId.get(String(emp.employeeId)) : existing.find(e=>keyOf(e)===keyOf(emp));
             if (match){
               await this.db.employees.update(match.id, { ...match, ...emp, id: match.id, updatedAt:new Date().toISOString() });
               updated++;
@@ -662,38 +452,26 @@
             }
           }
           await this.loadData();
-          this.showImportModal=false;
-          this.notify(`Employees: ${added} added, ${updated} updated`);
+          return { added, updated };
         },
 
         async importCompletions(){
-          const requirements = await this.db.requirements.toArray();
-          const reqById = new Map(requirements.map(r=>[r.id,r]));
+          const reqs = await this.db.requirements.toArray();
+          const reqById = new Map(reqs.map(r=>[r.id,r]));
           const employees = await this.db.employees.toArray();
           const byEmpId = new Map(employees.filter(e=>e.employeeId).map(e=>[String(e.employeeId).trim().toLowerCase(), e]));
           const byName = new Map(employees.map(e=>[(e.lastName+','+e.firstName).trim().toLowerCase(), e]));
-          let updates = 0;
+          let updates=0;
           for (const row of this.importData){
+            const a = this.analyzeRow(row);
             let emp = null;
-            if (this.columnMap.employeeId){
-              const key = String(row[this.columnMap.employeeId]||'').trim().toLowerCase();
-              emp = byEmpId.get(key) || null;
-            }
-            if (!emp && this.columnMap.payrollName){
-              const name = String(row[this.columnMap.payrollName]||'').trim().toLowerCase();
-              emp = byName.get(name) || null;
-            }
-            if (!emp && this.columnMap.firstName && this.columnMap.lastName){
-              const key = (String(row[this.columnMap.lastName]||'').trim()+','+String(row[this.columnMap.firstName]||'').trim()).toLowerCase();
-              emp = byName.get(key) || null;
-            }
+            if (a.empId){ emp = byEmpId.get(String(a.empId).trim().toLowerCase()) || null; }
+            if (!emp && a.first && a.last){ emp = byName.get((a.last+','+a.first).toLowerCase()) || null; }
             if (!emp) continue;
             for (const [rid, col] of Object.entries(this.completionMap)){
               if (!col) continue;
-              const dateVal = row[col];
-              if (!dateVal) continue;
-              const completedOn = this.normalizeDate(dateVal);
-              if (!completedOn) continue;
+              const val = row[col]; if (!val) continue;
+              const completedOn = this.normalizeDate(val); if (!completedOn) continue;
               const req = reqById.get(rid);
               const expiresOn = req?.defaultExpiryDays ? this.addDays(completedOn, req.defaultExpiryDays) : null;
               const existing = this.erMap.get(emp.id)?.get(rid);
@@ -706,46 +484,17 @@
             }
           }
           await this.loadData();
-          this.showImportModal=false;
-          this.notify(`Completions updated: ${updates}`);
+          return updates;
         },
 
         normalizeDate(v){
-          if (!v) return null;
-          let s = String(v).trim();
-          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-          const d = new Date(s);
-          if (!isNaN(d.getTime())) return this.toDateOnly(d);
-          const n = Number(s);
-          if (!isNaN(n) && n > 25569) {
-            const ms = (n - 25569) * 86400 * 1000;
-            const dd = new Date(ms);
-            return this.toDateOnly(dd);
-          }
+          if (!v) return null; const s=String(v).trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+          const d=new Date(s); if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
+          const n=Number(s); if(!isNaN(n)&&n>25569){ const ms=(n-25569)*86400*1000; return new Date(ms).toISOString().slice(0,10); }
           return null;
         },
 
-        async exportData(){
-          const data={ employees:await this.db.employees.toArray(), requirements:await this.db.requirements.toArray(), employeeRequirements:await this.db.employeeRequirements.toArray(), settings:await this.db.settings.toArray() };
-          const jsonBlob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-          this.downloadBlob(jsonBlob, `compliance-matrix-${new Date().toISOString().split('T')[0]}.json`);
-          const headers = ['First Name','Last Name','Role','Type', ...this.visibleRequirements.map(r=>r.name)];
-          const rows = this.filteredEmployees.map(emp => {
-            const base = [emp.firstName, emp.lastName, emp.role, emp.employmentType];
-            const cells = this.visibleRequirements.map(req => {
-              const s=this.getStatus(emp.id, req.id);
-              const c=this.getCompletedDate(emp.id, req.id);
-              const e=this.getExpiresDate(emp.id, req.id);
-              return s + (c?` (${c}${e?`→${e}`:''})`:'');
-            });
-            return base.concat(cells);
-          });
-          const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))].join('\n');
-          const csvBlob = new Blob([csv], {type:'text/csv'});
-          this.downloadBlob(csvBlob, `compliance-matrix-${new Date().toISOString().split('T')[0]}.csv`);
-          this.notify('Exported JSON and CSV');
-        },
-        downloadBlob(blob, filename){ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); },
+        addDays(dateOnly, days){ if(!dateOnly) return null; const [y,m,d]=dateOnly.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+Number(days)); return dt.toISOString().slice(0,10); },
       }));
     });
   </script>
