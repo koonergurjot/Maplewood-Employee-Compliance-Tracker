@@ -522,6 +522,24 @@
               </div>
             </div>
           </div>
+          <div x-show="importProgress>0" class="mt-3">
+            <div class="w-full bg-gray-200 rounded-full h-2">
+              <div class="bg-blue-600 h-2 rounded-full" :style="{width: importProgress + '%'}"></div>
+            </div>
+          </div>
+          <template x-if="importErrors.length">
+            <div class="mt-2 text-left">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-sm font-semibold text-red-600">Errors</span>
+                <button class="btn text-xs" @click="downloadImportErrors()">Download CSV</button>
+              </div>
+              <ul class="max-h-40 overflow-auto list-disc ml-5 text-xs text-red-600">
+                <template x-for="e in importErrors" :key="e.row">
+                  <li x-text="'Row ' + e.row + ': ' + e.message"></li>
+                </template>
+              </ul>
+            </div>
+          </template>
 
           <div x-show="importSheets.length" class="mb-3">
             <div class="flex items-center gap-3">
@@ -670,6 +688,7 @@
         lastDeletedRequirement:null,
         // Import UI state
         importType:'excel', importMode:'employees', importData:[], importHeaders:[], importSheets:[], importSheetName:'', importWarning:'', importError:'', importLoading:false,
+        importProgress:0, importErrors:[],
         nameFormat:'auto', previewEligible:0, dryRunDetails:[], dryRunSummary:{added:0,updated:0,skipped:0},
         fieldLabels:{ firstName:'First Name', lastName:'Last Name', payrollName:'Payroll/Employee Name', role:'Role / Job Title', employmentType:'Employment Type / Class', employeeId:'Employee ID / Position ID', status:'Position Status', seniorityHours:'Seniority Hours' },
         columnMap:{ firstName:'', lastName:'', payrollName:'', role:'', employmentType:'', employeeId:'', status:'', seniorityHours:'' },
@@ -831,9 +850,9 @@
         },
 
         // ---------- Import ----------
-        handleFileUpload(event){
-          this.importError=''; this.importWarning=''; this.importData=[]; this.importHeaders=[]; this.importSheets=[]; this.importSheetName=''; this.previewEligible=0; this.dryRunDetails=[]; this.importLoading=true;
-          const file = event.target.files[0]; 
+        async handleFileUpload(event){
+          this.importError=''; this.importWarning=''; this.importData=[]; this.importHeaders=[]; this.importSheets=[]; this.importSheetName=''; this.previewEligible=0; this.dryRunDetails=[]; this.importLoading=true; this.importProgress=0; this.importErrors=[];
+          const file = event.target.files[0];
           if(!file) { this.importLoading=false; return; }
           
           // File validation
@@ -867,18 +886,18 @@
           }
           
           if (this.importType === 'csv') {
-            file.text().then(text => {
-              const lines = text.split(/\r?\n/);
-              const body = this.stripTitleLines(lines);
-              const res = Papa.parse(body, { header:true, skipEmptyLines:true });
-              this.importData = res.data; this.importHeaders = res.meta.fields || [];
-              this.autofillMappings(); this.updateEligibilityPreview();
-              if (!this.importHeaders.length) this.importError = 'No headers detected — check the CSV file.';
-              this.importLoading = false;
-            });
+            const text = await file.text();
+            const lines = text.split(/\r?\n/);
+            const body = this.stripTitleLines(lines);
+            const res = Papa.parse(body, { header:true, skipEmptyLines:true });
+            this.importData = res.data; this.importHeaders = res.meta.fields || [];
+            this.autofillMappings(); this.updateEligibilityPreview();
+            await this.validateImportData();
+            if (!this.importHeaders.length) this.importError = 'No headers detected — check the CSV file.';
+            this.importLoading = false;
           } else {
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
               try{
                 const data = new Uint8Array(e.target.result);
                 const wb = XLSX.read(data, { type:'array', cellDates: true, cellNF: false, cellText: false });
@@ -901,20 +920,21 @@
                   }
                 }
                 
-                this.importSheetName = best.name; 
-                this.importHeaders = best.headers; 
+                this.importSheetName = best.name;
+                this.importHeaders = best.headers;
                 this.importData = best.rows;
-                this.autofillMappings(); 
+                this.autofillMappings();
                 this.updateEligibilityPreview();
-                
+                await this.validateImportData();
+
                 if (!this.importHeaders.length) {
                   this.importError = 'Could not detect headers in Excel sheet. Try selecting a different worksheet above or check if the file has proper column headers.';
                 } else if (this.importData.length === 0) {
                   this.importError = 'No data rows found in the selected worksheet.';
                 }
                 this.importLoading = false;
-              }catch(err){ 
-                console.error('Excel processing error:', err); 
+              }catch(err){
+                console.error('Excel processing error:', err);
                 this.importError = `Failed to read Excel file: ${err.message || 'Unknown error'}. Ensure it is .xlsx or .xls format and not password protected.`;
                 this.importLoading = false;
               }
@@ -926,14 +946,15 @@
             reader.readAsArrayBuffer(file);
           }
         },
-        selectExcelSheet(name){
-          const input = document.getElementById('file-upload'); 
-          const file = input?.files?.[0]; 
+        async selectExcelSheet(name){
+          const input = document.getElementById('file-upload');
+          const file = input?.files?.[0];
           if(!file || !name) return;
-          
           this.importError = '';
+          this.importProgress = 0;
+          this.importErrors = [];
           const reader = new FileReader();
-          reader.onload = (e) => {
+          reader.onload = async (e) => {
             try {
               const data = new Uint8Array(e.target.result);
               const wb = XLSX.read(data, { type:'array', cellDates: true, cellNF: false, cellText: false });
@@ -943,11 +964,12 @@
                 return;
               }
               
-              const { headers, rows } = this.extractFromSheet(wb.Sheets[name]);
-              this.importHeaders = headers; 
-              this.importData = rows; 
-              this.autofillMappings(); 
-              this.updateEligibilityPreview();
+            const { headers, rows } = this.extractFromSheet(wb.Sheets[name]);
+            this.importHeaders = headers;
+            this.importData = rows;
+            this.autofillMappings();
+            this.updateEligibilityPreview();
+            await this.validateImportData();
               
               if (!this.importHeaders.length) {
                 this.importError = `No headers detected in worksheet "${name}".`;
@@ -963,6 +985,27 @@
             this.importError = 'Failed to read the file. Please try again.';
           };
           reader.readAsArrayBuffer(file);
+        },
+        async validateImportData(){
+          const total = this.importData.length;
+          this.importErrors = [];
+          this.importProgress = 0;
+          if (!total){ this.importProgress = 100; return; }
+          for(let i=0;i<total;i++){
+            const a = this.analyzeRow(this.importData[i]);
+            if(!a.first || !a.last){
+              this.importErrors.push({row:i+1, message:'Missing first or last name'});
+            }
+            this.importProgress = Math.round(((i+1)/total)*100);
+            await new Promise(r=>setTimeout(r));
+          }
+        },
+        downloadImportErrors(){
+          if(!this.importErrors.length) return;
+          const rows = [['Row','Error'], ...this.importErrors.map(e=>[e.row, e.message])];
+          const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+          const blob = new Blob([csv], {type:'text/csv'});
+          this.downloadBlob(blob, 'import-errors.csv');
         },
         stripTitleLines(lines){
           let bestIdx=0, bestScore=-1;
