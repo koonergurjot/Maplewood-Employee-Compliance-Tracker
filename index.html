@@ -15,6 +15,7 @@
   <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script>
     // Fallback for XLSX library loading
     if (typeof XLSX === 'undefined') {
@@ -187,6 +188,9 @@
         <div class="admin-card card p-4 text-center">
           <div class="text-2xl font-bold" style="color:var(--danger)" x-text="getIncompleteCount()"></div>
           <div class="text-sm" style="color:var(--muted)">Incomplete Requirements</div>
+        </div>
+        <div class="admin-card card p-4 md:col-span-4">
+          <canvas id="complianceChart" class="mx-auto" height="160"></canvas>
         </div>
       </div>
 
@@ -698,11 +702,12 @@
         showEditEmployeeModal:false, showEditRequirementModal:false,
           searchQuery:'', roleFilter:'', statusFilter:'', filteredEmployees:[], sortField:'firstName', sortDirection:'asc',
         newEmployee:{firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''},
-        newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
-        editingEmployee:{}, editingRequirement:{},
-        selectedEmployees:[], selectedRequirements:[], bulkAction:'',
+          newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
+          editingEmployee:{}, editingRequirement:{},
+          selectedEmployees:[], selectedRequirements:[], bulkAction:'',
+          complianceChart:null,
 
-        formatYears(days){ return Math.floor(days/365)+'y'; },
+          formatYears(days){ return Math.floor(days/365)+'y'; },
 
         async init(){
           this.initDB();
@@ -765,12 +770,13 @@
           this.requirements = await this.db.requirements.toArray();
           this.employeeRequirements = await this.db.employeeRequirements.toArray();
           this.erMap = new Map();
-          for (const er of this.employeeRequirements){
-            if(!this.erMap.has(er.employeeId)) this.erMap.set(er.employeeId,new Map());
-            this.erMap.get(er.employeeId).set(er.requirementId, er);
-          }
-          this.visibleRequirements = [...this.requirements];
-        },
+            for (const er of this.employeeRequirements){
+              if(!this.erMap.has(er.employeeId)) this.erMap.set(er.employeeId,new Map());
+              this.erMap.get(er.employeeId).set(er.requirementId, er);
+            }
+            this.visibleRequirements = [...this.requirements];
+            this.renderComplianceChart();
+          },
 
         // Status helpers (minimal)
         getER(eId,rId){ return this.erMap.get(eId)?.get(rId) || null; },
@@ -1255,12 +1261,30 @@
             return new Date(er.expiresOn) <= new Date();
           }).length;
         },
-        getIncompleteCount(){
-          return this.employeeRequirements.filter(er => er.status === 'NotCompleted').length;
-        },
-        getUniqueRoles(){
-          return [...new Set(this.employees.map(emp => emp.role).filter(Boolean))];
-        },
+          getIncompleteCount(){
+            return this.employeeRequirements.filter(er => er.status === 'NotCompleted').length;
+          },
+          renderComplianceChart(){
+            const ctx=document.getElementById('complianceChart');
+            if(!ctx) return;
+            const data=[this.getCompletedCount(),this.getExpiredCount(),this.getIncompleteCount()];
+            if(this.complianceChart){
+              this.complianceChart.data.datasets[0].data=data;
+              this.complianceChart.update();
+            } else {
+              this.complianceChart=new Chart(ctx,{
+                type:'doughnut',
+                data:{
+                  labels:['Completed','Expired','Incomplete'],
+                  datasets:[{data,backgroundColor:['var(--success)','var(--warn)','var(--danger)']}]
+                },
+                options:{responsive:true,maintainAspectRatio:false}
+              });
+            }
+          },
+          getUniqueRoles(){
+            return [...new Set(this.employees.map(emp => emp.role).filter(Boolean))];
+          },
         filterEmployees(){
           let filtered = [...this.employees];
           if (this.searchQuery) {
