@@ -77,7 +77,6 @@
                   <div class="flex items-center justify-between">
                     <span x-text="req.name" class="font-semibold"></span>
                     <div class="flex items-center gap-1">
-                      <span x-show="req.defaultExpiryDays" class="text-xs opacity-75" x-text="`${Math.floor(req.defaultExpiryDays/365)}y`"></span>
                       <button @click="editRequirement(req)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Edit requirement ${req.name}`">
                         <i data-feather="edit-2" class="w-3 h-3"></i>
                       </button>
@@ -314,6 +313,8 @@
             <div>
               <label class="block text-sm font-medium mb-1">Expiry Days (optional)</label>
               <input x-model="editingRequirement.defaultExpiryDays" type="number" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <p class="text-xs mt-1" x-show="editingRequirement.defaultExpiryDays"
+                 x-text="formatYears(editingRequirement.defaultExpiryDays)"></p>
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">Color</label>
@@ -658,6 +659,8 @@
         newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
         editingEmployee:{}, editingRequirement:{},
         selectedEmployees:[], selectedRequirements:[], bulkAction:'',
+
+        formatYears(days){ return Math.floor(days/365)+'y'; },
 
         async init(){
           this.initDB();
