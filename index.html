@@ -293,6 +293,108 @@
     </div>
   </div>
 
+  <!-- Edit Requirement Modal -->
+  <div x-show="showEditRequirementModal" class="fixed inset-0 z-50">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div @click="showEditRequirementModal=false" class="fixed inset-0 bg-black/40"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <h3 class="text-lg font-semibold mb-4">Edit Requirement</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Requirement Name</label>
+              <input x-model="editingRequirement.name" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Expiry Days (optional)</label>
+              <input x-model="editingRequirement.defaultExpiryDays" type="number" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Color</label>
+              <div class="flex gap-2">
+                <input x-model="editingRequirement.color" type="color" class="w-12 h-10 border rounded" style="border-color:var(--line)">
+                <select x-model="editingRequirement.color" class="flex-1 border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                  <option value="#e0e7ff">Light Blue</option>
+                  <option value="#f0f9ff">Light Cyan</option>
+                  <option value="#fef3c7">Light Yellow</option>
+                  <option value="#dcfce7">Light Green</option>
+                  <option value="#fce7f3">Light Pink</option>
+                  <option value="#f3e8ff">Light Purple</option>
+                  <option value="#fef2f2">Light Red</option>
+                  <option value="#fffbeb">Light Amber</option>
+                  <option value="#f0fdf4">Light Emerald</option>
+                  <option value="#ecfdf5">Light Green</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button @click="updateRequirement()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save Changes</button>
+          <button @click="showEditRequirementModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Employee Modal -->
+  <div x-show="showEditEmployeeModal" class="fixed inset-0 z-50">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div @click="showEditEmployeeModal=false" class="fixed inset-0 bg-black/40"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <h3 class="text-lg font-semibold mb-4">Edit Employee</h3>
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">First Name</label>
+                <input x-model="editingEmployee.firstName" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Last Name</label>
+                <input x-model="editingEmployee.lastName" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Role</label>
+              <select x-model="editingEmployee.role" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <option value="">Select Role</option>
+                <option value="LPN">LPN</option>
+                <option value="RCA">RCA</option>
+                <option value="Recreation">Recreation</option>
+                <option value="Reception">Reception</option>
+                <option value="RehabAssistant">Rehab Assistant</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Employment Type</label>
+              <select x-model="editingEmployee.employmentType" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <option value="FT">Full Time</option>
+                <option value="PT">Part Time</option>
+                <option value="Casual">Casual</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Employee ID</label>
+              <input x-model="editingEmployee.employeeId" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Seniority Hours</label>
+              <input x-model="editingEmployee.seniorityHours" type="number" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button @click="updateEmployee()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save Changes</button>
+          <button @click="showEditEmployeeModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Bulk Actions Modal -->
   <div x-show="showBulkActionsModal" class="fixed inset-0 z-50">
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -534,9 +636,11 @@
         completionMap:{},
         // Admin panel state
         showAddEmployeeModal:false, showAddRequirementModal:false, showBulkActionsModal:false,
+        showEditEmployeeModal:false, showEditRequirementModal:false,
         searchQuery:'', roleFilter:'', statusFilter:'', filteredEmployees:[],
         newEmployee:{firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''},
         newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
+        editingEmployee:{}, editingRequirement:{},
         selectedEmployees:[], selectedRequirements:[], bulkAction:'',
 
         async init(){
@@ -1155,22 +1259,59 @@
           this.notify('Requirement added successfully');
         },
         async editRequirement(req){
-          const newName = prompt('Edit requirement name:', req.name);
-          if (newName && newName !== req.name) {
-            await this.db.requirements.update(req.id, {name: newName, updatedAt: new Date().toISOString()});
-            await this.loadData();
-            this.refreshFeatherIcons();
-            this.notify('Requirement updated');
+          this.editingRequirement = { ...req, defaultExpiryDays: req.defaultExpiryDays ?? '' };
+          this.showEditRequirementModal = true;
+        },
+        async updateRequirement(){
+          const r = this.editingRequirement;
+          if (!r.name || !r.name.trim()) {
+            this.notify('Requirement name is required', 'var(--danger)');
+            return;
           }
+          if (r.defaultExpiryDays && isNaN(parseInt(r.defaultExpiryDays))) {
+            this.notify('Expiry days must be a number', 'var(--danger)');
+            return;
+          }
+          const updateData = {
+            name: r.name,
+            color: r.color,
+            defaultExpiryDays: r.defaultExpiryDays ? parseInt(r.defaultExpiryDays) : null,
+            updatedAt: new Date().toISOString()
+          };
+          await this.db.requirements.update(r.id, updateData);
+          this.showEditRequirementModal = false;
+          await this.loadData();
+          this.refreshFeatherIcons();
+          this.notify('Requirement updated');
         },
         async editEmployee(emp){
-          const newFirstName = prompt('Edit first name:', emp.firstName);
-          if (newFirstName && newFirstName !== emp.firstName) {
-            await this.db.employees.update(emp.id, {firstName: newFirstName, updatedAt: new Date().toISOString()});
-            await this.loadData();
-            this.refreshFeatherIcons();
-            this.notify('Employee updated');
+          this.editingEmployee = { ...emp, seniorityHours: emp.seniorityHours ?? '' };
+          this.showEditEmployeeModal = true;
+        },
+        async updateEmployee(){
+          const e = this.editingEmployee;
+          if (!e.firstName || !e.firstName.trim() || !e.lastName || !e.lastName.trim()) {
+            this.notify('First and last name are required', 'var(--danger)');
+            return;
           }
+          if (e.seniorityHours && isNaN(parseFloat(e.seniorityHours))) {
+            this.notify('Seniority hours must be a number', 'var(--danger)');
+            return;
+          }
+          const updateData = {
+            firstName: e.firstName,
+            lastName: e.lastName,
+            role: e.role,
+            employmentType: e.employmentType,
+            employeeId: e.employeeId,
+            seniorityHours: e.seniorityHours,
+            updatedAt: new Date().toISOString()
+          };
+          await this.db.employees.update(e.id, updateData);
+          this.showEditEmployeeModal = false;
+          await this.loadData();
+          this.refreshFeatherIcons();
+          this.notify('Employee updated');
         },
         getStatusTooltip(empId, reqId){
           const er = this.getER(empId, reqId);
