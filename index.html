@@ -1357,9 +1357,7 @@
           let first = g('firstName'); let last = g('lastName');
           const payroll = g('payrollName');
           if ((!first || !last) && payroll){
-            const s = String(payroll)
-              .replace(/\s*[-–—]+$/, '')
-              .trim();
+            const s = String(payroll).replace(/\s*[-–—]+$/, '').trim();
             if (this.nameFormat==='last_first' || (this.nameFormat==='auto' && s.includes(','))){
               const parts = s.split(','); last = (parts[0]||'').trim(); first = (parts.slice(1).join(',')||'').trim();
             } else {
