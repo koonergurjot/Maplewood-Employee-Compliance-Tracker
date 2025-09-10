@@ -30,8 +30,8 @@
     }
   </script>
   <style>
-    :root{ --bg:#f3f4f6; --card:#ffffff; --line:#e5e7eb; --text:#111827; --muted:#6b7280; --accent:#2563eb; --success:#10b981; --warn:#f59e0b; --danger:#ef4444; }
-    .dark:root, .dark{ --bg:#0b1220; --card:#111827; --line:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --accent:#60a5fa; --success:#34d399; --warn:#fbbf24; --danger:#f87171; }
+    :root{ --bg:#f3f4f6; --card:#ffffff; --line:#e5e7eb; --text:#111827; --muted:#6b7280; --accent:#2563eb; --success:#10b981; --warn:#f59e0b; --danger:#ef4444; --badge-text:#111827; }
+    .dark:root, .dark{ --bg:#0b1220; --card:#111827; --line:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --accent:#60a5fa; --success:#34d399; --warn:#fbbf24; --danger:#f87171; --badge-text:#111827; }
     body{ background:var(--bg); color:var(--text); }
     [x-cloak]{display:none!important}
     .card{background:var(--card);border:1px solid var(--line)}
@@ -46,6 +46,10 @@
     .checkbox.completed::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-60%) rotate(-45deg);width:.75rem;height:.4rem;border-left:2px solid #fff;border-bottom:2px solid #fff}
     .virtual-scroll{overflow-y:auto;max-height:calc(100vh - 260px)}
     .status-badge{transition:all 0.2s ease}
+    .badge{display:inline-flex;align-items:center;padding:.125rem .5rem;border-radius:.25rem;font-size:.75rem;font-weight:600;color:var(--badge-text);border:none;cursor:pointer}
+    .badge--compliant{background:var(--success)}
+    .badge--expiring{background:var(--warn)}
+    .badge--overdue{background:var(--danger)}
     .requirement-header{transition:all 0.2s ease;position:relative}
     .requirement-header:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,0.1)}
     .admin-card{transition:all 0.2s ease}
@@ -145,18 +149,28 @@
                 <td class="px-4 py-3">
                   <span :class="emp.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'" class="status-badge px-2 py-1 text-xs rounded-full" x-text="emp.status"></span>
                 </td>
-                <template x-for="req in orderedVisibleRequirements()" :key="req.id">
-                  <td class="px-4 py-3">
-                    <div class="flex items-center justify-center">
-                      <input type="checkbox" class="checkbox"
-                        :class="{ 'completed': getStatus(emp.id, req.id) === 'Completed', 'expired': getStatus(emp.id, req.id) === 'Expired' }"
-                        :checked="getStatus(emp.id, req.id) === 'Completed'"
-                        @change="toggleStatus(emp, req)"
-                        :title="getStatusTooltip(emp.id, req.id)"
-                        :aria-label="`${req.name} requirement for ${emp.firstName} ${emp.lastName}`">
-                    </div>
-                  </td>
-                </template>
+                  <template x-for="req in orderedVisibleRequirements()" :key="req.id">
+                    <td class="px-4 py-3">
+                      <div class="flex items-center justify-center">
+                        <button
+                          class="badge"
+                          :class="{
+                            'badge--compliant': calcStatus(emp.id, req.id) === 'compliant',
+                            'badge--expiring': calcStatus(emp.id, req.id) === 'expiring',
+                            'badge--overdue': calcStatus(emp.id, req.id) === 'overdue'
+                          }"
+                          @click="toggleStatus(emp, req)"
+                          :title="getStatusTooltip(emp.id, req.id)"
+                          :aria-label="`${req.name} requirement for ${emp.firstName} ${emp.lastName}: ${getStatusTooltip(emp.id, req.id)}`"
+                          x-text="{
+                            compliant: '✔ Compliant',
+                            expiring: '⚠ Expiring',
+                            overdue: '✖ Overdue'
+                          }[calcStatus(emp.id, req.id)]">
+                        </button>
+                      </div>
+                    </td>
+                  </template>
               </tr>
             </template>
             <tr x-show="sortedEmployees().length === 0">
@@ -885,10 +899,20 @@
         },
 
         // Status helpers (minimal)
-        getER(eId,rId){ return this.erMap.get(eId)?.get(rId) || null; },
-        getStatus(eId,rId){ const er=this.getER(eId,rId); if(!er||er.status==='NotCompleted') return 'NotCompleted'; if(er.expiresOn){ const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000); if(d<=0) return 'Expired'; } return 'Completed'; },
-        async toggleStatus(emp, req){
-          console.log('Toggle clicked for:', emp.firstName, emp.lastName, req.name);
+          getER(eId,rId){ return this.erMap.get(eId)?.get(rId) || null; },
+          getStatus(eId,rId){ const er=this.getER(eId,rId); if(!er||er.status==='NotCompleted') return 'NotCompleted'; if(er.expiresOn){ const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000); if(d<=0) return 'Expired'; } return 'Completed'; },
+          calcStatus(eId,rId){
+            const er=this.getER(eId,rId);
+            if(!er||er.status==='NotCompleted') return 'overdue';
+            if(er.expiresOn){
+              const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000);
+              if(d<=0) return 'overdue';
+              if(d<=30) return 'expiring';
+            }
+            return 'compliant';
+          },
+          async toggleStatus(emp, req){
+            console.log('Toggle clicked for:', emp.firstName, emp.lastName, req.name);
 
           try {
             const er=this.getER(emp.id, req.id);
