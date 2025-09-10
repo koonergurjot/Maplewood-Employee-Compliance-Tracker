@@ -81,6 +81,9 @@
                       <button @click="editRequirement(req)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Edit requirement ${req.name}`">
                         <i data-feather="edit-2" class="w-3 h-3"></i>
                       </button>
+                      <button @click="confirmDeleteRequirement(req)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Delete requirement ${req.name}`">
+                        <i data-feather="trash-2" class="w-3 h-3"></i>
+                      </button>
                     </div>
                   </div>
                 </th>
@@ -621,6 +624,7 @@
 
   <div x-show="showToast" class="fixed bottom-4 right-4 px-4 py-2 rounded shadow-lg" :style="'background:'+toastColor+';color:white'">
     <span x-text="toastMessage"></span>
+    <button x-show="toastUndo" @click="toastUndo()" class="ml-3 underline font-semibold">Undo</button>
   </div>
 
   <script>
@@ -638,7 +642,8 @@
         darkMode:false, showImportModal:false,
         db:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
         // Toast notification variables
-        showToast: false, toastMessage: '', toastColor: 'var(--success)',
+        showToast: false, toastMessage: '', toastColor: 'var(--success)', toastUndo:null,
+        lastDeletedRequirement:null,
         // Import UI state
         importType:'excel', importMode:'employees', importData:[], importHeaders:[], importSheets:[], importSheetName:'', importWarning:'', importError:'', importLoading:false,
         nameFormat:'auto', previewEligible:0, dryRunDetails:[], dryRunSummary:{added:0,updated:0,skipped:0},
@@ -755,7 +760,13 @@
         },
 
         // UI helpers
-        notify(msg,color='var(--success)'){ this.toastMessage=msg; this.toastColor=color; this.showToast=true; setTimeout(()=>this.showToast=false,3000); },
+        notify(msg,color='var(--success)',undoHandler=null){
+          this.toastMessage=msg;
+          this.toastColor=color;
+          this.toastUndo=undoHandler;
+          this.showToast=true;
+          setTimeout(()=>{this.showToast=false; this.toastUndo=null;},3000);
+        },
         async toggleDarkMode(){ this.darkMode=!this.darkMode; document.documentElement.classList.toggle('dark', this.darkMode); const prev=await this.db.settings.get('app')||{id:'app'}; await this.db.settings.put({...prev, darkMode:this.darkMode}); },
         initializeFeatherIcons() {
           try {
@@ -1287,6 +1298,32 @@
           await this.loadData();
           this.refreshFeatherIcons();
           this.notify('Requirement updated');
+        },
+        confirmDeleteRequirement(req){
+          if(confirm(`Delete requirement "${req.name}"? This will remove all related records.`)){
+            this.deleteRequirement(req);
+          }
+        },
+        async deleteRequirement(req){
+          const related = await this.db.employeeRequirements.where('requirementId').equals(req.id).toArray();
+          this.lastDeletedRequirement = { requirement: req, employeeRequirements: related };
+          await this.db.requirements.delete(req.id);
+          await this.db.employeeRequirements.where('requirementId').equals(req.id).delete();
+          await this.loadData();
+          this.refreshFeatherIcons();
+          this.notify('Requirement deleted','var(--warn)',() => this.undoDeleteRequirement());
+        },
+        async undoDeleteRequirement(){
+          if(!this.lastDeletedRequirement) return;
+          await this.db.requirements.add(this.lastDeletedRequirement.requirement);
+          if(this.lastDeletedRequirement.employeeRequirements.length){
+            await this.db.employeeRequirements.bulkAdd(this.lastDeletedRequirement.employeeRequirements);
+          }
+          this.lastDeletedRequirement=null;
+          this.toastUndo=null;
+          await this.loadData();
+          this.refreshFeatherIcons();
+          this.notify('Requirement restored');
         },
         async editEmployee(emp){
           this.editingEmployee = { ...emp, seniorityHours: emp.seniorityHours ?? '' };
