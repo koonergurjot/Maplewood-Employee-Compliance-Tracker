@@ -585,7 +585,14 @@
         },
 
         async clearAllData(){
-          await this.db.delete(); this.initDB(); await this.loadData(); this.notify('All data cleared');
+          if(!confirm('This will delete all data. Are you sure?')){
+            this.notify('Data deletion cancelled','var(--warn)');
+            return;
+          }
+          await this.db.delete();
+          this.initDB();
+          await this.loadData();
+          this.notify('All data cleared');
         },
 
         async loadData(){
