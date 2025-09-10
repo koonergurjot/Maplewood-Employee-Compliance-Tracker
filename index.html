@@ -755,11 +755,12 @@
         darkMode:false, showImportModal:false, showExportDropdown:false,
         showSettingsModal:false, settingsSortable:null,
         db:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
+        importHeaders: [], // ensure array exists before templates iterate over it
         // Toast notification variables
         showToast: false, toastMessage: '', toastColor: 'var(--success)', toastUndo:null,
         lastDeletedRequirement:null,
         // Import UI state
-        importType:'excel', importMode:'employees', importData:[], importHeaders:[], // initialize as array for x-for loop and key binding
+        importType:'excel', importMode:'employees', importData:[],
         importSheets:[], importSheetName:'', importWarning:'', importError:'', importLoading:false,
         importProgress:0, importErrors:[],
         nameFormat:'auto', previewEligible:0, dryRunDetails:[], dryRunSummary:{added:0,updated:0,skipped:0},
