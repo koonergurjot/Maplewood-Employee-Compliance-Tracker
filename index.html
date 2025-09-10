@@ -622,6 +622,15 @@
   </div>
 
   <script>
+    function generateId(){
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+      }
+      if (typeof Dexie !== 'undefined' && typeof Dexie.uuid === 'function') {
+        return Dexie.uuid();
+      }
+      return Date.now().toString(36) + Math.random().toString(36).slice(2);
+    }
     document.addEventListener('alpine:init', () => {
       Alpine.data('app', () => ({
         darkMode:false, showImportModal:false,
@@ -671,7 +680,7 @@
           });
           this.db.on('populate', (tx) => {
             const now = new Date().toISOString();
-            const seed = (name, days=null, color='#fef3c7')=>({id:crypto.randomUUID(),name,defaultExpiryDays:days,color,createdAt:now,updatedAt:now});
+            const seed = (name, days=null, color='#fef3c7')=>({id:generateId(),name,defaultExpiryDays:days,color,createdAt:now,updatedAt:now});
             tx.table('requirements').bulkAdd([
               seed('Resume', null, '#e0e7ff'), // Light blue
               seed('References', null, '#f0f9ff'), // Light cyan
@@ -724,7 +733,7 @@
 
             await this.db.transaction('rw', this.db.employeeRequirements, async () => {
               const record = {
-                id: er?.id || crypto.randomUUID(),
+                id: er?.id || generateId(),
                 employeeId: emp.id,
                 requirementId: req.id,
                 status: newStatus,
@@ -1085,7 +1094,7 @@
                         : /rehab/i.test(a.role) ? 'RehabAssistant' : (a.role || 'Other');
             const type = /\\bpt\\b|part/i.test(a.type) ? 'PT' : (/\\bcas|casual|ca\\b/i.test(a.type) ? 'Casual' : 'FT');
             const status = /inactive|leave/i.test(a.status||'') ? 'Inactive' : 'Active';
-            incoming.push({ id:crypto.randomUUID(), firstName:a.first, lastName:a.last, role, employmentType:type, status, employeeId:a.empId, seniorityHours:a.hours, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
+            incoming.push({ id:generateId(), firstName:a.first, lastName:a.last, role, employmentType:type, status, employeeId:a.empId, seniorityHours:a.hours, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
           }
           const existing = await this.db.employees.toArray();
           const byEmpId = new Map(existing.filter(e=>e.employeeId).map(e=>[String(e.employeeId), e]));
@@ -1099,7 +1108,7 @@
             } else {
               const id = await this.db.employees.add(emp);
               const reqs = await this.db.requirements.toArray();
-              const rows = reqs.map(r => ({ id: crypto.randomUUID(), employeeId: id, requirementId: r.id, status:'NotCompleted', completedOn:null, expiresOn:null, updatedAt:new Date().toISOString() }));
+              const rows = reqs.map(r => ({ id: generateId(), employeeId: id, requirementId: r.id, status:'NotCompleted', completedOn:null, expiresOn:null, updatedAt:new Date().toISOString() }));
               if (rows.length) await this.db.employeeRequirements.bulkAdd(rows);
               added++;
             }
@@ -1130,7 +1139,7 @@
               if (existing){
                 await this.db.employeeRequirements.update(existing.id,{status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()});
               } else {
-                await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:rid,status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()});
+                await this.db.employeeRequirements.add({id:generateId(),employeeId:emp.id,requirementId:rid,status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()});
               }
               updates++;
             }
@@ -1194,7 +1203,7 @@
             return;
           }
           const emp = {
-            id: crypto.randomUUID(),
+            id: generateId(),
             ...this.newEmployee,
             status: 'Active',
             createdAt: new Date().toISOString(),
@@ -1204,7 +1213,7 @@
           // Create requirement entries for new employee
           const reqs = await this.db.requirements.toArray();
           const rows = reqs.map(r => ({
-            id: crypto.randomUUID(),
+            id: generateId(),
             employeeId: emp.id,
             requirementId: r.id,
             status: 'NotCompleted',
@@ -1225,7 +1234,7 @@
             return;
           }
           const req = {
-            id: crypto.randomUUID(),
+            id: generateId(),
             ...this.newRequirement,
             defaultExpiryDays: this.newRequirement.defaultExpiryDays ? parseInt(this.newRequirement.defaultExpiryDays) : null,
             createdAt: new Date().toISOString(),
@@ -1235,7 +1244,7 @@
           // Create requirement entries for all existing employees
           const employees = await this.db.employees.toArray();
           const rows = employees.map(emp => ({
-            id: crypto.randomUUID(),
+            id: generateId(),
             employeeId: emp.id,
             requirementId: req.id,
             status: 'NotCompleted',
@@ -1341,7 +1350,7 @@
                   });
                 } else {
                   await this.db.employeeRequirements.add({
-                    id: crypto.randomUUID(),
+                    id: generateId(),
                     employeeId: empId,
                     requirementId: reqId,
                     status,
