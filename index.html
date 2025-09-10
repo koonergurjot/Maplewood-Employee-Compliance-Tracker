@@ -78,7 +78,7 @@
                     <span x-text="req.name" class="font-semibold"></span>
                     <div class="flex items-center gap-1">
                       <button @click="editRequirement(req)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Edit requirement ${req.name}`">
-                        <i data-feather="edit-2" class="w-2 h-2"></i>
+                        <i data-feather="edit-2" class="icon-sm"></i>
                       </button>
                       <button @click="confirmDeleteRequirement(req)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Delete requirement ${req.name}`">
                         <i data-feather="trash-2" class="w-3 h-3"></i>
@@ -106,7 +106,7 @@
                       <span :class="emp.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'" 
                             class="status-badge px-2 py-1 text-xs rounded-full" x-text="emp.status"></span>
                       <button @click="editEmployee(emp)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Edit employee ${emp.firstName} ${emp.lastName}`">
-                        <i data-feather="edit-2" class="w-2 h-2"></i>
+                        <i data-feather="edit-2" class="icon-sm"></i>
                       </button>
                     </div>
                   </div>

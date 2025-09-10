@@ -829,3 +829,9 @@ body {
 .dark .dark\:bg-red-900 {
   background-color: #7f1d1d;
 }
+
+/* Custom small icon size */
+.icon-sm {
+  width: 0.25rem;
+  height: 0.25rem;
+}
