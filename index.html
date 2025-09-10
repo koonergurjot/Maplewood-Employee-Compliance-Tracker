@@ -6,9 +6,8 @@
   <title>Compliance Matrix</title>
   <meta name="theme-color" content="#111827"/>
   <link rel="manifest" href="/manifest.webmanifest"/>
-  <!-- Note: Tailwind CDN is used for development. For production, consider installing Tailwind as a PostCSS plugin -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script> tailwind.config = { darkMode: 'class' } </script>
+  <!-- Production Tailwind CSS -->
+  <link rel="stylesheet" href="/styles.css">
   <script src="https://unpkg.com/feather-icons"></script>
   <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
@@ -546,11 +545,7 @@
           
           // Initialize feather icons after DOM is ready
           this.$nextTick(() => {
-            try {
-              feather.replace();
-            } catch (error) {
-              console.warn('Feather icons initialization error:', error);
-            }
+            this.initializeFeatherIcons();
           });
           
           if ('serviceWorker' in navigator) try{ await navigator.serviceWorker.register('/sw.js'); }catch(e){}
@@ -614,23 +609,26 @@
             const newStatus = er && er.status === 'Completed' ? 'NotCompleted' : 'Completed';
             console.log('Current status:', er?.status, 'New status:', newStatus);
             
-            // Use a fresh transaction for each operation
-            if(!er){ 
-              await this.db.employeeRequirements.add({
-                id:crypto.randomUUID(),
-                employeeId:emp.id,
-                requirementId:req.id,
-                status:newStatus,
-                completedOn:newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
-                updatedAt: new Date().toISOString()
-              }); 
-            } else { 
-              await this.db.employeeRequirements.update(er.id,{
-                status: newStatus,
-                completedOn: newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
-                updatedAt: new Date().toISOString()
-              }); 
-            } 
+            // Use Dexie transaction to ensure atomicity
+            await this.db.transaction('rw', this.db.employeeRequirements, async () => {
+              if(!er){ 
+                await this.db.employeeRequirements.add({
+                  id:crypto.randomUUID(),
+                  employeeId:emp.id,
+                  requirementId:req.id,
+                  status:newStatus,
+                  completedOn:newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
+                  updatedAt: new Date().toISOString()
+                }); 
+              } else { 
+                await this.db.employeeRequirements.update(er.id,{
+                  status: newStatus,
+                  completedOn: newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
+                  updatedAt: new Date().toISOString()
+                }); 
+              }
+            });
+            
             await this.loadData(); 
             console.log('Toggle completed');
           } catch (error) {
@@ -642,13 +640,20 @@
         // UI helpers
         notify(msg,color='var(--success)'){ this.toastMessage=msg; this.toastColor=color; this.showToast=true; setTimeout(()=>this.showToast=false,3000); },
         async toggleDarkMode(){ this.darkMode=!this.darkMode; document.documentElement.classList.toggle('dark', this.darkMode); const prev=await this.db.settings.get('app')||{id:'app'}; await this.db.settings.put({...prev, darkMode:this.darkMode}); },
+        initializeFeatherIcons() {
+          try {
+            // Only replace icons that exist and have data-feather attribute
+            const featherElements = document.querySelectorAll('[data-feather]');
+            if (featherElements.length > 0 && typeof feather !== 'undefined') {
+              feather.replace();
+            }
+          } catch (error) {
+            console.warn('Feather icons initialization error:', error);
+          }
+        },
         refreshFeatherIcons(){ 
           this.$nextTick(() => {
-            try {
-              feather.replace();
-            } catch (error) {
-              console.warn('Feather icons refresh error:', error);
-            }
+            this.initializeFeatherIcons();
           });
         },
 
@@ -1217,6 +1222,5 @@
     });
   </script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
-  <script>feather.replace();</script>
 </body>
 </html>
