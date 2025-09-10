@@ -1,0 +1,6 @@
+When you change files, always:
+1) Keep edits minimal and focused.
+2) Summarize changes at the end of each task.
+3) Propose a Conventional Commit message (e.g., feat:, fix:, chore:).
+4) If build/tests pass, prepare to commit and open a PR with a clear title/description.
+5) Never add binaries; only text assets. Ask me before creating new top-level folders.
