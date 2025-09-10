@@ -609,26 +609,26 @@
             const newStatus = er && er.status === 'Completed' ? 'NotCompleted' : 'Completed';
             console.log('Current status:', er?.status, 'New status:', newStatus);
             
-            // Use Dexie transaction to ensure atomicity
-            await this.db.transaction('rw', this.db.employeeRequirements, async () => {
-              if(!er){ 
-                await this.db.employeeRequirements.add({
-                  id:crypto.randomUUID(),
-                  employeeId:emp.id,
-                  requirementId:req.id,
-                  status:newStatus,
-                  completedOn:newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
-                  updatedAt: new Date().toISOString()
-                }); 
-              } else { 
-                await this.db.employeeRequirements.update(er.id,{
-                  status: newStatus,
-                  completedOn: newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
-                  updatedAt: new Date().toISOString()
-                }); 
-              }
-            });
+            // Use individual operations with proper error handling
+            if(!er){ 
+              await this.db.employeeRequirements.add({
+                id:crypto.randomUUID(),
+                employeeId:emp.id,
+                requirementId:req.id,
+                status:newStatus,
+                completedOn:newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
+                updatedAt: new Date().toISOString()
+              }); 
+            } else { 
+              await this.db.employeeRequirements.update(er.id,{
+                status: newStatus,
+                completedOn: newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
+                updatedAt: new Date().toISOString()
+              }); 
+            }
             
+            // Small delay to ensure operation completes
+            await new Promise(resolve => setTimeout(resolve, 10));
             await this.loadData(); 
             console.log('Toggle completed');
           } catch (error) {
@@ -642,10 +642,28 @@
         async toggleDarkMode(){ this.darkMode=!this.darkMode; document.documentElement.classList.toggle('dark', this.darkMode); const prev=await this.db.settings.get('app')||{id:'app'}; await this.db.settings.put({...prev, darkMode:this.darkMode}); },
         initializeFeatherIcons() {
           try {
+            // Wait for feather to be available and DOM to be ready
+            if (typeof feather === 'undefined') {
+              console.warn('Feather icons library not loaded');
+              return;
+            }
+            
             // Only replace icons that exist and have data-feather attribute
             const featherElements = document.querySelectorAll('[data-feather]');
-            if (featherElements.length > 0 && typeof feather !== 'undefined') {
-              feather.replace();
+            if (featherElements.length > 0) {
+              // Use a more specific approach to avoid replaceChild errors
+              featherElements.forEach(element => {
+                try {
+                  if (element && element.parentNode) {
+                    const iconName = element.getAttribute('data-feather');
+                    if (iconName && feather.icons[iconName]) {
+                      element.innerHTML = feather.icons[iconName].toSvg();
+                    }
+                  }
+                } catch (iconError) {
+                  console.warn('Error replacing individual icon:', iconError);
+                }
+              });
             }
           } catch (error) {
             console.warn('Feather icons initialization error:', error);

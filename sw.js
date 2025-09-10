@@ -1,7 +1,25 @@
 const CACHE='cmatrix-v4_3';
-const ASSETS=['/','/index.html','/manifest.webmanifest','/styles.css','/icons/icon-192.png','/icons/icon-512.png'];
+const ASSETS=['/','/index.html','/manifest.webmanifest','/styles.css','/icon-192.svg','/icon-512.svg'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))) });
-self.addEventListener('fetch',e=>{ if(e.request.method!=='GET') return; const url=new URL(e.request.url);
-  e.respondWith(caches.match(e.request).then(c=>c||fetch(e.request).then(r=>{ if(url.origin===location.origin && r.ok) caches.open(CACHE).then(cs=>cs.put(e.request,r.clone())); return r; }).catch(()=>url.pathname.startsWith('/')?caches.match('/index.html'):Promise.reject('offline'))));
+self.addEventListener('fetch',e=>{ 
+  if(e.request.method!=='GET') return; 
+  const url=new URL(e.request.url);
+  e.respondWith(
+    caches.match(e.request).then(c=>{
+      if(c) return c;
+      return fetch(e.request).then(r=>{ 
+        if(url.origin===location.origin && r.ok) {
+          const responseClone = r.clone();
+          caches.open(CACHE).then(cs=>cs.put(e.request,responseClone));
+        }
+        return r; 
+      }).catch(()=>{
+        if(url.pathname.startsWith('/')) {
+          return caches.match('/index.html');
+        }
+        return Promise.reject('offline');
+      });
+    })
+  );
 });
