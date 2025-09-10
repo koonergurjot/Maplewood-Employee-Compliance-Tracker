@@ -73,7 +73,11 @@
     </div>
 
     <div class="mb-3 text-sm" :style="'color:var(--muted)'">
-      <span>Total employees: </span><strong x-text="employees.length"></strong>
+      <span>Total employees: </span>
+      <strong x-text="employees.length"></strong>
+      <template x-if="filteredEmployees.length">
+        <span> (showing <span x-text="filteredEmployees.length"></span>)</span>
+      </template>
     </div>
 
     <div class="card rounded-lg shadow overflow-hidden">
@@ -155,6 +159,9 @@
                 </template>
               </tr>
             </template>
+            <tr x-show="sortedEmployees().length === 0">
+              <td class="px-6 py-4 text-center text-sm" :colspan="4 + orderedVisibleRequirements().length" style="color:var(--muted)">No matches found</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -204,7 +211,7 @@
       </div>
 
       <!-- Search and Filter -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
         <div>
           <label class="block text-sm font-medium mb-1">Search Employees</label>
           <input x-model="searchQuery" @input="filterEmployees()" type="text" placeholder="Name, role, or ID..." 
@@ -225,6 +232,15 @@
             <option value="">All Status</option>
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Requirement Status</label>
+          <select x-model="reqStatusFilter" @change="filterEmployees()" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+            <option value="">Any</option>
+            <option value="Completed">Completed</option>
+            <option value="Expired">Expired</option>
+            <option value="NotCompleted">Incomplete</option>
           </select>
         </div>
       </div>
@@ -738,7 +754,7 @@
         // Admin panel state
         showAddEmployeeModal:false, showAddRequirementModal:false, showBulkActionsModal:false,
         showEditEmployeeModal:false, showEditRequirementModal:false,
-          searchQuery:'', roleFilter:'', statusFilter:'', filteredEmployees:[], sortField:'firstName', sortDirection:'asc',
+          searchQuery:'', roleFilter:'', statusFilter:'', reqStatusFilter:'', filteredEmployees:[], sortField:'firstName', sortDirection:'asc',
         newEmployee:{firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''},
           newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
           editingEmployee:{}, editingRequirement:{},
@@ -1412,6 +1428,11 @@
           }
           if (this.statusFilter) {
             filtered = filtered.filter(emp => emp.status === this.statusFilter);
+          }
+          if (this.reqStatusFilter) {
+            filtered = filtered.filter(emp =>
+              this.requirements.some(req => this.getStatus(emp.id, req.id) === this.reqStatusFilter)
+            );
           }
           this.filteredEmployees = filtered;
         },
