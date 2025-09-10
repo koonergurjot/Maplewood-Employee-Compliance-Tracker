@@ -58,7 +58,14 @@
       <h1 class="text-2xl font-bold">Compliance Matrix</h1>
       <div class="flex gap-2">
         <button @click="showImportModal = true" class="btn"><i data-feather="upload" class="w-4 h-4"></i><span>Import</span></button>
-        <button @click="exportData" class="btn"><i data-feather="download" class="w-4 h-4"></i><span>Export</span></button>
+        <div class="relative">
+          <button @click="showExportDropdown = !showExportDropdown" class="btn"><i data-feather="download" class="w-4 h-4"></i><span>Export</span></button>
+          <div x-show="showExportDropdown" @click.away="showExportDropdown = false" class="absolute right-0 mt-2 w-32 border rounded shadow bg-white dark:bg-gray-800 z-10">
+            <button @click="exportData('json'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">JSON</button>
+            <button @click="exportData('csv'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">CSV</button>
+            <button @click="exportData('xlsx'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">Excel</button>
+          </div>
+        </div>
         <button @click="clearAllData" class="btn"><i data-feather="trash-2" class="w-4 h-4"></i><span>Clear</span></button>
         <button @click="openSettingsModal()" class="btn"><i data-feather="settings" class="w-4 h-4"></i><span>Settings</span></button>
         <button @click="toggleDarkMode()" class="btn" aria-label="Toggle dark mode"><i :data-feather="darkMode ? 'sun' : 'moon'"></i></button>
@@ -715,7 +722,7 @@
     }
     document.addEventListener('alpine:init', () => {
       Alpine.data('app', () => ({
-        darkMode:false, showImportModal:false,
+        darkMode:false, showImportModal:false, showExportDropdown:false,
         showSettingsModal:false, settingsSortable:null,
         db:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
         // Toast notification variables
@@ -1326,11 +1333,32 @@
           return null;
         },
         addDays(dateOnly, days){ if(!dateOnly) return null; const [y,m,d]=dateOnly.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+Number(days)); return dt.toISOString().slice(0,10); },
-        exportData: async function(){
+        exportData: async function(format='json'){
           const data={ employees:await this.db.employees.toArray(), requirements:await this.db.requirements.toArray(), employeeRequirements:await this.db.employeeRequirements.toArray(), settings:await this.db.settings.toArray() };
-          const jsonBlob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-          this.downloadBlob(jsonBlob, `compliance-matrix-${new Date().toISOString().split('T')[0]}.json`);
-          this.notify('Exported JSON');
+          const date=`compliance-matrix-${new Date().toISOString().split('T')[0]}`;
+          let blob, filename, message;
+          if(format==='csv'){
+            const csv=Papa.unparse(data.employees);
+            blob=new Blob([csv],{type:'text/csv'});
+            filename=`${date}.csv`;
+            message='Exported CSV';
+          } else if(format==='xlsx'){
+            const wb=XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.employees),'Employees');
+            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.requirements),'Requirements');
+            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.employeeRequirements),'EmployeeRequirements');
+            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.settings),'Settings');
+            const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+            blob=new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+            filename=`${date}.xlsx`;
+            message='Exported Excel';
+          } else {
+            blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+            filename=`${date}.json`;
+            message='Exported JSON';
+          }
+          this.downloadBlob(blob, filename);
+          this.notify(message);
         },
         downloadBlob(blob, filename){ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); },
 
