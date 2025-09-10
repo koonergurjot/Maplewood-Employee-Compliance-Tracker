@@ -12,6 +12,18 @@
   <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script>
+    // Fallback for XLSX library loading
+    if (typeof XLSX === 'undefined') {
+      console.error('XLSX library failed to load. Trying alternative CDN...');
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
+      script.onerror = function() {
+        console.error('Alternative XLSX CDN also failed to load');
+      };
+      document.head.appendChild(script);
+    }
+  </script>
   <style>
     :root{ --bg:#f3f4f6; --card:#ffffff; --line:#e5e7eb; --text:#111827; --muted:#6b7280; --accent:#2563eb; --success:#10b981; --warn:#f59e0b; --danger:#ef4444; }
     .dark:root, .dark{ --bg:#0b1220; --card:#111827; --line:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --accent:#60a5fa; --success:#34d399; --warn:#fbbf24; --danger:#f87171; }
@@ -111,10 +123,14 @@
               <label class="block text-sm">File</label>
               <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md" style="border-color:var(--line)">
                 <div class="space-y-1 text-center">
-                  <label for="file-upload" class="relative cursor-pointer rounded-md font-medium text-blue-600 hover:opacity-80">
+                  <label for="file-upload" class="relative cursor-pointer rounded-md font-medium text-blue-600 hover:opacity-80" x-show="!importLoading">
                     <span>Upload a file</span>
-                    <input id="file-upload" type="file" class="sr-only" @change="handleFileUpload">
+                    <input id="file-upload" type="file" class="sr-only" @change="handleFileUpload" accept=".csv,.xlsx,.xls" multiple="false">
                   </label>
+                  <div x-show="importLoading" class="flex items-center justify-center">
+                    <div class="animate-spin rounded-full h-6 w-6 border-b-2" style="border-color:var(--accent)"></div>
+                    <span class="ml-2 text-sm">Processing file...</span>
+                  </div>
                   <p class="text-xs" style="color:var(--muted)">CSV or Excel up to 10MB</p>
                 </div>
               </div>
@@ -254,7 +270,7 @@
         darkMode:false, showImportModal:false,
         db:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
         // Import UI state
-        importType:'excel', importMode:'employees', importData:[], importHeaders:[], importSheets:[], importSheetName:'', importWarning:'', importError:'',
+        importType:'excel', importMode:'employees', importData:[], importHeaders:[], importSheets:[], importSheetName:'', importWarning:'', importError:'', importLoading:false,
         nameFormat:'auto', previewEligible:0, dryRunDetails:[], dryRunSummary:{added:0,updated:0,skipped:0},
         fieldLabels:{ firstName:'First Name', lastName:'Last Name', payrollName:'Payroll/Employee Name', role:'Role / Job Title', employmentType:'Employment Type / Class', employeeId:'Employee ID / Position ID', status:'Position Status', seniorityHours:'Seniority Hours' },
         columnMap:{ firstName:'', lastName:'', payrollName:'', role:'', employmentType:'', employeeId:'', status:'', seniorityHours:'' },
@@ -320,8 +336,40 @@
 
         // ---------- Import ----------
         handleFileUpload(event){
-          this.importError=''; this.importWarning=''; this.importData=[]; this.importHeaders=[]; this.importSheets=[]; this.importSheetName=''; this.previewEligible=0; this.dryRunDetails=[];
-          const file = event.target.files[0]; if(!file) return;
+          this.importError=''; this.importWarning=''; this.importData=[]; this.importHeaders=[]; this.importSheets=[]; this.importSheetName=''; this.previewEligible=0; this.dryRunDetails=[]; this.importLoading=true;
+          const file = event.target.files[0]; 
+          if(!file) { this.importLoading=false; return; }
+          
+          // File validation
+          const maxSize = 10 * 1024 * 1024; // 10MB
+          if (file.size > maxSize) {
+            this.importError = 'File size exceeds 10MB limit. Please choose a smaller file.';
+            this.importLoading = false;
+            return;
+          }
+          
+          const allowedTypes = ['.csv', '.xlsx', '.xls'];
+          const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+          if (!allowedTypes.includes(fileExtension)) {
+            this.importError = 'Invalid file type. Please upload a CSV or Excel file (.csv, .xlsx, .xls).';
+            this.importLoading = false;
+            return;
+          }
+          
+          // Auto-detect import type based on file extension if not set correctly
+          if (fileExtension === '.csv' && this.importType === 'excel') {
+            this.importType = 'csv';
+          } else if ((fileExtension === '.xlsx' || fileExtension === '.xls') && this.importType === 'csv') {
+            this.importType = 'excel';
+          }
+          
+          // Check if XLSX library is available for Excel files
+          if (this.importType === 'excel' && typeof XLSX === 'undefined') {
+            this.importError = 'Excel processing library is not loaded. Please refresh the page and try again.';
+            this.importLoading = false;
+            return;
+          }
+          
           if (this.importType === 'csv') {
             file.text().then(text => {
               const lines = text.split(/\r?\n/);
@@ -330,35 +378,93 @@
               this.importData = res.data; this.importHeaders = res.meta.fields || [];
               this.autofillMappings(); this.updateEligibilityPreview();
               if (!this.importHeaders.length) this.importError = 'No headers detected — check the CSV file.';
+              this.importLoading = false;
             });
           } else {
             const reader = new FileReader();
             reader.onload = (e) => {
               try{
                 const data = new Uint8Array(e.target.result);
-                const wb = XLSX.read(data, { type:'array' });
+                const wb = XLSX.read(data, { type:'array', cellDates: true, cellNF: false, cellText: false });
+                
+                if (!wb.SheetNames || wb.SheetNames.length === 0) {
+                  this.importError = 'No worksheets found in the Excel file.';
+                  return;
+                }
+                
                 this.importSheets = wb.SheetNames;
                 let best = { name: wb.SheetNames[0], score: -1, headers: [], rows: [] };
+                
                 for (const name of wb.SheetNames){
-                  const { headers, rows, score } = this.extractFromSheet(wb.Sheets[name]);
-                  if (score > best.score) best = { name, score, headers, rows };
+                  try {
+                    const { headers, rows, score } = this.extractFromSheet(wb.Sheets[name]);
+                    if (score > best.score) best = { name, score, headers, rows };
+                  } catch (sheetErr) {
+                    console.warn(`Error processing sheet "${name}":`, sheetErr);
+                    continue;
+                  }
                 }
-                this.importSheetName = best.name; this.importHeaders = best.headers; this.importData = best.rows;
-                this.autofillMappings(); this.updateEligibilityPreview();
-                if (!this.importHeaders.length) this.importError = 'Could not detect headers in Excel sheet. Try selecting a different worksheet above.';
-              }catch(err){ console.error(err); this.importError = 'Failed to read Excel file. Ensure it is .xlsx or .xls and not password protected.'; }
+                
+                this.importSheetName = best.name; 
+                this.importHeaders = best.headers; 
+                this.importData = best.rows;
+                this.autofillMappings(); 
+                this.updateEligibilityPreview();
+                
+                if (!this.importHeaders.length) {
+                  this.importError = 'Could not detect headers in Excel sheet. Try selecting a different worksheet above or check if the file has proper column headers.';
+                } else if (this.importData.length === 0) {
+                  this.importError = 'No data rows found in the selected worksheet.';
+                }
+                this.importLoading = false;
+              }catch(err){ 
+                console.error('Excel processing error:', err); 
+                this.importError = `Failed to read Excel file: ${err.message || 'Unknown error'}. Ensure it is .xlsx or .xls format and not password protected.`;
+                this.importLoading = false;
+              }
+            };
+            reader.onerror = () => {
+              this.importError = 'Failed to read the file. Please try again.';
+              this.importLoading = false;
             };
             reader.readAsArrayBuffer(file);
           }
         },
         selectExcelSheet(name){
-          const input = document.getElementById('file-upload'); const file = input?.files?.[0]; if(!file || !name) return;
+          const input = document.getElementById('file-upload'); 
+          const file = input?.files?.[0]; 
+          if(!file || !name) return;
+          
+          this.importError = '';
           const reader = new FileReader();
           reader.onload = (e) => {
-            const data = new Uint8Array(e.target.result);
-            const wb = XLSX.read(data, { type:'array' });
-            const { headers, rows } = this.extractFromSheet(wb.Sheets[name]);
-            this.importHeaders = headers; this.importData = rows; this.autofillMappings(); this.updateEligibilityPreview();
+            try {
+              const data = new Uint8Array(e.target.result);
+              const wb = XLSX.read(data, { type:'array', cellDates: true, cellNF: false, cellText: false });
+              
+              if (!wb.Sheets[name]) {
+                this.importError = `Worksheet "${name}" not found in the file.`;
+                return;
+              }
+              
+              const { headers, rows } = this.extractFromSheet(wb.Sheets[name]);
+              this.importHeaders = headers; 
+              this.importData = rows; 
+              this.autofillMappings(); 
+              this.updateEligibilityPreview();
+              
+              if (!this.importHeaders.length) {
+                this.importError = `No headers detected in worksheet "${name}".`;
+              } else if (this.importData.length === 0) {
+                this.importError = `No data rows found in worksheet "${name}".`;
+              }
+            } catch (err) {
+              console.error('Error selecting Excel sheet:', err);
+              this.importError = `Failed to process worksheet "${name}": ${err.message || 'Unknown error'}`;
+            }
+          };
+          reader.onerror = () => {
+            this.importError = 'Failed to read the file. Please try again.';
           };
           reader.readAsArrayBuffer(file);
         },
@@ -368,21 +474,47 @@
           return lines.slice(bestIdx).join('\\n');
         },
         extractFromSheet(sheet){
-          const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows:false });
-          let bestIdx = 0, bestScore = -1;
-          for (let i=0; i<Math.min(30, aoa.length); i++){
-            const row = (aoa[i]||[]).map(v => (v==null?'':String(v)));
-            const score = this.scoreHeaderRow(row);
-            if (score > bestScore){ bestScore = score; bestIdx = i; }
+          try {
+            const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
+            
+            if (!aoa || aoa.length === 0) {
+              return { headers: [], rows: [], score: -1 };
+            }
+            
+            let bestIdx = 0, bestScore = -1;
+            for (let i=0; i<Math.min(30, aoa.length); i++){
+              const row = (aoa[i]||[]).map(v => (v==null || v===undefined ? '' : String(v).trim()));
+              const score = this.scoreHeaderRow(row);
+              if (score > bestScore){ bestScore = score; bestIdx = i; }
+            }
+            
+            const headers = (aoa[bestIdx] || []).map(v => String(v||'').trim()).filter(x => x !== '');
+            const rows = [];
+            
+            for (let r=bestIdx+1; r<aoa.length; r++){
+              const row = aoa[r]; 
+              if (!row || row.every(v => v==null || v===undefined || String(v).trim()==='')) continue;
+              
+              const obj = {}; 
+              for (let c=0; c<headers.length; c++){ 
+                const value = row[c];
+                // Handle different data types properly
+                if (value === null || value === undefined) {
+                  obj[headers[c]] = '';
+                } else if (typeof value === 'object' && value instanceof Date) {
+                  obj[headers[c]] = value.toISOString().split('T')[0]; // Format dates as YYYY-MM-DD
+                } else {
+                  obj[headers[c]] = String(value).trim();
+                }
+              }
+              rows.push(obj);
+            }
+            
+            return { headers, rows, score: bestScore };
+          } catch (err) {
+            console.error('Error extracting from sheet:', err);
+            return { headers: [], rows: [], score: -1 };
           }
-          const headers = (aoa[bestIdx] || []).map(v => String(v||'').trim()).filter(x=>x!=='');
-          const rows = [];
-          for (let r=bestIdx+1; r<aoa.length; r++){
-            const row = aoa[r]; if (!row || row.every(v => v==null || String(v).trim()==='')) continue;
-            const obj={}; for (let c=0;c<headers.length;c++){ obj[headers[c]] = row[c]; }
-            rows.push(obj);
-          }
-          return { headers, rows, score: bestScore };
         },
         scoreHeaderRow(cols){
           const patterns=[/first/i,/last/i,/employee\\s*name/i,/payroll\\s*name/i,/job\\s*title|role/i,/employment\\s*type|class/i,/position\\s*id|employee\\s*id/i,/status/i,/seniority|total.*hours/i];
