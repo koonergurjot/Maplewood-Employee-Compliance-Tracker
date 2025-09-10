@@ -75,6 +75,7 @@
           </div>
         </div>
         <button @click="clearAllData" class="btn"><i data-feather="trash-2" class="w-4 h-4"></i><span>Clear</span></button>
+        <button id="activity-log-btn" @click="openActivityLog()" class="btn"><i data-feather="list" class="w-4 h-4"></i><span>Activity Log</span></button>
         <button id="settings-btn" @click="openSettingsModal()" class="btn"><i data-feather="settings" class="w-4 h-4"></i><span>Settings</span></button>
         <button id="help-btn" @click="startTour()" class="btn"><i data-feather="help-circle" class="w-4 h-4"></i><span>Help</span></button>
         <button @click="toggleDarkMode()" class="btn" aria-label="Toggle dark mode"><i :data-feather="darkMode ? 'sun' : 'moon'"></i></button>
@@ -740,6 +741,34 @@
     </div>
   </div>
 
+  <!-- Activity Log Modal -->
+  <div x-show="showActivityLogModal" class="fixed inset-0 z-50">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div @click="showActivityLogModal=false" class="fixed inset-0 bg-black/40 z-40"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-xl sm:w-full">
+        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <h3 class="text-lg font-semibold mb-4">Activity Log</h3>
+          <div x-data="activityTimeline()" x-ref="activityTimeline" x-init="init()" class="space-y-3 max-h-96 overflow-y-auto">
+            <template x-for="entry in entries" :key="entry.id">
+              <div class="flex items-center justify-between border-b pb-2" style="border-color:var(--line)">
+                <div>
+                  <div class="text-sm" x-text="new Date(entry.timestamp).toLocaleString()"></div>
+                  <div class="text-xs" style="color:var(--muted)" x-text="entry.actionType"></div>
+                </div>
+                <button x-show="entry.status === 'completed'" @click="undo(entry)" class="btn btn-primary text-xs">Undo</button>
+              </div>
+            </template>
+            <div x-show="!entries.length" class="text-sm" style="color:var(--muted)">No activity yet</div>
+          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button @click="showActivityLogModal=false" class="w-full sm:w-auto px-4 py-2 btn">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div x-show="showToast" class="fixed bottom-4 right-4 px-4 py-2 rounded shadow-lg" :style="'background:'+toastColor+';color:white'">
     <span x-text="toastMessage"></span>
     <button x-show="toastUndo" @click="toastUndo()" class="ml-3 underline font-semibold">Undo</button>
@@ -755,11 +784,42 @@
       }
       return Date.now().toString(36) + Math.random().toString(36).slice(2);
     }
+
+    function activityTimeline(){
+      return {
+        entries: [],
+        async load(){
+          const { default: ActivityLog } = await import('./activity-log.js');
+          if(!this.$root.activityLog){
+            this.$root.activityLog = await ActivityLog.init(this.$root.db);
+          }
+          this.entries = await this.$root.activityLog.recent();
+        },
+        async init(){
+          await this.load();
+        },
+        async undo(entry){
+          const { EditEmployee, ImportEmployees, BulkUpdateStatus } = await import('./commands.js');
+          const factories = {
+            EditEmployee: e => new EditEmployee(this.$root.db, e.targets[0], e.metadata.newData),
+            ImportEmployees: e => new ImportEmployees(this.$root.db, e.metadata.rows),
+            BulkUpdateStatus: e => new BulkUpdateStatus(this.$root.db, e.targets, e.metadata.requirementId, e.metadata.status)
+          };
+          const factory = factories[entry.actionType];
+          if(!factory) return;
+          await this.$root.activityLog.undo(entry.id, factory);
+          await this.load();
+          await this.$root.loadData();
+        }
+      };
+    }
+
     document.addEventListener('alpine:init', () => {
       Alpine.data('app', () => ({
         darkMode:false, showImportModal:false, showExportDropdown:false,
         showSettingsModal:false, settingsSortable:null,
-        db:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
+        showActivityLogModal:false,
+        db:null, activityLog:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
         importHeaders: [], // ensure array exists before templates iterate over it
         // Toast notification variables
         showToast: false, toastMessage: '', toastColor: 'var(--success)', toastUndo:null,
@@ -828,11 +888,12 @@
 
         initDB(){
           this.db = new Dexie('ComplianceMatrixDB');
-          this.db.version(7).stores({
+          this.db.version(8).stores({
             employees:'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
             requirements:'id, name, defaultExpiryDays, color',
             employeeRequirements:'id, [employeeId+requirementId], status, completedOn, expiresOn, notes',
-            settings:'id'
+            settings:'id',
+            activityLog:'id,timestamp,actionType'
           });
           this.db.on('populate', (tx) => {
             const now = new Date().toISOString();
@@ -851,6 +912,13 @@
             ]);
             tx.table('settings').put({id:'app',darkMode:false});
             tx.table('settings').put({id:'hasSeenTour', value:false});
+          });
+        },
+
+        openActivityLog(){
+          this.showActivityLogModal = true;
+          this.$nextTick(() => {
+            this.$refs.activityTimeline?.load();
           });
         },
 
