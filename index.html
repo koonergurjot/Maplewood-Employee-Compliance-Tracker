@@ -669,10 +669,10 @@
             employeeRequirements:'id, [employeeId+requirementId], status, completedOn, expiresOn, notes',
             settings:'id'
           });
-          this.db.on('populate', async () => {
+          this.db.on('populate', (tx) => {
             const now = new Date().toISOString();
             const seed = (name, days=null, color='#fef3c7')=>({id:crypto.randomUUID(),name,defaultExpiryDays:days,color,createdAt:now,updatedAt:now});
-            await this.db.requirements.bulkAdd([
+            tx.table('requirements').bulkAdd([
               seed('Resume', null, '#e0e7ff'), // Light blue
               seed('References', null, '#f0f9ff'), // Light cyan
               seed('First Aid', 1095, '#fef3c7'), // Light yellow
@@ -684,7 +684,7 @@
               seed('TB Test', 365, '#f0fdf4'), // Light emerald
               seed('Immunization', 365, '#ecfdf5') // Light green
             ]);
-            await this.db.settings.put({id:'app',darkMode:false});
+            tx.table('settings').put({id:'app',darkMode:false});
           });
         },
 
@@ -721,28 +721,20 @@
             const er=this.getER(emp.id, req.id);
             const newStatus = er && er.status === 'Completed' ? 'NotCompleted' : 'Completed';
             console.log('Current status:', er?.status, 'New status:', newStatus);
-            
-            // Use individual operations with proper error handling
-            if(!er){ 
-              await this.db.employeeRequirements.add({
-                id:crypto.randomUUID(),
-                employeeId:emp.id,
-                requirementId:req.id,
-                status:newStatus,
-                completedOn:newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
-                updatedAt: new Date().toISOString()
-              }); 
-            } else { 
-              await this.db.employeeRequirements.update(er.id,{
+
+            await this.db.transaction('rw', this.db.employeeRequirements, async () => {
+              const record = {
+                id: er?.id || crypto.randomUUID(),
+                employeeId: emp.id,
+                requirementId: req.id,
                 status: newStatus,
                 completedOn: newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
                 updatedAt: new Date().toISOString()
-              }); 
-            }
-            
-            // Small delay to ensure operation completes
-            await new Promise(resolve => setTimeout(resolve, 10));
-            await this.loadData(); 
+              };
+              await this.db.employeeRequirements.put(record);
+            });
+
+            await this.loadData();
             console.log('Toggle completed');
           } catch (error) {
             console.error('Error toggling status:', error);
