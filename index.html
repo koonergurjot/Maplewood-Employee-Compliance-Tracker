@@ -6,6 +6,7 @@
   <title>Compliance Matrix</title>
   <meta name="theme-color" content="#111827"/>
   <link rel="manifest" href="/manifest.webmanifest"/>
+  <!-- Note: Tailwind CDN is used for development. For production, consider installing Tailwind as a PostCSS plugin -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script> tailwind.config = { darkMode: 'class' } </script>
   <script src="https://unpkg.com/feather-icons"></script>
@@ -521,6 +522,8 @@
       Alpine.data('app', () => ({
         darkMode:false, showImportModal:false,
         db:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
+        // Toast notification variables
+        showToast: false, toastMessage: '', toastColor: 'var(--success)',
         // Import UI state
         importType:'excel', importMode:'employees', importData:[], importHeaders:[], importSheets:[], importSheetName:'', importWarning:'', importError:'', importLoading:false,
         nameFormat:'auto', previewEligible:0, dryRunDetails:[], dryRunSummary:{added:0,updated:0,skipped:0},
@@ -540,7 +543,16 @@
           const s = await this.db.settings.get('app');
           if (s?.darkMode) this.darkMode = true;
           document.documentElement.classList.toggle('dark', this.darkMode);
-          feather.replace();
+          
+          // Initialize feather icons after DOM is ready
+          this.$nextTick(() => {
+            try {
+              feather.replace();
+            } catch (error) {
+              console.warn('Feather icons initialization error:', error);
+            }
+          });
+          
           if ('serviceWorker' in navigator) try{ await navigator.serviceWorker.register('/sw.js'); }catch(e){}
         },
 
@@ -596,31 +608,49 @@
             event.preventDefault();
             event.stopPropagation();
           }
-          const er=this.getER(emp.id, req.id); 
-          const newStatus = er && er.status === 'Completed' ? 'NotCompleted' : 'Completed';
-          console.log('Current status:', er?.status, 'New status:', newStatus);
           
-          if(!er){ 
-            await this.db.employeeRequirements.add({
-              id:crypto.randomUUID(),
-              employeeId:emp.id,
-              requirementId:req.id,
-              status:newStatus,
-              completedOn:newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null
-            }); 
-          } else { 
-            await this.db.employeeRequirements.update(er.id,{
-              status: newStatus,
-              completedOn: newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null
-            }); 
-          } 
-          await this.loadData(); 
-          console.log('Toggle completed');
+          try {
+            const er=this.getER(emp.id, req.id); 
+            const newStatus = er && er.status === 'Completed' ? 'NotCompleted' : 'Completed';
+            console.log('Current status:', er?.status, 'New status:', newStatus);
+            
+            // Use a fresh transaction for each operation
+            if(!er){ 
+              await this.db.employeeRequirements.add({
+                id:crypto.randomUUID(),
+                employeeId:emp.id,
+                requirementId:req.id,
+                status:newStatus,
+                completedOn:newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
+                updatedAt: new Date().toISOString()
+              }); 
+            } else { 
+              await this.db.employeeRequirements.update(er.id,{
+                status: newStatus,
+                completedOn: newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
+                updatedAt: new Date().toISOString()
+              }); 
+            } 
+            await this.loadData(); 
+            console.log('Toggle completed');
+          } catch (error) {
+            console.error('Error toggling status:', error);
+            this.notify('Error updating status. Please try again.', 'var(--danger)');
+          }
         },
 
         // UI helpers
         notify(msg,color='var(--success)'){ this.toastMessage=msg; this.toastColor=color; this.showToast=true; setTimeout(()=>this.showToast=false,3000); },
         async toggleDarkMode(){ this.darkMode=!this.darkMode; document.documentElement.classList.toggle('dark', this.darkMode); const prev=await this.db.settings.get('app')||{id:'app'}; await this.db.settings.put({...prev, darkMode:this.darkMode}); },
+        refreshFeatherIcons(){ 
+          this.$nextTick(() => {
+            try {
+              feather.replace();
+            } catch (error) {
+              console.warn('Feather icons refresh error:', error);
+            }
+          });
+        },
 
         // ---------- Import ----------
         handleFileUpload(event){
@@ -1057,6 +1087,7 @@
           this.newEmployee = {firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''};
           this.showAddEmployeeModal = false;
           await this.loadData();
+          this.refreshFeatherIcons();
           this.notify('Employee added successfully');
         },
         async addRequirement(){
@@ -1087,6 +1118,7 @@
           this.newRequirement = {name:'', defaultExpiryDays:'', color:'#e0e7ff'};
           this.showAddRequirementModal = false;
           await this.loadData();
+          this.refreshFeatherIcons();
           this.notify('Requirement added successfully');
         },
         async editRequirement(req){
@@ -1094,6 +1126,7 @@
           if (newName && newName !== req.name) {
             await this.db.requirements.update(req.id, {name: newName, updatedAt: new Date().toISOString()});
             await this.loadData();
+            this.refreshFeatherIcons();
             this.notify('Requirement updated');
           }
         },
@@ -1102,6 +1135,7 @@
           if (newFirstName && newFirstName !== emp.firstName) {
             await this.db.employees.update(emp.id, {firstName: newFirstName, updatedAt: new Date().toISOString()});
             await this.loadData();
+            this.refreshFeatherIcons();
             this.notify('Employee updated');
           }
         },
