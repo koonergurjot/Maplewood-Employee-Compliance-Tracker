@@ -747,7 +747,11 @@
             console.log('Toggle completed');
           } catch (error) {
             console.error('Error toggling status:', error);
-            this.notify('Error updating status. Please try again.', 'var(--danger)');
+            if (error && error.stack) {
+              console.error(error.stack);
+            }
+            const message = error && error.message ? `Error updating status: ${String(error.message)}` : 'Error updating status. Please try again.';
+            this.notify(message, 'var(--danger)');
           }
         },
 
