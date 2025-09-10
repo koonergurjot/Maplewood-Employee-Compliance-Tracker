@@ -17,6 +17,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script src="onboarding.js"></script>
   <script>
     // Fallback for XLSX library loading
     if (typeof XLSX === 'undefined') {
@@ -54,6 +55,9 @@
     .requirement-header:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,0.1)}
     .admin-card{transition:all 0.2s ease}
     .admin-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.1)}
+    .tour-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000}
+    .tour-tooltip{position:absolute;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:.5rem;padding:1rem;max-width:18rem;z-index:1001}
+    .tour-highlight{position:relative;z-index:1002;box-shadow:0 0 0 4px var(--accent);border-radius:.25rem}
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak :class="{'dark': darkMode}">
@@ -61,9 +65,9 @@
     <div class="flex justify-between items-center mb-4">
       <h1 class="text-2xl font-bold">Compliance Matrix</h1>
       <div class="flex gap-2">
-        <button @click="showImportModal = true" class="btn"><i data-feather="upload" class="w-4 h-4"></i><span>Import</span></button>
+        <button id="import-btn" @click="showImportModal = true" class="btn"><i data-feather="upload" class="w-4 h-4"></i><span>Import</span></button>
         <div class="relative">
-          <button @click="showExportDropdown = !showExportDropdown" class="btn"><i data-feather="download" class="w-4 h-4"></i><span>Export</span></button>
+          <button id="export-btn" @click="showExportDropdown = !showExportDropdown" class="btn"><i data-feather="download" class="w-4 h-4"></i><span>Export</span></button>
           <div x-show="showExportDropdown" @click.away="showExportDropdown = false" class="absolute right-0 mt-2 w-32 border rounded shadow bg-white dark:bg-gray-800 z-10">
             <button @click="exportData('json'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">JSON</button>
             <button @click="exportData('csv'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">CSV</button>
@@ -71,7 +75,8 @@
           </div>
         </div>
         <button @click="clearAllData" class="btn"><i data-feather="trash-2" class="w-4 h-4"></i><span>Clear</span></button>
-        <button @click="openSettingsModal()" class="btn"><i data-feather="settings" class="w-4 h-4"></i><span>Settings</span></button>
+        <button id="settings-btn" @click="openSettingsModal()" class="btn"><i data-feather="settings" class="w-4 h-4"></i><span>Settings</span></button>
+        <button id="help-btn" @click="startTour()" class="btn"><i data-feather="help-circle" class="w-4 h-4"></i><span>Help</span></button>
         <button @click="toggleDarkMode()" class="btn" aria-label="Toggle dark mode"><i :data-feather="darkMode ? 'sun' : 'moon'"></i></button>
       </div>
     </div>
@@ -86,7 +91,7 @@
 
     <div class="card rounded-lg shadow overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="min-w-full divide-y" style="border-color:var(--line)">
+        <table id="employee-table" class="min-w-full divide-y" style="border-color:var(--line)">
           <thead class="bg-gray-50 dark:bg-gray-900">
             <tr>
               <th @click="sortEmployees('firstName')" class="sticky-col px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer" style="color:var(--muted)">
@@ -182,7 +187,7 @@
     </div>
 
     <!-- Admin Panel -->
-    <div class="mt-6 card rounded-lg shadow p-6">
+    <div id="admin-panel" class="mt-6 card rounded-lg shadow p-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold">Admin Panel</h2>
         <div class="flex gap-2">
@@ -813,6 +818,12 @@
           });
           
           if ('serviceWorker' in navigator) try{ await navigator.serviceWorker.register('/sw.js?v=1'); }catch(e){}
+
+          const tourSetting = await this.db.settings.get('hasSeenTour');
+          if (!tourSetting?.value && typeof startTour === 'function') {
+            startTour();
+            await this.db.settings.put({id:'hasSeenTour', value:true});
+          }
         },
 
         initDB(){
@@ -839,6 +850,7 @@
               seed('Immunization', 365, '#ecfdf5') // Light green
             ]);
             tx.table('settings').put({id:'app',darkMode:false});
+            tx.table('settings').put({id:'hasSeenTour', value:false});
           });
         },
 
