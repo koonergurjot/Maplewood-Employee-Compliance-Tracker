@@ -33,11 +33,17 @@
     .btn{display:inline-flex;align-items:center;gap:.4rem;border-radius:.5rem;padding:.5rem .75rem;border:1px solid var(--line);background:var(--card)}
     .btn-primary{background:var(--accent);border-color:var(--accent);color:white}
     .sticky-col{position:sticky;left:0;z-index:10;background:var(--card)}
-    .checkbox{appearance:none;width:1.25rem;height:1.25rem;border:2px solid var(--line);border-radius:.25rem;cursor:pointer;position:relative;background:var(--card)}
+    .checkbox{appearance:none;width:1.25rem;height:1.25rem;border:2px solid var(--line);border-radius:.25rem;cursor:pointer;position:relative;background:var(--card);transition:all 0.2s ease}
+    .checkbox:hover{transform:scale(1.1);box-shadow:0 2px 4px rgba(0,0,0,0.1)}
     .checkbox.completed{background-color:var(--success);border-color:var(--success)}
     .checkbox.expired{background-color:var(--warn);border-color:var(--warn)}
     .checkbox.completed::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-60%) rotate(-45deg);width:.75rem;height:.4rem;border-left:2px solid #fff;border-bottom:2px solid #fff}
     .virtual-scroll{overflow-y:auto;max-height:calc(100vh - 260px)}
+    .status-badge{transition:all 0.2s ease}
+    .requirement-header{transition:all 0.2s ease;position:relative}
+    .requirement-header:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+    .admin-card{transition:all 0.2s ease}
+    .admin-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.1)}
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak :class="{'dark': darkMode}">
@@ -63,29 +69,272 @@
             <tr>
               <th class="sticky-col px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style="color:var(--muted)">Employee</th>
               <template x-for="req in visibleRequirements" :key="req.id">
-                <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider" :style="`background:${req.color || '#f8fafc'};`">
-                  <span x-text="req.name"></span>
+                <th class="requirement-header px-4 py-3 text-left text-xs font-medium uppercase tracking-wider relative" :style="`background:${req.color || '#f8fafc'}; border-left: 3px solid ${req.color ? req.color.replace('f', '8').replace('e', '6') : '#94a3b8'};`">
+                  <div class="flex items-center justify-between">
+                    <span x-text="req.name" class="font-semibold"></span>
+                    <div class="flex items-center gap-1">
+                      <span x-show="req.defaultExpiryDays" class="text-xs opacity-75" x-text="`${Math.floor(req.defaultExpiryDays/365)}y`"></span>
+                      <button @click="editRequirement(req)" class="opacity-50 hover:opacity-100 transition-opacity">
+                        <i data-feather="edit-2" class="w-3 h-3"></i>
+                      </button>
+                    </div>
+                  </div>
                 </th>
               </template>
             </tr>
           </thead>
           <tbody class="divide-y virtual-scroll">
-            <template x-for="emp in employees" :key="emp.id">
+            <template x-for="emp in (filteredEmployees.length ? filteredEmployees : employees)" :key="emp.id">
               <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
                 <td class="sticky-col px-6 py-4">
-                  <div class="text-sm font-semibold" x-text="`${emp.firstName} ${emp.lastName}`"></div>
-                  <div class="text-xs" style="color:var(--muted)" x-text="`${emp.role||''} • ${emp.employmentType||''}`"></div>
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <div class="text-sm font-semibold" x-text="`${emp.firstName} ${emp.lastName}`"></div>
+                      <div class="text-xs" style="color:var(--muted)" x-text="`${emp.role||''} • ${emp.employmentType||''}`"></div>
+                      <div x-show="emp.employeeId" class="text-xs" style="color:var(--muted)" x-text="`ID: ${emp.employeeId}`"></div>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <span :class="emp.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'" 
+                            class="status-badge px-2 py-1 text-xs rounded-full" x-text="emp.status"></span>
+                      <button @click="editEmployee(emp)" class="opacity-50 hover:opacity-100 transition-opacity">
+                        <i data-feather="edit-2" class="w-3 h-3"></i>
+                      </button>
+                    </div>
+                  </div>
                 </td>
                 <template x-for="req in visibleRequirements" :key="req.id">
                   <td class="px-4 py-3">
-                    <button class="checkbox" :class="{ 'completed': getStatus(emp.id, req.id) === 'Completed', 'expired': getStatus(emp.id, req.id) === 'Expired' }"
-                      @click="toggleStatus(emp, req, $event)"></button>
+                    <div class="flex items-center justify-center">
+                      <button class="checkbox" :class="{ 'completed': getStatus(emp.id, req.id) === 'Completed', 'expired': getStatus(emp.id, req.id) === 'Expired' }"
+                        @click="toggleStatus(emp, req, $event)" :title="getStatusTooltip(emp.id, req.id)"></button>
+                    </div>
                   </td>
                 </template>
               </tr>
             </template>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div class="mt-6 card rounded-lg shadow p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold">Admin Panel</h2>
+        <div class="flex gap-2">
+          <button @click="showAddEmployeeModal = true" class="btn btn-primary">
+            <i data-feather="user-plus" class="w-4 h-4"></i>
+            <span>Add Employee</span>
+          </button>
+          <button @click="showAddRequirementModal = true" class="btn">
+            <i data-feather="plus" class="w-4 h-4"></i>
+            <span>Add Requirement</span>
+          </button>
+          <button @click="showBulkActionsModal = true" class="btn">
+            <i data-feather="layers" class="w-4 h-4"></i>
+            <span>Bulk Actions</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="admin-card card p-4 text-center">
+          <div class="text-2xl font-bold" style="color:var(--accent)" x-text="employees.length"></div>
+          <div class="text-sm" style="color:var(--muted)">Total Employees</div>
+        </div>
+        <div class="admin-card card p-4 text-center">
+          <div class="text-2xl font-bold" style="color:var(--success)" x-text="getCompletedCount()"></div>
+          <div class="text-sm" style="color:var(--muted)">Completed Requirements</div>
+        </div>
+        <div class="admin-card card p-4 text-center">
+          <div class="text-2xl font-bold" style="color:var(--warn)" x-text="getExpiredCount()"></div>
+          <div class="text-sm" style="color:var(--muted)">Expired Requirements</div>
+        </div>
+        <div class="admin-card card p-4 text-center">
+          <div class="text-2xl font-bold" style="color:var(--danger)" x-text="getIncompleteCount()"></div>
+          <div class="text-sm" style="color:var(--muted)">Incomplete Requirements</div>
+        </div>
+      </div>
+
+      <!-- Search and Filter -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Search Employees</label>
+          <input x-model="searchQuery" @input="filterEmployees()" type="text" placeholder="Name, role, or ID..." 
+                 class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Filter by Role</label>
+          <select x-model="roleFilter" @change="filterEmployees()" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+            <option value="">All Roles</option>
+            <template x-for="role in getUniqueRoles()" :key="role">
+              <option :value="role" x-text="role"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Filter by Status</label>
+          <select x-model="statusFilter" @change="filterEmployees()" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+            <option value="">All Status</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Employee Modal -->
+  <div x-show="showAddEmployeeModal" class="fixed inset-0 z-50">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div @click="showAddEmployeeModal=false" class="fixed inset-0 bg-black/40"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <h3 class="text-lg font-semibold mb-4">Add New Employee</h3>
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">First Name</label>
+                <input x-model="newEmployee.firstName" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Last Name</label>
+                <input x-model="newEmployee.lastName" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Role</label>
+              <select x-model="newEmployee.role" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <option value="">Select Role</option>
+                <option value="LPN">LPN</option>
+                <option value="RCA">RCA</option>
+                <option value="Recreation">Recreation</option>
+                <option value="Reception">Reception</option>
+                <option value="RehabAssistant">Rehab Assistant</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Employment Type</label>
+              <select x-model="newEmployee.employmentType" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <option value="FT">Full Time</option>
+                <option value="PT">Part Time</option>
+                <option value="Casual">Casual</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Employee ID</label>
+              <input x-model="newEmployee.employeeId" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Seniority Hours</label>
+              <input x-model="newEmployee.seniorityHours" type="number" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button @click="addEmployee()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Add Employee</button>
+          <button @click="showAddEmployeeModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Requirement Modal -->
+  <div x-show="showAddRequirementModal" class="fixed inset-0 z-50">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div @click="showAddRequirementModal=false" class="fixed inset-0 bg-black/40"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <h3 class="text-lg font-semibold mb-4">Add New Requirement</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Requirement Name</label>
+              <input x-model="newRequirement.name" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Expiry Days (optional)</label>
+              <input x-model="newRequirement.defaultExpiryDays" type="number" placeholder="e.g., 365 for 1 year" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Color</label>
+              <div class="flex gap-2">
+                <input x-model="newRequirement.color" type="color" class="w-12 h-10 border rounded" style="border-color:var(--line)">
+                <select x-model="newRequirement.color" class="flex-1 border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                  <option value="#e0e7ff">Light Blue</option>
+                  <option value="#f0f9ff">Light Cyan</option>
+                  <option value="#fef3c7">Light Yellow</option>
+                  <option value="#dcfce7">Light Green</option>
+                  <option value="#fce7f3">Light Pink</option>
+                  <option value="#f3e8ff">Light Purple</option>
+                  <option value="#fef2f2">Light Red</option>
+                  <option value="#fffbeb">Light Amber</option>
+                  <option value="#f0fdf4">Light Emerald</option>
+                  <option value="#ecfdf5">Light Green</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button @click="addRequirement()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Add Requirement</button>
+          <button @click="showAddRequirementModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Actions Modal -->
+  <div x-show="showBulkActionsModal" class="fixed inset-0 z-50">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div @click="showBulkActionsModal=false" class="fixed inset-0 bg-black/40"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <h3 class="text-lg font-semibold mb-4">Bulk Actions</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">Select Employees</label>
+              <div class="max-h-60 overflow-auto border rounded p-2" style="border-color:var(--line)">
+                <template x-for="emp in employees" :key="emp.id">
+                  <label class="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded">
+                    <input type="checkbox" x-model="selectedEmployees" :value="emp.id" class="checkbox">
+                    <span x-text="`${emp.firstName} ${emp.lastName}`"></span>
+                    <span class="text-sm" style="color:var(--muted)" x-text="emp.role"></span>
+                  </label>
+                </template>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Bulk Action</label>
+              <select x-model="bulkAction" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <option value="">Select Action</option>
+                <option value="complete">Mark Requirements Complete</option>
+                <option value="incomplete">Mark Requirements Incomplete</option>
+                <option value="export">Export Selected</option>
+                <option value="delete">Delete Selected</option>
+              </select>
+            </div>
+            <div x-show="bulkAction === 'complete' || bulkAction === 'incomplete'">
+              <label class="block text-sm font-medium mb-2">Select Requirements</label>
+              <div class="grid grid-cols-2 gap-2">
+                <template x-for="req in requirements" :key="req.id">
+                  <label class="flex items-center gap-2 p-2 border rounded" style="border-color:var(--line)">
+                    <input type="checkbox" x-model="selectedRequirements" :value="req.id" class="checkbox">
+                    <span x-text="req.name" class="text-sm"></span>
+                  </label>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button @click="executeBulkAction()" x-show="bulkAction && selectedEmployees.length" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Execute</button>
+          <button @click="showBulkActionsModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+        </div>
       </div>
     </div>
   </div>
@@ -275,6 +524,12 @@
         fieldLabels:{ firstName:'First Name', lastName:'Last Name', payrollName:'Payroll/Employee Name', role:'Role / Job Title', employmentType:'Employment Type / Class', employeeId:'Employee ID / Position ID', status:'Position Status', seniorityHours:'Seniority Hours' },
         columnMap:{ firstName:'', lastName:'', payrollName:'', role:'', employmentType:'', employeeId:'', status:'', seniorityHours:'' },
         completionMap:{},
+        // Admin panel state
+        showAddEmployeeModal:false, showAddRequirementModal:false, showBulkActionsModal:false,
+        searchQuery:'', roleFilter:'', statusFilter:'', filteredEmployees:[],
+        newEmployee:{firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''},
+        newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
+        selectedEmployees:[], selectedRequirements:[], bulkAction:'',
 
         async init(){
           this.initDB();
@@ -298,12 +553,16 @@
             const now = new Date().toISOString();
             const seed = (name, days=null, color='#fef3c7')=>({id:crypto.randomUUID(),name,defaultExpiryDays:days,color,createdAt:now,updatedAt:now});
             await this.db.requirements.bulkAdd([
-              seed('Resume', null, '#e5e7eb'),
-              seed('References', null, '#e5e7eb'),
-              seed('First Aid', 1095, '#ffd6a5'),
-              seed('CPR', 365, '#caffbf'),
-              seed('FoodSafe', 1825, '#9bf6ff'),
-              seed('Violence Prevention', 365, '#bdb2ff')
+              seed('Resume', null, '#e0e7ff'), // Light blue
+              seed('References', null, '#f0f9ff'), // Light cyan
+              seed('First Aid', 1095, '#fef3c7'), // Light yellow
+              seed('CPR', 365, '#dcfce7'), // Light green
+              seed('FoodSafe', 1825, '#fce7f3'), // Light pink
+              seed('Violence Prevention', 365, '#f3e8ff'), // Light purple
+              seed('Background Check', 1095, '#fef2f2'), // Light red
+              seed('Drug Test', 365, '#fffbeb'), // Light amber
+              seed('TB Test', 365, '#f0fdf4'), // Light emerald
+              seed('Immunization', 365, '#ecfdf5') // Light green
             ]);
             await this.db.settings.put({id:'app',darkMode:false});
           });
@@ -705,6 +964,192 @@
           this.notify('Exported JSON');
         },
         downloadBlob(blob, filename){ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); },
+
+        // Admin panel functions
+        getCompletedCount(){
+          return this.employeeRequirements.filter(er => er.status === 'Completed').length;
+        },
+        getExpiredCount(){
+          return this.employeeRequirements.filter(er => {
+            if (er.status !== 'Completed' || !er.expiresOn) return false;
+            return new Date(er.expiresOn) <= new Date();
+          }).length;
+        },
+        getIncompleteCount(){
+          return this.employeeRequirements.filter(er => er.status === 'NotCompleted').length;
+        },
+        getUniqueRoles(){
+          return [...new Set(this.employees.map(emp => emp.role).filter(Boolean))];
+        },
+        filterEmployees(){
+          let filtered = [...this.employees];
+          if (this.searchQuery) {
+            const query = this.searchQuery.toLowerCase();
+            filtered = filtered.filter(emp => 
+              emp.firstName.toLowerCase().includes(query) ||
+              emp.lastName.toLowerCase().includes(query) ||
+              emp.role.toLowerCase().includes(query) ||
+              emp.employeeId.toLowerCase().includes(query)
+            );
+          }
+          if (this.roleFilter) {
+            filtered = filtered.filter(emp => emp.role === this.roleFilter);
+          }
+          if (this.statusFilter) {
+            filtered = filtered.filter(emp => emp.status === this.statusFilter);
+          }
+          this.filteredEmployees = filtered;
+        },
+        async addEmployee(){
+          if (!this.newEmployee.firstName || !this.newEmployee.lastName) {
+            this.notify('First name and last name are required', 'var(--danger)');
+            return;
+          }
+          const emp = {
+            id: crypto.randomUUID(),
+            ...this.newEmployee,
+            status: 'Active',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          await this.db.employees.add(emp);
+          // Create requirement entries for new employee
+          const reqs = await this.db.requirements.toArray();
+          const rows = reqs.map(r => ({
+            id: crypto.randomUUID(),
+            employeeId: emp.id,
+            requirementId: r.id,
+            status: 'NotCompleted',
+            completedOn: null,
+            expiresOn: null,
+            updatedAt: new Date().toISOString()
+          }));
+          if (rows.length) await this.db.employeeRequirements.bulkAdd(rows);
+          this.newEmployee = {firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''};
+          this.showAddEmployeeModal = false;
+          await this.loadData();
+          this.notify('Employee added successfully');
+        },
+        async addRequirement(){
+          if (!this.newRequirement.name) {
+            this.notify('Requirement name is required', 'var(--danger)');
+            return;
+          }
+          const req = {
+            id: crypto.randomUUID(),
+            ...this.newRequirement,
+            defaultExpiryDays: this.newRequirement.defaultExpiryDays ? parseInt(this.newRequirement.defaultExpiryDays) : null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          await this.db.requirements.add(req);
+          // Create requirement entries for all existing employees
+          const employees = await this.db.employees.toArray();
+          const rows = employees.map(emp => ({
+            id: crypto.randomUUID(),
+            employeeId: emp.id,
+            requirementId: req.id,
+            status: 'NotCompleted',
+            completedOn: null,
+            expiresOn: null,
+            updatedAt: new Date().toISOString()
+          }));
+          if (rows.length) await this.db.employeeRequirements.bulkAdd(rows);
+          this.newRequirement = {name:'', defaultExpiryDays:'', color:'#e0e7ff'};
+          this.showAddRequirementModal = false;
+          await this.loadData();
+          this.notify('Requirement added successfully');
+        },
+        async editRequirement(req){
+          const newName = prompt('Edit requirement name:', req.name);
+          if (newName && newName !== req.name) {
+            await this.db.requirements.update(req.id, {name: newName, updatedAt: new Date().toISOString()});
+            await this.loadData();
+            this.notify('Requirement updated');
+          }
+        },
+        async editEmployee(emp){
+          const newFirstName = prompt('Edit first name:', emp.firstName);
+          if (newFirstName && newFirstName !== emp.firstName) {
+            await this.db.employees.update(emp.id, {firstName: newFirstName, updatedAt: new Date().toISOString()});
+            await this.loadData();
+            this.notify('Employee updated');
+          }
+        },
+        getStatusTooltip(empId, reqId){
+          const er = this.getER(empId, reqId);
+          if (!er || er.status === 'NotCompleted') return 'Not completed';
+          if (er.status === 'Completed') {
+            if (er.expiresOn) {
+              const daysLeft = Math.ceil((new Date(er.expiresOn) - new Date()) / 86400000);
+              if (daysLeft <= 0) return 'Expired';
+              return `Completed, expires in ${daysLeft} days`;
+            }
+            return 'Completed (no expiry)';
+          }
+          return er.status;
+        },
+        async executeBulkAction(){
+          if (!this.bulkAction || !this.selectedEmployees.length) return;
+          
+          if (this.bulkAction === 'complete' || this.bulkAction === 'incomplete') {
+            if (!this.selectedRequirements.length) {
+              this.notify('Please select at least one requirement', 'var(--danger)');
+              return;
+            }
+            const status = this.bulkAction === 'complete' ? 'Completed' : 'NotCompleted';
+            const completedOn = this.bulkAction === 'complete' ? new Date().toISOString().slice(0,10) : null;
+            
+            for (const empId of this.selectedEmployees) {
+              for (const reqId of this.selectedRequirements) {
+                const existing = this.erMap.get(empId)?.get(reqId);
+                if (existing) {
+                  await this.db.employeeRequirements.update(existing.id, {
+                    status,
+                    completedOn,
+                    expiresOn: status === 'Completed' && existing.expiresOn ? existing.expiresOn : null,
+                    updatedAt: new Date().toISOString()
+                  });
+                } else {
+                  await this.db.employeeRequirements.add({
+                    id: crypto.randomUUID(),
+                    employeeId: empId,
+                    requirementId: reqId,
+                    status,
+                    completedOn,
+                    expiresOn: null,
+                    updatedAt: new Date().toISOString()
+                  });
+                }
+              }
+            }
+            this.notify(`Bulk ${this.bulkAction} completed for ${this.selectedEmployees.length} employees`);
+          } else if (this.bulkAction === 'export') {
+            const selectedEmps = this.employees.filter(emp => this.selectedEmployees.includes(emp.id));
+            const data = {
+              employees: selectedEmps,
+              requirements: this.requirements,
+              employeeRequirements: this.employeeRequirements.filter(er => this.selectedEmployees.includes(er.employeeId))
+            };
+            const jsonBlob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+            this.downloadBlob(jsonBlob, `selected-employees-${new Date().toISOString().split('T')[0]}.json`);
+            this.notify('Selected employees exported');
+          } else if (this.bulkAction === 'delete') {
+            if (confirm(`Are you sure you want to delete ${this.selectedEmployees.length} employees? This action cannot be undone.`)) {
+              for (const empId of this.selectedEmployees) {
+                await this.db.employees.delete(empId);
+                await this.db.employeeRequirements.where('employeeId').equals(empId).delete();
+              }
+              this.notify(`${this.selectedEmployees.length} employees deleted`);
+            }
+          }
+          
+          this.selectedEmployees = [];
+          this.selectedRequirements = [];
+          this.bulkAction = '';
+          this.showBulkActionsModal = false;
+          await this.loadData();
+        }
       }));
     });
   </script>
