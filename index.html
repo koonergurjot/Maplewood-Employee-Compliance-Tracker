@@ -33,7 +33,7 @@
     .btn{display:inline-flex;align-items:center;gap:.4rem;border-radius:.5rem;padding:.5rem .75rem;border:1px solid var(--line);background:var(--card)}
     .btn-primary{background:var(--accent);border-color:var(--accent);color:white}
     .sticky-col{position:sticky;left:0;z-index:10;background:var(--card)}
-    .checkbox{appearance:none;width:1.25rem;height:1.25rem;border:2px solid var(--line);border-radius:.25rem;cursor:pointer;position:relative;background:var(--card);transition:all 0.2s ease}
+    .checkbox{appearance:none;width:1.25rem;height:1.25rem;border:2px solid var(--line);border-radius:.25rem;cursor:pointer;position:relative;background:var(--card);transition:all 0.2s ease;display:inline-block}
     .checkbox:hover{transform:scale(1.1);box-shadow:0 2px 4px rgba(0,0,0,0.1)}
     .checkbox.completed{background-color:var(--success);border-color:var(--success)}
     .checkbox.expired{background-color:var(--warn);border-color:var(--warn)}
@@ -105,8 +105,11 @@
                 <template x-for="req in visibleRequirements" :key="req.id">
                   <td class="px-4 py-3">
                     <div class="flex items-center justify-center">
-                      <button class="checkbox" :class="{ 'completed': getStatus(emp.id, req.id) === 'Completed', 'expired': getStatus(emp.id, req.id) === 'Expired' }"
-                        @click="toggleStatus(emp, req, $event)" :title="getStatusTooltip(emp.id, req.id)"></button>
+                      <input type="checkbox" class="checkbox" 
+                        :class="{ 'completed': getStatus(emp.id, req.id) === 'Completed', 'expired': getStatus(emp.id, req.id) === 'Expired' }"
+                        :checked="getStatus(emp.id, req.id) === 'Completed'"
+                        @change="toggleStatus(emp, req, $event)" 
+                        :title="getStatusTooltip(emp.id, req.id)">
                     </div>
                   </td>
                 </template>
@@ -588,14 +591,31 @@
         getER(eId,rId){ return this.erMap.get(eId)?.get(rId) || null; },
         getStatus(eId,rId){ const er=this.getER(eId,rId); if(!er||er.status==='NotCompleted') return 'NotCompleted'; if(er.expiresOn){ const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000); if(d<=0) return 'Expired'; } return 'Completed'; },
         async toggleStatus(emp, req, event){ 
-          if (event) event.preventDefault();
+          console.log('Toggle clicked for:', emp.firstName, emp.lastName, req.name);
+          if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
           const er=this.getER(emp.id, req.id); 
+          const newStatus = er && er.status === 'Completed' ? 'NotCompleted' : 'Completed';
+          console.log('Current status:', er?.status, 'New status:', newStatus);
+          
           if(!er){ 
-            await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'Completed',completedOn:new Date().toISOString().slice(0,10)}); 
+            await this.db.employeeRequirements.add({
+              id:crypto.randomUUID(),
+              employeeId:emp.id,
+              requirementId:req.id,
+              status:newStatus,
+              completedOn:newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null
+            }); 
           } else { 
-            await this.db.employeeRequirements.update(er.id,{status: er.status==='Completed'?'NotCompleted':'Completed'}); 
+            await this.db.employeeRequirements.update(er.id,{
+              status: newStatus,
+              completedOn: newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null
+            }); 
           } 
           await this.loadData(); 
+          console.log('Toggle completed');
         },
 
         // UI helpers
