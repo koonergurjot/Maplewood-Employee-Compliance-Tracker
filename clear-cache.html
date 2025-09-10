@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Cache Helper</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #1d4ed8; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #dcfce7; color: #166534; }
+        .error { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+    <h1>Cache Clearing Helper</h1>
+    <p>This page helps clear browser cache and service worker cache for the Compliance Matrix app.</p>
+    
+    <button onclick="clearServiceWorkerCache()">Clear Service Worker Cache</button>
+    <button onclick="clearBrowserCache()">Clear Browser Cache</button>
+    <button onclick="reloadApp()">Reload App</button>
+    
+    <div id="status"></div>
+    
+    <script>
+        function showStatus(message, type = 'success') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        async function clearServiceWorkerCache() {
+            try {
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (let registration of registrations) {
+                        await registration.unregister();
+                    }
+                    
+                    // Clear all caches
+                    const cacheNames = await caches.keys();
+                    await Promise.all(
+                        cacheNames.map(cacheName => caches.delete(cacheName))
+                    );
+                    
+                    showStatus('Service worker cache cleared successfully!');
+                } else {
+                    showStatus('Service worker not supported', 'error');
+                }
+            } catch (error) {
+                showStatus('Error clearing service worker cache: ' + error.message, 'error');
+            }
+        }
+        
+        function clearBrowserCache() {
+            try {
+                // Clear localStorage
+                localStorage.clear();
+                
+                // Clear sessionStorage
+                sessionStorage.clear();
+                
+                // Clear IndexedDB
+                if ('indexedDB' in window) {
+                    indexedDB.databases().then(databases => {
+                        databases.forEach(db => {
+                            indexedDB.deleteDatabase(db.name);
+                        });
+                    });
+                }
+                
+                showStatus('Browser cache cleared successfully!');
+            } catch (error) {
+                showStatus('Error clearing browser cache: ' + error.message, 'error');
+            }
+        }
+        
+        function reloadApp() {
+            window.location.href = '/';
+        }
+        
+        // Auto-clear cache on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                clearServiceWorkerCache();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

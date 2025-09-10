@@ -3,11 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+  <meta http-equiv="Pragma" content="no-cache"/>
+  <meta http-equiv="Expires" content="0"/>
   <title>Compliance Matrix</title>
   <meta name="theme-color" content="#111827"/>
-  <link rel="manifest" href="/manifest.webmanifest"/>
+  <link rel="manifest" href="/manifest.webmanifest?v=1"/>
   <!-- Production Tailwind CSS -->
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=1">
   <script src="https://unpkg.com/feather-icons"></script>
   <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
@@ -545,10 +548,13 @@
           
           // Initialize feather icons after DOM is ready
           this.$nextTick(() => {
-            this.initializeFeatherIcons();
+            // Add a small delay to ensure all elements are rendered
+            setTimeout(() => {
+              this.initializeFeatherIcons();
+            }, 100);
           });
           
-          if ('serviceWorker' in navigator) try{ await navigator.serviceWorker.register('/sw.js'); }catch(e){}
+          if ('serviceWorker' in navigator) try{ await navigator.serviceWorker.register('/sw.js?v=1'); }catch(e){}
         },
 
         initDB(){
@@ -654,10 +660,11 @@
               // Use a more specific approach to avoid replaceChild errors
               featherElements.forEach(element => {
                 try {
-                  if (element && element.parentNode) {
+                  if (element && element.parentNode && !element.hasAttribute('data-feather-processed')) {
                     const iconName = element.getAttribute('data-feather');
-                    if (iconName && feather.icons[iconName]) {
+                    if (iconName && feather.icons && feather.icons[iconName]) {
                       element.innerHTML = feather.icons[iconName].toSvg();
+                      element.setAttribute('data-feather-processed', 'true');
                     }
                   }
                 } catch (iconError) {
