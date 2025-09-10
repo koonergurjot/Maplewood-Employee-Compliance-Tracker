@@ -1047,6 +1047,13 @@
             const body = this.stripTitleLines(lines);
             const res = Papa.parse(body, { header:true, skipEmptyLines:true });
             this.importData = res.data; this.importHeaders = res.meta.fields || [];
+            const trimmed = (res.meta.fields || []).map(h => h.trim());
+            this.importData = res.data.map(row => {
+              const obj = {};
+              trimmed.forEach((h, i) => obj[h] = row[res.meta.fields[i]]);
+              return obj;
+            });
+            this.importHeaders = trimmed;
             this.autofillMappings(); this.updateEligibilityPreview();
             await this.validateImportData();
             if (!this.importHeaders.length) this.importError = 'No headers detected — check the CSV file.';
