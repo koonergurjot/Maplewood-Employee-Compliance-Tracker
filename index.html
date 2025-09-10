@@ -772,10 +772,22 @@
         newEmployee:{firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''},
           newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
           editingEmployee:{}, editingRequirement:{},
-          selectedEmployees:[], selectedRequirements:[], bulkAction:'',
-          complianceChart:null,
+        selectedEmployees:[], selectedRequirements:[], bulkAction:'',
+        complianceChart:null,
+        // Chart.js plugin container so we can safely set properties during init
+        chartBgPlugin: {
+          id: 'chartBgColor',
+          beforeDraw(chart, args, opts) {
+            const {ctx, width, height} = chart;
+            ctx.save();
+            ctx.globalCompositeOperation = 'destination-over';
+            ctx.fillStyle = opts?.color || getComputedStyle(document.documentElement).getPropertyValue('--card') || '#fff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.restore();
+          }
+        },
 
-          formatYears(days){ return Math.floor(days/365)+'y'; },
+        formatYears(days){ return Math.floor(days/365)+'y'; },
 
         async init(){
           this.initDB();
@@ -783,7 +795,13 @@
           const s = await this.db.settings.get('app');
           if (s?.darkMode) this.darkMode = true;
           document.documentElement.classList.toggle('dark', this.darkMode);
-          
+
+          // Ensure our custom chart plugin exists before charts initialize
+          this.chartBgPlugin.fullSize = true;
+          if (typeof Chart !== 'undefined') {
+            Chart.register(this.chartBgPlugin);
+          }
+
           // Initialize feather icons after DOM is ready
           this.$nextTick(() => {
             // Add a small delay to ensure all elements are rendered
