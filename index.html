@@ -731,18 +731,15 @@
             const newStatus = er && er.status === 'Completed' ? 'NotCompleted' : 'Completed';
             console.log('Current status:', er?.status, 'New status:', newStatus);
 
-            await this.db.transaction('rw', this.db.employeeRequirements, async () => {
-              const record = {
-                id: er?.id || generateId(),
-                employeeId: emp.id,
-                requirementId: req.id,
-                status: newStatus,
-                completedOn: newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
-                updatedAt: new Date().toISOString()
-              };
-              await this.db.employeeRequirements.put(record);
-            });
-
+            const record = {
+              id: er?.id || generateId(),
+              employeeId: emp.id,
+              requirementId: req.id,
+              status: newStatus,
+              completedOn: newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
+              updatedAt: new Date().toISOString()
+            };
+            await this.db.employeeRequirements.put(record);
             await this.loadData();
             console.log('Toggle completed');
           } catch (error) {
