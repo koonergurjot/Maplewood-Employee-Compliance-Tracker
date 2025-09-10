@@ -17,6 +17,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
   <script src="onboarding.js"></script>
   <script>
     // Fallback for XLSX library loading
@@ -58,6 +59,7 @@
     .tour-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000}
     .tour-tooltip{position:absolute;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:.5rem;padding:1rem;max-width:18rem;z-index:1001}
     .tour-highlight{position:relative;z-index:1002;box-shadow:0 0 0 4px var(--accent);border-radius:.25rem}
+    mark{background:var(--warn);color:var(--text);padding:0 .2rem}
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak :class="{'dark': darkMode}">
@@ -82,6 +84,15 @@
       </div>
     </div>
 
+    <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50">
+      <div class="relative">
+        <input id="global-search" x-model="globalSearch" @input="performGlobalSearch(globalSearch)" type="text" placeholder="Search..." class="pl-3 pr-8 py-1 border rounded bg-white dark:bg-gray-800" style="border-color:var(--line);"/>
+        <button x-show="globalSearch" @click="clearGlobalSearch" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500">
+          <i data-feather="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+
     <div class="mb-3 text-sm" :style="'color:var(--muted)'">
       <span>Total employees: </span>
       <strong x-text="employees.length"></strong>
@@ -92,7 +103,7 @@
 
     <div class="card rounded-lg shadow overflow-hidden">
       <div class="overflow-x-auto">
-        <table id="employee-table" class="min-w-full divide-y" style="border-color:var(--line)">
+        <table id="employee-table" x-ref="employeeTable" class="min-w-full divide-y" style="border-color:var(--line)">
           <thead class="bg-gray-50 dark:bg-gray-900">
             <tr>
               <th @click="sortEmployees('firstName')" class="sticky-col px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer" style="color:var(--muted)">
@@ -122,7 +133,7 @@
               <template x-for="req in orderedVisibleRequirements()" :key="req.id">
                 <th class="requirement-header px-4 py-3 text-left text-xs font-medium uppercase tracking-wider relative" :style="`background:${req.color || '#f8fafc'}; border-left: 3px solid ${req.color ? req.color.replace('f', '8').replace('e', '6') : '#94a3b8'};`">
                   <div class="flex items-center justify-between">
-                    <span x-text="req.name" class="font-semibold"></span>
+                    <span x-html="highlightText(req.name)" class="font-semibold"></span>
                     <div class="flex items-center gap-1">
                       <button @click="editRequirement(req)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Edit requirement ${req.name}`">
                         <i data-feather="edit-2" class="icon-sm"></i>
@@ -142,18 +153,18 @@
                 <td class="sticky-col px-6 py-4">
                   <div class="flex items-center justify-between">
                     <div>
-                      <div class="text-sm font-semibold" x-text="`${emp.firstName} ${emp.lastName}`"></div>
-                      <div x-show="emp.employeeId" class="text-xs" style="color:var(--muted)" x-text="`ID: ${emp.employeeId}`"></div>
+                      <div class="text-sm font-semibold" x-html="highlightText(emp.firstName + ' ' + emp.lastName)"></div>
+                      <div x-show="emp.employeeId" class="text-xs" style="color:var(--muted)" x-html="highlightText('ID: ' + emp.employeeId)"></div>
                     </div>
                     <button @click="editEmployee(emp)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Edit employee ${emp.firstName} ${emp.lastName}`">
                       <i data-feather="edit-2" class="icon-sm"></i>
                     </button>
                   </div>
                 </td>
-                <td class="px-4 py-3 text-sm" x-text="emp.role"></td>
-                <td class="px-4 py-3 text-sm" x-text="emp.employmentType"></td>
+                <td class="px-4 py-3 text-sm" x-html="highlightText(emp.role)"></td>
+                <td class="px-4 py-3 text-sm" x-html="highlightText(emp.employmentType)"></td>
                 <td class="px-4 py-3">
-                  <span :class="emp.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'" class="status-badge px-2 py-1 text-xs rounded-full" x-text="emp.status"></span>
+                  <span :class="emp.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'" class="status-badge px-2 py-1 text-xs rounded-full" x-html="highlightText(emp.status)"></span>
                 </td>
                   <template x-for="req in orderedVisibleRequirements()" :key="req.id">
                     <td class="px-4 py-3">
@@ -837,6 +848,7 @@
         showAddEmployeeModal:false, showAddRequirementModal:false, showBulkActionsModal:false,
         showEditEmployeeModal:false, showEditRequirementModal:false,
           searchQuery:'', roleFilter:'', statusFilter:'', reqStatusFilter:'', filteredEmployees:[], sortField:'firstName', sortDirection:'asc',
+          globalSearch:'', searchResults:[],
         newEmployee:{firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''},
           newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
           editingEmployee:{}, editingRequirement:{},
@@ -1567,6 +1579,22 @@
             );
           }
           this.filteredEmployees = filtered;
+        },
+        performGlobalSearch(query){
+          const data = [
+            ...this.employees.map(e => ({type:'employee', id:e.id, text:`${e.firstName} ${e.lastName} ${e.role} ${e.employeeId}`})),
+            ...(this.visibleRequirements.length ? this.visibleRequirements : this.requirements).map(r => ({type:'requirement', id:r.id, text:r.name}))
+          ];
+          const fuse = new Fuse(data, {keys:['text'], includeMatches:true, threshold:0.3});
+          this.searchResults = query ? fuse.search(query) : [];
+        },
+        clearGlobalSearch(){
+          this.globalSearch='';
+          this.searchResults=[];
+        },
+        highlightText(text){
+          if(!this.globalSearch) return text;
+          return text.replace(new RegExp(`(${this.globalSearch})`, 'gi'), '<mark>$1</mark>');
         },
         sortEmployees(field){
           if (this.sortField === field) {
