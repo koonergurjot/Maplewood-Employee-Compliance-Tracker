@@ -108,10 +108,10 @@
                 <template x-for="req in visibleRequirements" :key="req.id">
                   <td class="px-4 py-3">
                     <div class="flex items-center justify-center">
-                      <input type="checkbox" class="checkbox" 
+                      <input type="checkbox" class="checkbox"
                         :class="{ 'completed': getStatus(emp.id, req.id) === 'Completed', 'expired': getStatus(emp.id, req.id) === 'Expired' }"
                         :checked="getStatus(emp.id, req.id) === 'Completed'"
-                        @change="toggleStatus(emp, req, $event)" 
+                        @change="toggleStatus(emp, req)"
                         :title="getStatusTooltip(emp.id, req.id)">
                     </div>
                   </td>
@@ -603,15 +603,11 @@
         // Status helpers (minimal)
         getER(eId,rId){ return this.erMap.get(eId)?.get(rId) || null; },
         getStatus(eId,rId){ const er=this.getER(eId,rId); if(!er||er.status==='NotCompleted') return 'NotCompleted'; if(er.expiresOn){ const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000); if(d<=0) return 'Expired'; } return 'Completed'; },
-        async toggleStatus(emp, req, event){ 
+        async toggleStatus(emp, req){
           console.log('Toggle clicked for:', emp.firstName, emp.lastName, req.name);
-          if (event) {
-            event.preventDefault();
-            event.stopPropagation();
-          }
-          
+
           try {
-            const er=this.getER(emp.id, req.id); 
+            const er=this.getER(emp.id, req.id);
             const newStatus = er && er.status === 'Completed' ? 'NotCompleted' : 'Completed';
             console.log('Current status:', er?.status, 'New status:', newStatus);
             
