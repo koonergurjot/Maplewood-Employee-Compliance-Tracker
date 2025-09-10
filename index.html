@@ -599,10 +599,11 @@
               </div>
             </div>
           </div>
-          <div x-show="importProgress>0" class="mt-3">
+          <div x-show="importData.length" class="mt-3">
             <div class="w-full bg-gray-200 rounded-full h-2">
               <div class="bg-blue-600 h-2 rounded-full" :style="{width: importProgress + '%'}"></div>
             </div>
+            <div class="text-xs mt-1 text-center" x-text="importProgress + '%'" :style="'color:var(--muted)'"></div>
           </div>
           <template x-if="importErrors.length">
             <div class="mt-2 text-left">
@@ -1134,7 +1135,8 @@
               return obj;
             });
             this.importHeaders = trimmed;
-            this.autofillMappings(); this.updateEligibilityPreview();
+            this.autoMapColumns(this.importHeaders);
+            this.updateEligibilityPreview();
             await this.validateImportData();
             if (!this.importHeaders.length) this.importError = 'No headers detected — check the CSV file.';
             this.importLoading = false;
@@ -1166,7 +1168,7 @@
                 this.importSheetName = best.name;
                 this.importHeaders = best.headers;
                 this.importData = best.rows;
-                this.autofillMappings();
+                this.autoMapColumns(this.importHeaders);
                 this.updateEligibilityPreview();
                 await this.validateImportData();
 
@@ -1210,7 +1212,7 @@
             const { headers, rows } = this.extractFromSheet(wb.Sheets[name]);
             this.importHeaders = headers;
             this.importData = rows;
-            this.autofillMappings();
+            this.autoMapColumns(this.importHeaders);
             this.updateEligibilityPreview();
             await this.validateImportData();
               
@@ -1302,18 +1304,13 @@
           const patterns=[/first/i,/last/i,/employee\\s*name/i,/payroll\\s*name/i,/job\\s*title|role/i,/employment\\s*type|class/i,/position\\s*id|employee\\s*id/i,/status/i,/seniority|total.*hours/i];
           let score=0; for(const c of cols){ const s=String(c||''); for(const p of patterns) if(p.test(s)) score++; } return score;
         },
-        autofillMappings(){
-          const H = (this.importHeaders||[]).map(h=>String(h));
-          const find = (regexArr) => H.find(h => regexArr.some(r => r.test(h)));
-          const setIf = (key, regexArr) => { const h=find(regexArr); if(h && !this.columnMap[key]) this.columnMap[key]=h; };
-          setIf('firstName', [/^first\\b/i, /given\\s*name/i]);
-          setIf('lastName', [/^last\\b/i, /surname/i]);
-          setIf('payrollName', [/payroll\\s*name/i, /employee\\s*name/i, /^name$/i, /full\\s*name/i]);
-          setIf('role', [/job\\s*title/i, /^role$/i]);
-          setIf('employmentType', [/employment\\s*type/i, /class\\s*code/i]);
-          setIf('employeeId', [/position\\s*id/i, /employee\\s*id/i, /file\\s*#/i]);
-          setIf('status', [/status/i, /active\\?/i]);
-          setIf('seniorityHours', [/seniority/i, /total.*hours/i]);
+        autoMapColumns(headers){
+          const normalized = (headers||[]).map(h=>({orig:h, norm:String(h).toLowerCase().trim()}));
+          for(const [key,label] of Object.entries(this.fieldLabels)){
+            if(this.columnMap[key]) continue;
+            const match = normalized.find(h=>h.norm === label.toLowerCase());
+            if(match) this.columnMap[key]=match.orig;
+          }
         },
 
         // Presets
