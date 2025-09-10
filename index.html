@@ -1345,13 +1345,17 @@
           let first = g('firstName'); let last = g('lastName');
           const payroll = g('payrollName');
           if ((!first || !last) && payroll){
-            const s = String(payroll).trim();
+            const s = String(payroll)
+              .replace(/\s*[-–—]+$/, '')
+              .trim();
             if (this.nameFormat==='last_first' || (this.nameFormat==='auto' && s.includes(','))){
               const parts = s.split(','); last = (parts[0]||'').trim(); first = (parts.slice(1).join(',')||'').trim();
             } else {
               const parts = s.split(/\\s+/);
               if (parts.length>=2){ first = parts[0].trim(); last = parts.slice(1).join(' ').trim(); }
             }
+            first = first.replace(/\s*[-–—]+$/, '').trim();
+            last  = last.replace(/\s*[-–—]+$/, '').trim();
           }
           return { first, last, role: g('role'), type: g('employmentType'), empId: g('employeeId'), status: g('status'), hours: g('seniorityHours') };
         },
