@@ -587,7 +587,16 @@
         // Status helpers (minimal)
         getER(eId,rId){ return this.erMap.get(eId)?.get(rId) || null; },
         getStatus(eId,rId){ const er=this.getER(eId,rId); if(!er||er.status==='NotCompleted') return 'NotCompleted'; if(er.expiresOn){ const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000); if(d<=0) return 'Expired'; } return 'Completed'; },
-        async toggleStatus(emp, req){ const er=this.getER(emp.id, req.id); if(!er){ await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'Completed',completedOn:new Date().toISOString().slice(0,10)}); } else { await this.db.employeeRequirements.update(er.id,{status: er.status==='Completed'?'NotCompleted':'Completed'}); } await this.loadData(); },
+        async toggleStatus(emp, req, event){ 
+          if (event) event.preventDefault();
+          const er=this.getER(emp.id, req.id); 
+          if(!er){ 
+            await this.db.employeeRequirements.add({id:crypto.randomUUID(),employeeId:emp.id,requirementId:req.id,status:'Completed',completedOn:new Date().toISOString().slice(0,10)}); 
+          } else { 
+            await this.db.employeeRequirements.update(er.id,{status: er.status==='Completed'?'NotCompleted':'Completed'}); 
+          } 
+          await this.loadData(); 
+        },
 
         // UI helpers
         notify(msg,color='var(--success)'){ this.toastMessage=msg; this.toastColor=color; this.showToast=true; setTimeout(()=>this.showToast=false,3000); },
