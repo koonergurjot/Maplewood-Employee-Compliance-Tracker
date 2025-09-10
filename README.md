@@ -8,5 +8,6 @@
 - **Dry Run:** Shows how many rows will be added/updated and lists first skipped reasons.
 - **Post-Import Result:** Toast shows added/updated counts; also displays total employees now in the DB.
 - **Clear All Data:** For quick re-tests.
+- **Clear Cache:** Visit `/clear-cache.html` to wipe service worker and browser caches.
 
 Deploy: Netlify build command = empty; publish dir = `.`
