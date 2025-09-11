@@ -78,6 +78,7 @@
         </div>
         <button @click="clearAllData" class="btn"><i data-feather="trash-2" class="w-4 h-4"></i><span>Clear</span></button>
         <button id="activity-log-btn" @click="openActivityLog()" class="btn"><i data-feather="list" class="w-4 h-4"></i><span>Activity Log</span></button>
+        <button id="calendar-btn" @click="window.open('calendar.html', '_blank')" class="btn"><i data-feather="calendar" class="w-4 h-4"></i><span>Calendar</span></button>
         <button id="settings-btn" @click="openSettingsModal()" class="btn"><i data-feather="settings" class="w-4 h-4"></i><span>Settings</span></button>
         <button id="help-btn" @click="startTour()" class="btn"><i data-feather="help-circle" class="w-4 h-4"></i><span>Help</span></button>
         <button @click="toggleDarkMode()" class="btn" aria-label="Toggle dark mode"><i :data-feather="darkMode ? 'sun' : 'moon'"></i></button>
