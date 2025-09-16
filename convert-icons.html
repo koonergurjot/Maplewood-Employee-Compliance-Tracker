@@ -1,1 +1,315 @@
- 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PWA Icon Converter</title>
+  <link rel="stylesheet" href="/styles.css?v=1">
+  <style>
+    :root { --bg:#f3f4f6; --card:#ffffff; --line:#e5e7eb; --text:#111827; --muted:#6b7280; --accent:#2563eb; --success:#10b981; --warn:#f59e0b; --danger:#ef4444; }
+    .dark:root, .dark { --bg:#0b1220; --card:#111827; --line:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --accent:#60a5fa; --success:#34d399; --warn:#fbbf24; --danger:#f87171; }
+    body { background:var(--bg); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; margin:0; min-height:100vh; }
+    a { color:inherit; }
+    .page { min-height:100vh; }
+    .page-header { display:flex; flex-direction:column; gap:1.25rem; margin-bottom:2.5rem; }
+    @media (min-width:768px) {
+      .page-header { flex-direction:row; align-items:flex-end; justify-content:space-between; }
+    }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:1rem; padding:1.5rem; box-shadow:0 10px 25px rgba(15,23,42,0.05); }
+    .card-header { margin-bottom:1.25rem; }
+    .card h2 { margin:0 0 0.5rem 0; font-size:1.25rem; }
+    .card p { margin:0; color:var(--muted); font-size:0.95rem; line-height:1.5; }
+    .btn { display:inline-flex; align-items:center; gap:0.4rem; border-radius:0.5rem; padding:0.55rem 0.85rem; border:1px solid var(--line); background:var(--card); color:var(--text); font-weight:600; cursor:pointer; transition:transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease; text-decoration:none; }
+    .btn:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 8px 16px rgba(15,23,42,0.08); }
+    .btn:disabled { opacity:0.45; cursor:not-allowed; box-shadow:none; }
+    .btn-primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .btn-muted { color:var(--muted); }
+    .chip { display:inline-flex; align-items:center; gap:0.35rem; padding:0.35rem 0.65rem; border-radius:999px; background:rgba(37,99,235,0.08); color:var(--accent); font-size:0.8rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; }
+    .checkbox { appearance:none; width:1.25rem; height:1.25rem; border:2px solid var(--line); border-radius:0.35rem; background:var(--card); cursor:pointer; transition:all 0.2s ease; position:relative; }
+    .checkbox:hover { transform:scale(1.05); box-shadow:0 2px 6px rgba(15,23,42,0.12); }
+    .checkbox:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    .checkbox:checked { background:var(--accent); border-color:var(--accent); }
+    .checkbox:checked::after { content:""; position:absolute; top:50%; left:50%; transform:translate(-50%, -60%) rotate(-45deg); width:0.55rem; height:0.35rem; border-bottom:2px solid #fff; border-left:2px solid #fff; }
+    .input { width:100%; padding:0.65rem 0.85rem; border-radius:0.75rem; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:0.95rem; transition:border-color 0.15s ease, box-shadow 0.15s ease; }
+    .input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,0.15); }
+    .control-group { display:flex; flex-wrap:wrap; gap:0.75rem; align-items:center; }
+    .preview-surface { position:relative; border-radius:1rem; overflow:hidden; border:1px dashed var(--line); background: repeating-conic-gradient(#eceff5 0% 25%, #f9fafb 0% 50%) 50%/24px 24px; display:flex; align-items:center; justify-content:center; min-height:280px; }
+    canvas.preview { width:100%; max-width:256px; height:auto; aspect-ratio:1/1; background:transparent; }
+    .preview-placeholder { text-align:center; font-size:0.95rem; color:var(--muted); position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:1.5rem; }
+    .preview-meta { margin-top:0.75rem; font-size:0.85rem; color:var(--muted); text-align:center; }
+    .status { margin-top:1rem; font-size:0.9rem; color:var(--muted); }
+    .status[data-tone="success"] { color:var(--success); }
+    .status[data-tone="warning"] { color:var(--warn); }
+    .status[data-tone="danger"] { color:var(--danger); }
+    .download-grid { display:grid; gap:0.75rem; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); }
+    .note { font-size:0.85rem; color:var(--muted); line-height:1.5; }
+    .mt-2 { margin-top:0.5rem; }
+    .instructions ul { margin:0; padding-left:1.1rem; color:var(--muted); }
+    .instructions li { margin-bottom:0.6rem; }
+    .instructions code { background:rgba(15,23,42,0.08); color:var(--text); padding:0.1rem 0.35rem; border-radius:0.4rem; font-size:0.85rem; }
+    @media (max-width: 640px) {
+      .card { padding:1.25rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="container mx-auto px-4 py-10">
+      <header class="page-header">
+        <div>
+          <div class="chip mb-2">PWA asset helper</div>
+          <h1 class="text-2xl font-bold mb-2">PWA Icon Converter</h1>
+          <p class="note">Upload a high-resolution square logo to generate the <strong>192&times;192</strong> and <strong>512&times;512</strong> icons referenced in <a href="manifest.webmanifest">manifest.webmanifest</a>.</p>
+        </div>
+        <a href="index.html" class="btn btn-muted" aria-label="Return to the Compliance Matrix">&larr; Back to the Compliance Matrix</a>
+      </header>
+
+      <div class="grid gap-6 md:grid-cols-2">
+        <section class="card">
+          <div class="card-header">
+            <h2>Upload source artwork</h2>
+            <p>Select a PNG, JPEG, or SVG file at least 512px wide for the best results.</p>
+          </div>
+
+          <label class="block mb-4" for="source-image">
+            <span class="text-sm font-semibold" style="color:var(--muted);">Source file</span>
+            <input id="source-image" type="file" accept="image/*" class="input mt-2" />
+          </label>
+
+          <div class="control-group mb-4" role="group" aria-label="Icon background options">
+            <label class="flex items-center gap-2 text-sm" style="color:var(--muted);">
+              <input id="apply-background" type="checkbox" class="checkbox" checked aria-describedby="background-help" />
+              Fill background color
+            </label>
+            <input id="background-color" type="color" value="#111827" aria-label="Icon background color" />
+            <button type="button" class="btn" data-color="#111827">Manifest color</button>
+            <button type="button" class="btn" data-transparent>Transparent</button>
+          </div>
+          <p id="background-help" class="note">Use the manifest theme color (<code>#111827</code>) to match the default installation tiles.</p>
+
+          <div class="preview-surface" id="preview-wrapper">
+            <canvas id="preview-canvas" class="preview" width="256" height="256" aria-hidden="true"></canvas>
+            <div id="preview-placeholder" class="preview-placeholder">Upload an image to preview the icon crop.</div>
+          </div>
+          <div id="preview-meta" class="preview-meta" aria-live="polite"></div>
+
+          <div class="mt-6">
+            <h3 class="text-sm font-semibold mb-3" style="color:var(--muted);">Download generated icons</h3>
+            <div class="download-grid">
+              <button class="btn btn-primary" data-download data-size="192" data-format="png">192&times;192 PNG</button>
+              <button class="btn" data-download data-size="192" data-format="svg">192&times;192 SVG</button>
+              <button class="btn btn-primary" data-download data-size="512" data-format="png">512&times;512 PNG</button>
+              <button class="btn" data-download data-size="512" data-format="svg">512&times;512 SVG</button>
+            </div>
+          </div>
+
+          <div id="helper-status" class="status" role="status" aria-live="polite">Waiting for an image upload.</div>
+        </section>
+
+        <section class="card instructions">
+          <div class="card-header">
+            <h2>How this helper maps to the manifest</h2>
+            <p>The PWA manifest expects square icons named <code>icon-192.svg</code> and <code>icon-512.svg</code> with a dark background.</p>
+          </div>
+          <ul>
+            <li><strong>Upload once</strong> — the converter resizes and centers your artwork on a square artboard so you can replace <code>icon-192.svg</code> and <code>icon-512.svg</code>.</li>
+            <li><strong>Dual formats</strong> — download PNGs for store submissions and matching SVG wrappers that align with the <code>type: "image/svg+xml"</code> entries already in <a href="manifest.webmanifest">manifest.webmanifest</a>.</li>
+            <li><strong>Color presets</strong> — use the manifest theme color (<code>#111827</code>) or switch to a transparent background before exporting.</li>
+            <li><strong>Reminder</strong> — commit the generated files to <code>/icon-192.svg</code> and <code>/icon-512.svg</code> (and optionally PNG siblings) so the service worker can cache them.</li>
+          </ul>
+          <p class="note mt-4">Tip: include ample padding in your source artwork. The converter keeps your image centered and scales it down to fit inside the icon frame.</p>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const fileInput = document.getElementById('source-image');
+      const previewCanvas = document.getElementById('preview-canvas');
+      const previewCtx = previewCanvas.getContext('2d');
+      const previewPlaceholder = document.getElementById('preview-placeholder');
+      const previewMeta = document.getElementById('preview-meta');
+      const status = document.getElementById('helper-status');
+      const downloadButtons = document.querySelectorAll('[data-download]');
+      const backgroundInput = document.getElementById('background-color');
+      const backgroundToggle = document.getElementById('apply-background');
+      const colorButtons = document.querySelectorAll('button[data-color], button[data-transparent]');
+
+      let sourceImage = null;
+
+      const setButtonsDisabled = (disabled) => {
+        downloadButtons.forEach((button) => {
+          button.disabled = disabled;
+          button.setAttribute('aria-disabled', String(disabled));
+        });
+      };
+
+      const updateStatus = (message, tone = 'info') => {
+        status.textContent = message;
+        status.dataset.tone = tone;
+      };
+
+      const getBackgroundColor = () => {
+        return backgroundToggle.checked ? backgroundInput.value : null;
+      };
+
+      const drawToContext = (ctx, size) => {
+        if (!sourceImage) {
+          ctx.clearRect(0, 0, size, size);
+          return;
+        }
+        const backgroundColor = getBackgroundColor();
+        if (backgroundColor) {
+          ctx.fillStyle = backgroundColor;
+          ctx.fillRect(0, 0, size, size);
+        } else {
+          ctx.clearRect(0, 0, size, size);
+        }
+        const scale = Math.min(size / sourceImage.width, size / sourceImage.height);
+        const targetWidth = sourceImage.width * scale;
+        const targetHeight = sourceImage.height * scale;
+        const dx = (size - targetWidth) / 2;
+        const dy = (size - targetHeight) / 2;
+        ctx.drawImage(sourceImage, dx, dy, targetWidth, targetHeight);
+      };
+
+      const refreshPreview = () => {
+        if (!sourceImage) {
+          previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+          previewPlaceholder.hidden = false;
+          previewMeta.textContent = '';
+          return;
+        }
+        drawToContext(previewCtx, previewCanvas.width);
+        previewPlaceholder.hidden = true;
+        previewMeta.textContent = `Previewing ${sourceImage.width}×${sourceImage.height}px → ${previewCanvas.width}×${previewCanvas.height}px artboard`;
+      };
+
+      const createCanvasForSize = (size) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        drawToContext(ctx, size);
+        return canvas;
+      };
+
+      const downloadIcon = (size, format) => {
+        if (!sourceImage) {
+          updateStatus('Upload an image before downloading icons.', 'warning');
+          return;
+        }
+        const canvas = createCanvasForSize(size);
+        if (format === 'png') {
+          const pngUrl = canvas.toDataURL('image/png');
+          triggerDownload(pngUrl, `icon-${size}.png`);
+          updateStatus(`Exported icon-${size}.png`, 'success');
+        } else {
+          const pngUrl = canvas.toDataURL('image/png');
+          const backgroundColor = getBackgroundColor();
+          const svgContent = [
+            `<?xml version="1.0" encoding="UTF-8"?>`,
+            `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`,
+            backgroundColor ? `<rect width="${size}" height="${size}" fill="${backgroundColor}"/>` : '',
+            `<image width="${size}" height="${size}" href="${pngUrl}" />`,
+            `</svg>`
+          ].filter(Boolean).join('');
+          const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+          const url = URL.createObjectURL(blob);
+          triggerDownload(url, `icon-${size}.svg`);
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+          updateStatus(`Exported icon-${size}.svg`, 'success');
+        }
+      };
+
+      const triggerDownload = (url, filename) => {
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      };
+
+      const handleFile = (file) => {
+        if (!file) {
+          return;
+        }
+        if (!file.type.startsWith('image/')) {
+          updateStatus('Please choose an image file (PNG, JPEG, or SVG).', 'danger');
+          fileInput.value = '';
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            sourceImage = img;
+            refreshPreview();
+            setButtonsDisabled(false);
+            updateStatus(`Ready to export ${file.name}.`, 'success');
+          };
+          img.onerror = () => {
+            updateStatus('Unable to read that image. Please try another file.', 'danger');
+            sourceImage = null;
+            refreshPreview();
+            setButtonsDisabled(true);
+          };
+          img.src = event.target.result;
+        };
+        reader.onerror = () => {
+          updateStatus('Unable to read that file. Please try again.', 'danger');
+        };
+        reader.readAsDataURL(file);
+      };
+
+      fileInput.addEventListener('change', (event) => {
+        const [file] = event.target.files;
+        handleFile(file);
+      });
+
+      backgroundInput.addEventListener('input', () => {
+        if (!sourceImage) {
+          return;
+        }
+        refreshPreview();
+        updateStatus('Background color updated.', 'info');
+      });
+
+      backgroundToggle.addEventListener('change', () => {
+        if (!sourceImage) {
+          return;
+        }
+        refreshPreview();
+        updateStatus(backgroundToggle.checked ? 'Background fill enabled.' : 'Background fill disabled.', 'info');
+      });
+
+      colorButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          if (button.dataset.color) {
+            backgroundInput.value = button.dataset.color;
+            backgroundToggle.checked = true;
+          } else if ('transparent' in button.dataset) {
+            backgroundToggle.checked = false;
+          }
+          refreshPreview();
+          if (sourceImage) {
+            updateStatus('Background preset applied.', 'info');
+          }
+        });
+      });
+
+      downloadButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const size = Number(button.dataset.size);
+          const format = button.dataset.format;
+          downloadIcon(size, format);
+        });
+      });
+
+      setButtonsDisabled(true);
+    })();
+  </script>
+</body>
+</html>
