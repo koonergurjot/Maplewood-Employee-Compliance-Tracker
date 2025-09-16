@@ -49,6 +49,7 @@ Read the full project overview in [docs/OVERVIEW.md](docs/OVERVIEW.md).
 
 - [Configuration](docs/CONFIGURATION.md)
 - [Deployment](docs/DEPLOYMENT.md)
+- [PWA Icon Conversion Helper](convert-icons.html)
 - [Screenshots](docs/SCREENSHOTS.md)
 - [Security Notes](docs/SECURITY.md)
 
