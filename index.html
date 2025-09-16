@@ -812,11 +812,24 @@
           await this.load();
         },
         async undo(entry){
-          const { EditEmployee, ImportEmployees, BulkUpdateStatus } = await import('./commands.js');
+          const commands = await import('./commands.js');
           const factories = {
-            EditEmployee: e => new EditEmployee(this.$root.db, e.targets[0], e.metadata.newData),
-            ImportEmployees: e => new ImportEmployees(this.$root.db, e.metadata.rows),
-            BulkUpdateStatus: e => new BulkUpdateStatus(this.$root.db, e.targets, e.metadata.requirementId, e.metadata.status)
+            AddEmployee: e => new commands.AddEmployee(this.$root.db, { employee: e.metadata?.employee }),
+            UpdateEmployee: e => new commands.UpdateEmployee(this.$root.db, { employeeId: e.targets?.[0], newData: e.metadata?.newData }),
+            AddRequirement: e => new commands.AddRequirement(this.$root.db, { requirement: e.metadata?.requirement }),
+            UpdateRequirement: e => new commands.UpdateRequirement(this.$root.db, { requirementId: e.targets?.[0], newData: e.metadata?.newData }),
+            DeleteRequirement: e => new commands.DeleteRequirement(this.$root.db, { requirementId: e.targets?.[0] }),
+            BulkUpdateStatus: e => new commands.BulkUpdateStatus(this.$root.db, {
+              employeeIds: e.metadata?.employeeIds || e.targets || [],
+              requirementIds: e.metadata?.requirementIds || [],
+              status: e.metadata?.status,
+              completedOn: e.metadata?.completedOn || null
+            }),
+            BulkDeleteEmployees: e => new commands.BulkDeleteEmployees(this.$root.db, {
+              employeeIds: e.metadata?.employeeIds || e.targets || []
+            }),
+            ImportEmployees: () => new commands.ImportEmployees(this.$root.db),
+            ImportCompletions: () => new commands.ImportCompletions(this.$root.db)
           };
           const factory = factories[entry.actionType];
           if(!factory) return;
@@ -872,6 +885,7 @@
 
         async init(){
           this.initDB();
+          await this.initActivityLog();
           await this.loadData();
           const s = await this.db.settings.get('app');
           if (s?.darkMode) this.darkMode = true;
@@ -929,6 +943,16 @@
           });
         },
 
+        async initActivityLog(){
+          if (!this.db) return;
+          try {
+            const { default: ActivityLog } = await import('./activity-log.js');
+            this.activityLog = await ActivityLog.init(this.db);
+          } catch (error) {
+            console.error('Failed to initialize activity log', error);
+          }
+        },
+
         openActivityLog(){
           this.showActivityLogModal = true;
           this.$nextTick(() => {
@@ -943,6 +967,7 @@
           }
           await this.db.delete();
           this.initDB();
+          await this.initActivityLog();
           await this.loadData();
           this.notify('All data cleared');
         },
@@ -1061,6 +1086,21 @@
           this.toastUndo=undoHandler;
           this.showToast=true;
           setTimeout(()=>{this.showToast=false; this.toastUndo=null;},3000);
+        },
+        async recordActivity(actionType, targets = [], metadata = {}, undoPayload = null){
+          if(!this.activityLog) return;
+          try{
+            await this.activityLog.record({
+              actionType,
+              actor:'user',
+              targets,
+              metadata,
+              undoPayload
+            });
+            this.$refs.activityTimeline?.load();
+          }catch(error){
+            console.error('Failed to record activity', error);
+          }
         },
         async toggleDarkMode(){ this.darkMode=!this.darkMode; document.documentElement.classList.toggle('dark', this.darkMode); const prev=await this.db.settings.get('app')||{id:'app'}; await this.db.settings.put({...prev, darkMode:this.darkMode}); },
         initializeFeatherIcons() {
@@ -1407,6 +1447,7 @@
               this.importError='Map at least First/Last or Payroll Name before importing.'; return;
             }
             const res = await this.importEmployees();
+            if(!res) return;
             this.showImportModal=false;
             await this.loadData();
             this.notify(`Employees: ${res.added} added, ${res.updated} updated • Total now: ${this.employees.length}`);
@@ -1414,6 +1455,7 @@
             const hasAny = Object.values(this.completionMap).some(Boolean);
             if (!hasAny){ this.importError='Select at least one requirement column on the right to import completions.'; return; }
             const cnt = await this.importCompletions();
+            if(cnt === null) return;
             this.showImportModal=false;
             await this.loadData();
             this.notify(`Completions updated: ${cnt}`);
@@ -1434,24 +1476,31 @@
             const status = /inactive|leave/i.test(a.status||'') ? 'Inactive' : 'Active';
             incoming.push({ id:generateId(), firstName:a.first, lastName:a.last, role, employmentType:type, status, employeeId:a.empId, seniorityHours:a.hours, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
           }
-          const existing = await this.db.employees.toArray();
-          const byEmpId = new Map(existing.filter(e=>e.employeeId).map(e=>[String(e.employeeId), e]));
-          const keyOf = (e) => e.employeeId || `${e.firstName}|${e.lastName}|${e.role}`;
-          let added=0, updated=0;
-          for (const emp of incoming){
-            const match = emp.employeeId ? byEmpId.get(String(emp.employeeId)) : existing.find(e=>keyOf(e)===keyOf(emp));
-            if (match){
-              await this.db.employees.update(match.id, { ...match, ...emp, id: match.id, updatedAt:new Date().toISOString() });
-              updated++;
-            } else {
-              const id = await this.db.employees.add(emp);
-              const reqs = await this.db.requirements.toArray();
-              const rows = reqs.map(r => ({ id: generateId(), employeeId: id, requirementId: r.id, status:'NotCompleted', completedOn:null, expiresOn:null, updatedAt:new Date().toISOString() }));
-              if (rows.length) await this.db.employeeRequirements.bulkAdd(rows);
-              added++;
-            }
+          if (!incoming.length) {
+            return { added: 0, updated: 0, skipped: skipped.length };
           }
-          return { added, updated, skipped: skipped.length };
+          try{
+            const { ImportEmployees } = await import('./commands.js');
+            const command = new ImportEmployees(this.db, { employees: incoming });
+            const undoPayload = await command.execute();
+            const added = undoPayload.addedEmployees?.length || 0;
+            const updated = undoPayload.updatedSnapshots?.length || 0;
+            const targets = new Set();
+            (undoPayload.addedEmployees || []).forEach(emp => targets.add(emp.id));
+            (undoPayload.updatedSnapshots || []).forEach(emp => targets.add(emp.id));
+            if (added || updated) {
+              await this.recordActivity('ImportEmployees', Array.from(targets), {
+                added,
+                updated,
+                skipped: skipped.length
+              }, undoPayload);
+            }
+            return { added, updated, skipped: skipped.length };
+          }catch(error){
+            console.error('Failed to import employees', error);
+            this.notify('Failed to import employees', 'var(--danger)');
+            return null;
+          }
         },
 
         async importCompletions(){
@@ -1460,7 +1509,7 @@
           const employees = await this.db.employees.toArray();
           const byEmpId = new Map(employees.filter(e=>e.employeeId).map(e=>[String(e.employeeId).trim().toLowerCase(), e]));
           const byName = new Map(employees.map(e=>[(e.lastName+','+e.firstName).trim().toLowerCase(), e]));
-          let updates=0;
+          const updates = [];
           for (const row of this.importData){
             const a = this.analyzeRow(row);
             let emp = null;
@@ -1473,16 +1522,36 @@
               const completedOn = this.normalizeDate(val); if (!completedOn) continue;
               const req = reqById.get(rid);
               const expiresOn = req?.defaultExpiryDays ? this.addDays(completedOn, req.defaultExpiryDays) : null;
-              const existing = this.erMap.get(emp.id)?.get(rid);
-              if (existing){
-                await this.db.employeeRequirements.update(existing.id,{status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()});
-              } else {
-                await this.db.employeeRequirements.add({id:generateId(),employeeId:emp.id,requirementId:rid,status:'Completed',completedOn,expiresOn,updatedAt:new Date().toISOString()});
-              }
-              updates++;
+              updates.push({
+                employeeId: emp.id,
+                requirementId: rid,
+                status: 'Completed',
+                completedOn,
+                expiresOn
+              });
             }
           }
-          return updates;
+          if (!updates.length) return 0;
+          try{
+            const { ImportCompletions } = await import('./commands.js');
+            const command = new ImportCompletions(this.db, { updates });
+            const undoPayload = await command.execute();
+            const count = undoPayload.changes?.length || 0;
+            if (count){
+              const employeeIds = Array.from(new Set(updates.map(u => u.employeeId)));
+              const requirementIds = Array.from(new Set(updates.map(u => u.requirementId)));
+              await this.recordActivity('ImportCompletions', employeeIds, {
+                employeeIds,
+                requirementIds,
+                count
+              }, undoPayload);
+            }
+            return count;
+          }catch(error){
+            console.error('Failed to import completions', error);
+            this.notify('Failed to import completions', 'var(--danger)');
+            return null;
+          }
         },
 
         normalizeDate(v){
@@ -1625,24 +1694,20 @@
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
-          await this.db.employees.add(emp);
-          // Create requirement entries for new employee
-          const reqs = await this.db.requirements.toArray();
-          const rows = reqs.map(r => ({
-            id: generateId(),
-            employeeId: emp.id,
-            requirementId: r.id,
-            status: 'NotCompleted',
-            completedOn: null,
-            expiresOn: null,
-            updatedAt: new Date().toISOString()
-          }));
-          if (rows.length) await this.db.employeeRequirements.bulkAdd(rows);
-          this.newEmployee = {firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''};
-          this.showAddEmployeeModal = false;
-          await this.loadData();
-          this.refreshFeatherIcons();
-          this.notify('Employee added successfully');
+          try{
+            const { AddEmployee } = await import('./commands.js');
+            const command = new AddEmployee(this.db, { employee: emp });
+            const undoPayload = await command.execute();
+            await this.recordActivity('AddEmployee', [emp.id], { employee: emp }, undoPayload);
+            this.newEmployee = {firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''};
+            this.showAddEmployeeModal = false;
+            await this.loadData();
+            this.refreshFeatherIcons();
+            this.notify('Employee added successfully');
+          }catch(error){
+            console.error('Failed to add employee', error);
+            this.notify('Failed to add employee', 'var(--danger)');
+          }
         },
         async addRequirement(){
           if (!this.newRequirement.name) {
@@ -1656,24 +1721,20 @@
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
-          await this.db.requirements.add(req);
-          // Create requirement entries for all existing employees
-          const employees = await this.db.employees.toArray();
-          const rows = employees.map(emp => ({
-            id: generateId(),
-            employeeId: emp.id,
-            requirementId: req.id,
-            status: 'NotCompleted',
-            completedOn: null,
-            expiresOn: null,
-            updatedAt: new Date().toISOString()
-          }));
-          if (rows.length) await this.db.employeeRequirements.bulkAdd(rows);
-          this.newRequirement = {name:'', defaultExpiryDays:'', color:'#e0e7ff'};
-          this.showAddRequirementModal = false;
-          await this.loadData();
-          this.refreshFeatherIcons();
-          this.notify('Requirement added successfully');
+          try{
+            const { AddRequirement } = await import('./commands.js');
+            const command = new AddRequirement(this.db, { requirement: req });
+            const undoPayload = await command.execute();
+            await this.recordActivity('AddRequirement', [req.id], { requirement: req }, undoPayload);
+            this.newRequirement = {name:'', defaultExpiryDays:'', color:'#e0e7ff'};
+            this.showAddRequirementModal = false;
+            await this.loadData();
+            this.refreshFeatherIcons();
+            this.notify('Requirement added successfully');
+          }catch(error){
+            console.error('Failed to add requirement', error);
+            this.notify('Failed to add requirement', 'var(--danger)');
+          }
         },
         async editRequirement(req){
           this.editingRequirement = { ...req, defaultExpiryDays: req.defaultExpiryDays ?? '' };
@@ -1695,11 +1756,19 @@
             defaultExpiryDays: r.defaultExpiryDays ? parseInt(r.defaultExpiryDays) : null,
             updatedAt: new Date().toISOString()
           };
-          await this.db.requirements.update(r.id, updateData);
-          this.showEditRequirementModal = false;
-          await this.loadData();
-          this.refreshFeatherIcons();
-          this.notify('Requirement updated');
+          try{
+            const { UpdateRequirement } = await import('./commands.js');
+            const command = new UpdateRequirement(this.db, { requirementId: r.id, newData: updateData });
+            const undoPayload = await command.execute();
+            await this.recordActivity('UpdateRequirement', [r.id], { newData: updateData }, undoPayload);
+            this.showEditRequirementModal = false;
+            await this.loadData();
+            this.refreshFeatherIcons();
+            this.notify('Requirement updated');
+          }catch(error){
+            console.error('Failed to update requirement', error);
+            this.notify('Failed to update requirement', 'var(--danger)');
+          }
         },
         confirmDeleteRequirement(req){
           if(confirm(`Delete requirement "${req.name}"? This will remove all related records.`)){
@@ -1707,13 +1776,19 @@
           }
         },
         async deleteRequirement(req){
-          const related = await this.db.employeeRequirements.where('requirementId').equals(req.id).toArray();
-          this.lastDeletedRequirement = { requirement: req, employeeRequirements: related };
-          await this.db.requirements.delete(req.id);
-          await this.db.employeeRequirements.where('requirementId').equals(req.id).delete();
-          await this.loadData();
-          this.refreshFeatherIcons();
-          this.notify('Requirement deleted','var(--warn)',() => this.undoDeleteRequirement());
+          try{
+            const { DeleteRequirement } = await import('./commands.js');
+            const command = new DeleteRequirement(this.db, { requirementId: req.id });
+            const undoPayload = await command.execute();
+            this.lastDeletedRequirement = undoPayload;
+            await this.recordActivity('DeleteRequirement', [req.id], { requirement: req }, undoPayload);
+            await this.loadData();
+            this.refreshFeatherIcons();
+            this.notify('Requirement deleted','var(--warn)',() => this.undoDeleteRequirement());
+          }catch(error){
+            console.error('Failed to delete requirement', error);
+            this.notify('Failed to delete requirement', 'var(--danger)');
+          }
         },
         async undoDeleteRequirement(){
           if(!this.lastDeletedRequirement) return;
@@ -1750,11 +1825,19 @@
             seniorityHours: e.seniorityHours,
             updatedAt: new Date().toISOString()
           };
-          await this.db.employees.update(e.id, updateData);
-          this.showEditEmployeeModal = false;
-          await this.loadData();
-          this.refreshFeatherIcons();
-          this.notify('Employee updated');
+          try{
+            const { UpdateEmployee } = await import('./commands.js');
+            const command = new UpdateEmployee(this.db, { employeeId: e.id, newData: updateData });
+            const undoPayload = await command.execute();
+            await this.recordActivity('UpdateEmployee', [e.id], { newData: updateData }, undoPayload);
+            this.showEditEmployeeModal = false;
+            await this.loadData();
+            this.refreshFeatherIcons();
+            this.notify('Employee updated');
+          }catch(error){
+            console.error('Failed to update employee', error);
+            this.notify('Failed to update employee', 'var(--danger)');
+          }
         },
         getStatusTooltip(empId, reqId){
           const er = this.getER(empId, reqId);
@@ -1771,7 +1854,7 @@
         },
         async executeBulkAction(){
           if (!this.bulkAction || !this.selectedEmployees.length) return;
-          
+
           if (this.bulkAction === 'complete' || this.bulkAction === 'incomplete') {
             if (!this.selectedRequirements.length) {
               this.notify('Please select at least one requirement', 'var(--danger)');
@@ -1779,31 +1862,28 @@
             }
             const status = this.bulkAction === 'complete' ? 'Completed' : 'NotCompleted';
             const completedOn = this.bulkAction === 'complete' ? new Date().toISOString().slice(0,10) : null;
-            
-            for (const empId of this.selectedEmployees) {
-              for (const reqId of this.selectedRequirements) {
-                const existing = this.erMap.get(empId)?.get(reqId);
-                if (existing) {
-                  await this.db.employeeRequirements.update(existing.id, {
-                    status,
-                    completedOn,
-                    expiresOn: status === 'Completed' && existing.expiresOn ? existing.expiresOn : null,
-                    updatedAt: new Date().toISOString()
-                  });
-                } else {
-                  await this.db.employeeRequirements.add({
-                    id: generateId(),
-                    employeeId: empId,
-                    requirementId: reqId,
-                    status,
-                    completedOn,
-                    expiresOn: null,
-                    updatedAt: new Date().toISOString()
-                  });
-                }
+            try{
+              const { BulkUpdateStatus } = await import('./commands.js');
+              const command = new BulkUpdateStatus(this.db, {
+                employeeIds: [...this.selectedEmployees],
+                requirementIds: [...this.selectedRequirements],
+                status,
+                completedOn
+              });
+              const undoPayload = await command.execute();
+              if (undoPayload.changes?.length) {
+                await this.recordActivity('BulkUpdateStatus', [...this.selectedEmployees], {
+                  employeeIds: [...this.selectedEmployees],
+                  requirementIds: [...this.selectedRequirements],
+                  status,
+                  completedOn
+                }, undoPayload);
               }
+              this.notify(`Bulk ${this.bulkAction} completed for ${this.selectedEmployees.length} employees`);
+            }catch(error){
+              console.error('Failed to apply bulk status update', error);
+              this.notify('Failed to apply bulk status update', 'var(--danger)');
             }
-            this.notify(`Bulk ${this.bulkAction} completed for ${this.selectedEmployees.length} employees`);
           } else if (this.bulkAction === 'export') {
             const selectedEmps = this.employees.filter(emp => this.selectedEmployees.includes(emp.id));
             const data = {
@@ -1816,14 +1896,24 @@
             this.notify('Selected employees exported');
           } else if (this.bulkAction === 'delete') {
             if (confirm(`Are you sure you want to delete ${this.selectedEmployees.length} employees? This action cannot be undone.`)) {
-              for (const empId of this.selectedEmployees) {
-                await this.db.employees.delete(empId);
-                await this.db.employeeRequirements.where('employeeId').equals(empId).delete();
+              try{
+                const { BulkDeleteEmployees } = await import('./commands.js');
+                const command = new BulkDeleteEmployees(this.db, { employeeIds: [...this.selectedEmployees] });
+                const undoPayload = await command.execute();
+                if ((undoPayload.employees?.length || undoPayload.employeeRequirements?.length)) {
+                  await this.recordActivity('BulkDeleteEmployees', [...this.selectedEmployees], {
+                    employeeIds: [...this.selectedEmployees],
+                    count: this.selectedEmployees.length
+                  }, undoPayload);
+                }
+                this.notify(`${this.selectedEmployees.length} employees deleted`);
+              }catch(error){
+                console.error('Failed to delete employees', error);
+                this.notify('Failed to delete employees', 'var(--danger)');
               }
-              this.notify(`${this.selectedEmployees.length} employees deleted`);
             }
           }
-          
+
           this.selectedEmployees = [];
           this.selectedRequirements = [];
           this.bulkAction = '';
