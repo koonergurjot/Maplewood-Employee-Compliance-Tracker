@@ -669,7 +669,7 @@
                   <select class="flex-1 border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)"
                           x-model="columnMap[key]" @change="updateEligibilityPreview()">
                     <option value="">-- Not Mapped --</option>
-                    <template x-for="h in importHeaders" :key="h"><option :value="h" x-text="h"></option></template>
+                    <template x-for="(h, idx) in importHeaders" :key="idx"><option :value="h" x-text="h"></option></template>
                   </select>
                 </div>
               </template>
@@ -684,7 +684,7 @@
                     <select class="flex-1 border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)"
                             x-model="completionMap[r.id]">
                       <option value="">-- Not Mapped --</option>
-                      <template x-for="h in importHeaders" :key="h"><option :value="h" x-text="h"></option></template>
+                      <template x-for="(h, idx) in importHeaders" :key="idx"><option :value="h" x-text="h"></option></template>
                     </select>
                   </div>
                 </template>
