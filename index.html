@@ -802,10 +802,25 @@
       return {
         entries: [],
         async load(){
-          const { default: ActivityLog } = await import('./activity-log.js');
-          if(!this.$root.activityLog){
-            this.$root.activityLog = await ActivityLog.init(this.$root.db);
+          if(!this?.$root?.db){
+            this.$nextTick(() => this.load());
+            return;
           }
+
+          const { default: ActivityLog } = await import('./activity-log.js');
+
+          if(!this.$root.activityLog){
+            if(typeof this.$root.initActivityLog === 'function'){
+              await this.$root.initActivityLog();
+            }
+
+            if(!this.$root.activityLog){
+              this.$root.activityLog = await ActivityLog.init(this.$root.db);
+            }
+          }
+
+          if(!this.$root.activityLog) return;
+
           this.entries = await this.$root.activityLog.recent();
         },
         async init(){
