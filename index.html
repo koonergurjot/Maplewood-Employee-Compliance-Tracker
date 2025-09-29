@@ -1120,30 +1120,12 @@
         async toggleDarkMode(){ this.darkMode=!this.darkMode; document.documentElement.classList.toggle('dark', this.darkMode); const prev=await this.db.settings.get('app')||{id:'app'}; await this.db.settings.put({...prev, darkMode:this.darkMode}); },
         initializeFeatherIcons() {
           try {
-            // Wait for feather to be available and DOM to be ready
             if (typeof feather === 'undefined') {
               console.warn('Feather icons library not loaded');
               return;
             }
-            
-            // Only replace icons that exist and have data-feather attribute
-            const featherElements = document.querySelectorAll('[data-feather]');
-            if (featherElements.length > 0) {
-              // Use a more specific approach to avoid replaceChild errors
-              featherElements.forEach(element => {
-                try {
-                  if (element && element.parentNode && !element.hasAttribute('data-feather-processed')) {
-                    const iconName = element.getAttribute('data-feather');
-                    if (iconName && feather.icons && feather.icons[iconName]) {
-                      element.innerHTML = feather.icons[iconName].toSvg();
-                      element.setAttribute('data-feather-processed', 'true');
-                    }
-                  }
-                } catch (iconError) {
-                  console.warn('Error replacing individual icon:', iconError);
-                }
-              });
-            }
+
+            feather.replace();
           } catch (error) {
             console.warn('Feather icons initialization error:', error);
           }
