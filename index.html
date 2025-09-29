@@ -1765,9 +1765,17 @@
           this.globalSearch='';
           this.searchResults=[];
         },
+        getEscapedGlobalSearch(){
+          if(!this.globalSearch) return '';
+          return String(this.globalSearch).replace(/[.*+?^${}()|[\]\\]/g, '\$&');
+        },
         highlightText(text){
-          if(!this.globalSearch) return text;
-          return text.replace(new RegExp(`(${this.globalSearch})`, 'gi'), '<mark>$1</mark>');
+          if(text == null) return '';
+          const value = String(text);
+          if(!this.globalSearch) return value;
+          const escapedSearch = this.getEscapedGlobalSearch();
+          if(!escapedSearch) return value;
+          return value.replace(new RegExp(`(${escapedSearch})`, 'gi'), '<mark>$1</mark>');
         },
         sortEmployees(field){
           if (this.sortField === field) {
