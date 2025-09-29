@@ -11,25 +11,27 @@
   <link rel="manifest" href="/manifest.webmanifest?v=1"/>
   <!-- Production Tailwind CSS -->
   <link rel="stylesheet" href="/styles.css?v=1">
-  <script src="https://unpkg.com/feather-icons"></script>
-  <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
-  <script src="onboarding.js"></script>
+  <script defer src="https://unpkg.com/feather-icons"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+  <script defer src="onboarding.js"></script>
   <script>
-    // Fallback for XLSX library loading
-    if (typeof XLSX === 'undefined') {
-      console.error('XLSX library failed to load. Trying alternative CDN...');
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
-      script.onerror = function() {
-        console.error('Alternative XLSX CDN also failed to load');
-      };
-      document.head.appendChild(script);
-    }
+    window.addEventListener('DOMContentLoaded', function () {
+      // Fallback for XLSX library loading
+      if (typeof XLSX === 'undefined') {
+        console.error('XLSX library failed to load. Trying alternative CDN...');
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
+        script.onerror = function() {
+          console.error('Alternative XLSX CDN also failed to load');
+        };
+        document.head.appendChild(script);
+      }
+    });
   </script>
   <style>
     :root{ --bg:#f3f4f6; --card:#ffffff; --line:#e5e7eb; --text:#111827; --muted:#6b7280; --accent:#2563eb; --success:#10b981; --warn:#f59e0b; --danger:#ef4444; --badge-text:#111827; }
