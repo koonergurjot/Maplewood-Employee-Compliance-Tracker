@@ -12,18 +12,43 @@ function startTour(){
   const tooltip = document.createElement('div');
   tooltip.className = 'tour-tooltip';
   const text = document.createElement('div');
+  const controls = document.createElement('div');
+  controls.style.display = 'flex';
+  controls.style.gap = '0.5rem';
+  controls.style.marginTop = '0.75rem';
   const nextBtn = document.createElement('button');
+  nextBtn.type = 'button';
   nextBtn.className = 'btn btn-primary';
   nextBtn.textContent = 'Next';
-  nextBtn.style.marginTop = '0.5rem';
+  const skipBtn = document.createElement('button');
+  skipBtn.type = 'button';
+  skipBtn.className = 'btn';
+  skipBtn.textContent = 'Skip tour';
+  skipBtn.style.background = 'var(--card)';
+  skipBtn.style.borderColor = 'var(--line)';
+  controls.appendChild(nextBtn);
+  controls.appendChild(skipBtn);
   tooltip.appendChild(text);
-  tooltip.appendChild(nextBtn);
+  tooltip.appendChild(controls);
   document.body.appendChild(overlay);
   document.body.appendChild(tooltip);
 
+  window.dispatchEvent(new CustomEvent('tour:started'));
+
+  let cleaning = false;
+
+  function cleanup(reason='completed'){
+    if(cleaning) return;
+    cleaning = true;
+    document.querySelectorAll('.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));
+    overlay.remove();
+    tooltip.remove();
+    window.dispatchEvent(new CustomEvent('tour:ended', { detail: { reason } }));
+  }
+
   function showStep(){
     if(index >= steps.length){
-      cleanup();
+      cleanup('completed');
       return;
     }
     const step = steps[index];
@@ -48,14 +73,9 @@ function startTour(){
     showStep();
   }
 
-  function cleanup(){
-    document.querySelectorAll('.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));
-    overlay.remove();
-    tooltip.remove();
-  }
-
   nextBtn.addEventListener('click', next);
-  overlay.addEventListener('click', cleanup);
+  skipBtn.addEventListener('click', () => cleanup('skipped'));
+  overlay.addEventListener('click', () => cleanup('skipped'));
   showStep();
 }
 
