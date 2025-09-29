@@ -2042,24 +2042,46 @@
   </script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
   <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      const hasAlpine = Boolean(window.Alpine) && Boolean(document.body?.__x);
+    function showFallback() {
+      document.body?.removeAttribute('x-cloak');
 
-      if (!hasAlpine) {
-        console.error('Alpine.js failed to load');
-
-        document.body?.removeAttribute('x-cloak');
-
-        const dashboard = document.getElementById('dashboard-app');
-        if (dashboard) {
-          dashboard.setAttribute('hidden', '');
-        }
-
-        const fallback = document.getElementById('alpine-fallback');
-        if (fallback) {
-          fallback.removeAttribute('hidden');
-        }
+      const dashboard = document.getElementById('dashboard-app');
+      if (dashboard) {
+        dashboard.setAttribute('hidden', '');
       }
+
+      const fallback = document.getElementById('alpine-fallback');
+      if (fallback) {
+        fallback.removeAttribute('hidden');
+      }
+    }
+
+    function hideFallback() {
+      const fallback = document.getElementById('alpine-fallback');
+      if (fallback && !fallback.hasAttribute('hidden')) {
+        fallback.setAttribute('hidden', '');
+      }
+
+      const dashboard = document.getElementById('dashboard-app');
+      if (dashboard) {
+        dashboard.removeAttribute('hidden');
+      }
+    }
+
+    document.addEventListener('alpine:initialized', () => {
+      hideFallback();
+    });
+
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const rootStack = document.body ? document.body._x_dataStack : null;
+        const alpineReady = Boolean(window.Alpine) && Array.isArray(rootStack) && rootStack.length > 0;
+
+        if (!alpineReady) {
+          console.error('Alpine.js failed to initialize');
+          showFallback();
+        }
+      }, 1200);
     });
   </script>
   <script>
