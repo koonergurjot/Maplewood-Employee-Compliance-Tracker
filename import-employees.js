@@ -21,6 +21,8 @@
     return Boolean(getAlpineRoot());
   }
 
+  let fallbackModalCleanup = null;
+
   function toggleImportModal(open){
     const alpine = getAlpineRoot();
     if (alpine){
@@ -31,9 +33,42 @@
     const modal = document.querySelector('[x-show="showImportModal"]');
     if (modal){
       if (open){
+        if (modal.dataset.fallbackOpen === 'true'){
+          modal.style.display = 'block';
+          return true;
+        }
         modal.dataset.fallbackOpen = 'true';
         modal.style.display = 'block';
+
+        const cleanupFns = [];
+        const closeHandler = (event) => {
+          event.preventDefault();
+          toggleImportModal(false);
+        };
+
+        modal.querySelectorAll('[\@click="showImportModal=false"]').forEach((el) => {
+          el.addEventListener('click', closeHandler);
+          cleanupFns.push(() => el.removeEventListener('click', closeHandler));
+        });
+
+        const escapeHandler = (event) => {
+          if (event.key === 'Escape' || event.key === 'Esc'){
+            toggleImportModal(false);
+          }
+        };
+        document.addEventListener('keydown', escapeHandler);
+        cleanupFns.push(() => document.removeEventListener('keydown', escapeHandler));
+
+        fallbackModalCleanup = () => {
+          cleanupFns.forEach(fn => fn());
+          fallbackModalCleanup = null;
+        };
       } else {
+        if (typeof fallbackModalCleanup === 'function'){
+          const cleanup = fallbackModalCleanup;
+          fallbackModalCleanup = null;
+          cleanup();
+        }
         delete modal.dataset.fallbackOpen;
         modal.style.display = 'none';
       }
