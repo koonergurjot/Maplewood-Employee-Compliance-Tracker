@@ -1,22 +1,45 @@
-const CACHE='cmatrix-v4_5';
-const ASSETS=['/','/index.html','/manifest.webmanifest','/styles.css','/icon-192.svg','/icon-512.svg'];
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))) });
-self.addEventListener('fetch',e=>{ 
-  if(e.request.method!=='GET') return; 
-  const url=new URL(e.request.url);
-  e.respondWith(
-    caches.match(e.request).then(c=>{
-      if(c) return c;
-      return fetch(e.request).then(r=>{ 
-        if(url.origin===location.origin && r.ok) {
-          const responseClone = r.clone();
-          caches.open(CACHE).then(cs=>cs.put(e.request,responseClone));
+const CACHE = 'cmatrix-v4_5';
+const scopePath = self.registration.scope.replace(location.origin, '');
+const BASE = scopePath ? (scopePath.endsWith('/') ? scopePath : `${scopePath}/`) : '/';
+const withBase = (path = '') => `${BASE}${path.replace(/^\//, '')}`;
+const ASSET_PATHS = ['', 'index.html', 'manifest.webmanifest', 'styles.css', 'icon-192.svg', 'icon-512.svg'];
+const ASSETS = ASSET_PATHS.map(withBase);
+const OFFLINE_HTML = withBase('index.html');
+const OFFLINE_ROOT = withBase('');
+
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE).then(cache => cache.addAll(ASSETS))
+  );
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))
+    )
+  );
+});
+
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+  const inScope = url.origin === location.origin && url.pathname.startsWith(BASE);
+
+  event.respondWith(
+    caches.match(event.request).then(cacheResponse => {
+      if (cacheResponse) return cacheResponse;
+
+      return fetch(event.request).then(networkResponse => {
+        if (inScope && networkResponse.ok) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE).then(cache => cache.put(event.request, responseClone));
         }
-        return r; 
-      }).catch(()=>{
-        if(url.pathname.startsWith('/')) {
-          return caches.match('/index.html');
+        return networkResponse;
+      }).catch(() => {
+        if (inScope) {
+          return caches.match(OFFLINE_HTML).then(response => response || caches.match(OFFLINE_ROOT));
         }
         return Promise.reject('offline');
       });
