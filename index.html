@@ -66,7 +66,7 @@
     mark{background:var(--warn);color:var(--text);padding:0 .2rem}
   </style>
 </head>
-<body x-data="app()" x-init="init()" x-cloak :class="{'dark': darkMode}">
+<body x-data="app" x-init="init()" x-cloak :class="{'dark': darkMode}">
   <template x-if="loadError">
     <div class="container mx-auto px-4 py-12">
       <div class="card rounded-lg shadow p-6 max-w-2xl mx-auto text-center">
