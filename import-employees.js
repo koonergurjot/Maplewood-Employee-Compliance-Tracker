@@ -13,7 +13,7 @@
   }
 
   function getAlpineRoot(){
-    const root = document.querySelector('[x-data="app()"]');
+    const root = document.querySelector('[x-data="app"]');
     return root && root.__x ? root.__x : null;
   }
 
