@@ -1737,7 +1737,7 @@
               emp.firstName.toLowerCase().includes(query) ||
               emp.lastName.toLowerCase().includes(query) ||
               emp.role.toLowerCase().includes(query) ||
-              emp.employeeId.toLowerCase().includes(query)
+              (emp.employeeId ?? '').toString().toLowerCase().includes(query)
             );
           }
           if (this.roleFilter) {
