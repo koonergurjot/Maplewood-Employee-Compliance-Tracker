@@ -77,7 +77,15 @@
     </div>
   </template>
 
-  <div class="container mx-auto px-4 py-6" x-show="!loadError">
+  <div id="alpine-fallback" class="container mx-auto px-4 py-12" hidden>
+    <div class="card rounded-lg shadow p-6 max-w-2xl mx-auto text-center">
+      <h1 class="text-2xl font-bold mb-4">Dashboard temporarily unavailable</h1>
+      <p class="mb-3">We couldn't load the interactive experience that powers this dashboard.</p>
+      <p style="color:var(--muted)">Please refresh the page or verify your network connection. If the problem continues, contact support.</p>
+    </div>
+  </div>
+
+  <div id="dashboard-app" class="container mx-auto px-4 py-6" x-show="!loadError">
     <div class="flex justify-between items-center mb-4">
       <h1 class="text-2xl font-bold">Compliance Matrix</h1>
       <div class="flex gap-2">
@@ -2033,6 +2041,27 @@
     });
   </script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const hasAlpine = Boolean(window.Alpine) && Boolean(document.body?.__x);
+
+      if (!hasAlpine) {
+        console.error('Alpine.js failed to load');
+
+        document.body?.removeAttribute('x-cloak');
+
+        const dashboard = document.getElementById('dashboard-app');
+        if (dashboard) {
+          dashboard.setAttribute('hidden', '');
+        }
+
+        const fallback = document.getElementById('alpine-fallback');
+        if (fallback) {
+          fallback.removeAttribute('hidden');
+        }
+      }
+    });
+  </script>
   <script>
     const replaceFeatherIcons = () => {
       if (window.feather && typeof feather.replace === 'function') {
