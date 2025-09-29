@@ -1085,12 +1085,18 @@
             const newStatus = er && er.status === 'Completed' ? 'NotCompleted' : 'Completed';
             console.log('Current status:', er?.status, 'New status:', newStatus);
 
+            const completedOn = newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null;
+            const hasDefaultExpiry = req?.defaultExpiryDays !== undefined && req?.defaultExpiryDays !== null;
+            const expiresOn = newStatus === 'Completed'
+              ? (hasDefaultExpiry ? this.addDays(completedOn, req.defaultExpiryDays) : null)
+              : null;
             const record = {
               id: er?.id || generateId(),
               employeeId: emp.id,
               requirementId: req.id,
               status: newStatus,
-              completedOn: newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null,
+              completedOn,
+              expiresOn,
               updatedAt: new Date().toISOString()
             };
             await this.db.employeeRequirements.put(record);
@@ -1920,13 +1926,24 @@
             }
             const status = this.bulkAction === 'complete' ? 'Completed' : 'NotCompleted';
             const completedOn = this.bulkAction === 'complete' ? new Date().toISOString().slice(0,10) : null;
+            let expiresOn = null;
+            if (status === 'Completed') {
+              expiresOn = {};
+              for (const requirementId of this.selectedRequirements) {
+                const req = this.requirements.find(r => r.id === requirementId);
+                if (!req) continue;
+                const hasDefaultExpiry = req.defaultExpiryDays !== undefined && req.defaultExpiryDays !== null;
+                expiresOn[requirementId] = hasDefaultExpiry ? this.addDays(completedOn, req.defaultExpiryDays) : null;
+              }
+            }
             try{
               const { BulkUpdateStatus } = await import('./commands.js');
               const command = new BulkUpdateStatus(this.db, {
                 employeeIds: [...this.selectedEmployees],
                 requirementIds: [...this.selectedRequirements],
                 status,
-                completedOn
+                completedOn,
+                expiresOn
               });
               const undoPayload = await command.execute();
               if (undoPayload.changes?.length) {
@@ -1934,7 +1951,8 @@
                   employeeIds: [...this.selectedEmployees],
                   requirementIds: [...this.selectedRequirements],
                   status,
-                  completedOn
+                  completedOn,
+                  expiresOn
                 }, undoPayload);
               }
               this.notify(`Bulk ${this.bulkAction} completed for ${this.selectedEmployees.length} employees`);
