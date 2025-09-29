@@ -11,20 +11,23 @@
   <link rel="manifest" href="/manifest.webmanifest?v=1"/>
   <!-- Production Tailwind CSS -->
   <link rel="stylesheet" href="/styles.css?v=1">
-  <script src="https://unpkg.com/feather-icons"></script>
-  <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+  <script src="docs/assets/vendor/feather.min.js"></script>
+  <script src="docs/assets/vendor/dexie.min.js"></script>
+  <script src="docs/assets/vendor/papaparse.min.js"></script>
+  <script src="docs/assets/vendor/xlsx.full.min.js"></script>
+  <script src="docs/assets/vendor/chart.umd.min.js"></script>
+  <script src="docs/assets/vendor/Sortable.min.js"></script>
+  <script src="docs/assets/vendor/fuse.min.js"></script>
   <script src="onboarding.js"></script>
   <script>
     // Fallback for XLSX library loading
     if (typeof XLSX === 'undefined') {
-      console.error('XLSX library failed to load. Trying alternative CDN...');
+      console.error('XLSX library failed to load. Trying CDN fallback...');
       const script = document.createElement('script');
-      script.src = 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
+      script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      script.integrity = 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw';
+      script.crossOrigin = 'anonymous';
+      script.referrerPolicy = 'no-referrer';
       script.onerror = function() {
         console.error('Alternative XLSX CDN also failed to load');
       };
@@ -1938,6 +1941,6 @@
       }));
     });
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script src="docs/assets/vendor/alpinejs.cdn.min.js" defer></script>
 </body>
 </html>
