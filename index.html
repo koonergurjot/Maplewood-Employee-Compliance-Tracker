@@ -2050,7 +2050,11 @@
       }));
     });
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"
+    defer
+    onload="window.Alpine && window.Alpine.start()"
+  ></script>
   <script>
     function showFallback() {
       document.body?.removeAttribute('x-cloak');
