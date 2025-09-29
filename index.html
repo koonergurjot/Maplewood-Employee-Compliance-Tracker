@@ -67,7 +67,17 @@
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak :class="{'dark': darkMode}">
-  <div class="container mx-auto px-4 py-6">
+  <template x-if="loadError">
+    <div class="container mx-auto px-4 py-12">
+      <div class="card rounded-lg shadow p-6 max-w-2xl mx-auto text-center">
+        <h1 class="text-2xl font-bold mb-4">Unable to Load Dashboard</h1>
+        <p class="mb-3" x-text="loadError"></p>
+        <p style="color:var(--muted)">Please refresh the page or check your network connection before trying again.</p>
+      </div>
+    </div>
+  </template>
+
+  <div class="container mx-auto px-4 py-6" x-show="!loadError">
     <div class="flex justify-between items-center mb-4">
       <h1 class="text-2xl font-bold">Compliance Matrix</h1>
       <div class="flex gap-2">
@@ -861,6 +871,7 @@
 
     document.addEventListener('alpine:init', () => {
       Alpine.data('app', () => ({
+        loadError:'',
         darkMode:false, showImportModal:false, showExportDropdown:false,
         showSettingsModal:false, settingsSortable:null,
         showActivityLogModal:false,
@@ -906,7 +917,15 @@
         formatYears(days){ return Math.floor(days/365)+'y'; },
 
         async init(){
+          if (typeof window.Dexie === 'undefined') {
+            this.loadError = 'The offline database library (Dexie.js) did not load. Data cannot be displayed without it.';
+            this.$nextTick(() => this.$root?.removeAttribute('x-cloak'));
+            return;
+          }
+
           this.initDB();
+
+          this.$nextTick(() => this.$root?.removeAttribute('x-cloak'));
 
           const markTourSeenHandler = () => this.markTourSeen();
           window.addEventListener('tour:started', markTourSeenHandler);
@@ -914,6 +933,7 @@
 
           await this.initActivityLog();
           await this.loadData();
+          if (this.loadError || !this.db) return;
           const s = await this.db.settings.get('app');
           if (s?.darkMode) this.darkMode = true;
           document.documentElement.classList.toggle('dark', this.darkMode);
@@ -942,7 +962,10 @@
         },
 
         initDB(){
-          this.db = new Dexie('ComplianceMatrixDB');
+          if (this.loadError || typeof window === 'undefined' || typeof window.Dexie === 'undefined') {
+            return;
+          }
+          this.db = new window.Dexie('ComplianceMatrixDB');
           this.db.version(8).stores({
             employees:'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
             requirements:'id, name, defaultExpiryDays, color',
@@ -971,7 +994,7 @@
         },
 
         async initActivityLog(){
-          if (!this.db) return;
+          if (this.loadError || !this.db) return;
           try {
             const { default: ActivityLog } = await import('./activity-log.js');
             this.activityLog = await ActivityLog.init(this.db);
@@ -988,6 +1011,7 @@
         },
 
         async clearAllData(){
+          if (this.loadError || !this.db) return;
           if(!confirm('This will delete all data. Are you sure?')){
             this.notify('Data deletion cancelled','var(--warn)');
             return;
@@ -1000,6 +1024,7 @@
         },
 
         async loadData(){
+          if (this.loadError || !this.db) return;
           this.employees = await this.db.employees.toArray();
           this.requirements = await this.db.requirements.toArray();
           this.employeeRequirements = await this.db.employeeRequirements.toArray();
@@ -1013,6 +1038,7 @@
         },
 
         async loadVisibleRequirements(){
+          if (this.loadError || !this.db) return;
           const setting = await this.db.settings.get('visibleRequirements');
           if(setting && Array.isArray(setting.value)){
             const map = new Map(setting.value.map(s => [s.id, s]));
@@ -1030,6 +1056,7 @@
         },
 
         async saveRequirementsSettings(){
+          if (this.loadError || !this.db) return;
           await this.db.settings.put({
             id:'visibleRequirements',
             value: this.visibleRequirements.map(r => ({id:r.id, order:r.order, visible:r.visible}))
@@ -1184,7 +1211,13 @@
             console.error('Failed to record activity', error);
           }
         },
-        async toggleDarkMode(){ this.darkMode=!this.darkMode; document.documentElement.classList.toggle('dark', this.darkMode); const prev=await this.db.settings.get('app')||{id:'app'}; await this.db.settings.put({...prev, darkMode:this.darkMode}); },
+        async toggleDarkMode(){
+          this.darkMode=!this.darkMode;
+          document.documentElement.classList.toggle('dark', this.darkMode);
+          if (this.loadError || !this.db) return;
+          const prev=await this.db.settings.get('app')||{id:'app'};
+          await this.db.settings.put({...prev, darkMode:this.darkMode});
+        },
         initializeFeatherIcons() {
           try {
             if (typeof feather === 'undefined') {
