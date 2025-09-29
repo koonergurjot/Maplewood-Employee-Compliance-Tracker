@@ -1939,5 +1939,15 @@
     });
   </script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script>
+    const replaceFeatherIcons = () => {
+      if (window.feather && typeof feather.replace === 'function') {
+        feather.replace();
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', replaceFeatherIcons);
+    document.addEventListener('alpine:init', replaceFeatherIcons);
+  </script>
 </body>
 </html>
