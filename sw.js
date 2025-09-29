@@ -1,8 +1,9 @@
-const BUILD_HASH = self.__SW_BUILD_HASH__ || self.__BUILD_HASH__ || 'dev';
+const BUILD_HASH = self.__SW_BUILD_HASH__ || self.__BUILD_HASH__ || 'v3';
 const CACHE = `cmatrix-${BUILD_HASH}`;
 
 const scopeUrl = self.registration.scope;
 const PRECACHE_PATHS = [
+
   './',
   'index.html',
   'calendar.html',
@@ -17,6 +18,9 @@ const PRECACHE_PATHS = [
   'activity-log.js',
   'calendar.js',
   'onboarding.js'
+,
+  'manifest.webmanifest?v=1',
+  'styles.css?v=1'
 ];
 
 const PRECACHE_URLS = PRECACHE_PATHS.map(path => new URL(path, scopeUrl).toString());

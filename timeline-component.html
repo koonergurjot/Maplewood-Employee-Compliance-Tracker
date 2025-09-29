@@ -9,7 +9,7 @@
 </div>
 
 <script type="module">
-import Dexie from 'dexie';
+const Dexie = window.Dexie;
 import ActivityLog from './activity-log.js';
 import {
   EditEmployee,
@@ -25,7 +25,7 @@ export function timeline() {
 
     async init() {
       // Example schema—extend with your real tables.
-      this.db = new Dexie('app');
+      this.db = new Dexie('ComplianceMatrixDB');
       this.db.version(1).stores({
         employees: 'id',
         employeeRequirements: '[employeeId+requirementId],employeeId,requirementId,status',

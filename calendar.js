@@ -32,7 +32,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       const req = reqMap.get(er.requirementId);
       return {
         title: `${emp?.firstName ?? ''} ${emp?.lastName ?? ''} - ${req?.name ?? ''}`.trim(),
-        start: er.expiresOn,
+        start: (function(d){ try { return new Date(d).toISOString(); } catch(e){ return d; } })(er.expiresOn),
+
         allDay: true
       };
     });

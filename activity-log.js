@@ -3,11 +3,19 @@ export default class ActivityLog {
   static async init(db) {
     // Ensure the table exists before opening.
     if (!db.tables.some(t => t.name === 'activityLog')) {
-      db.version(db.verno + 1).stores({
-        activityLog: 'id,timestamp,actionType'
-      });
-    }
-    await db.open();
+      try {
+  db.version(db.verno + 1).stores({
+    activityLog: 'id,timestamp,actionType'
+  });
+} catch (e) {
+  // If version bump fails (e.g., another tab holds the DB), proceed to open and hope table exists.
+  console.warn('ActivityLog schema ensure failed (non-fatal):', e);
+}
+try {
+  await db.open();
+} catch (e) {
+  console.error('Failed to open DB for ActivityLog:', e);
+}
     return new ActivityLog(db);
   }
 
