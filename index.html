@@ -1406,14 +1406,16 @@
         downloadImportErrors(){
           if(!this.importErrors.length) return;
           const rows = [['Row','Error'], ...this.importErrors.map(e=>[e.row, e.message])];
-          const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+          const newline = '\n';
+          const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join(newline);
           const blob = new Blob([csv], {type:'text/csv'});
           this.downloadBlob(blob, 'import-errors.csv');
         },
         stripTitleLines(lines){
           let bestIdx=0, bestScore=-1;
           for(let i=0;i<Math.min(30,lines.length);i++){ const cols=(lines[i]||'').split(',').map(s=>s.replace(/\"/g,'').trim()); const sc=this.scoreHeaderRow(cols); if(sc>bestScore){bestScore=sc;bestIdx=i;} }
-          return lines.slice(bestIdx).join('\\n');
+          const newline = '\n';
+          return lines.slice(bestIdx).join(newline);
         },
         extractFromSheet(sheet){
           try {
