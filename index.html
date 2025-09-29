@@ -1933,5 +1933,13 @@
     document.addEventListener('DOMContentLoaded', replaceFeatherIcons);
     document.addEventListener('alpine:init', replaceFeatherIcons);
   </script>
+
+<script defer src="import-employees.js"></script>
+<script>
+  window.addEventListener('DOMContentLoaded', ()=> {
+    if (window.__initImportUI) window.__initImportUI();
+  });
+</script>
+
 </body>
 </html>
