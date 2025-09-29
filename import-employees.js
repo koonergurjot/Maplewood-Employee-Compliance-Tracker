@@ -12,6 +12,36 @@
     console.warn("Dexie not found; import will fail until Dexie loads.");
   }
 
+  function getAlpineRoot(){
+    const root = document.querySelector('[x-data="app()"]');
+    return root && root.__x ? root.__x : null;
+  }
+
+  function isAlpineReady(){
+    return Boolean(getAlpineRoot());
+  }
+
+  function toggleImportModal(open){
+    const alpine = getAlpineRoot();
+    if (alpine){
+      alpine.$data.showImportModal = Boolean(open);
+      return true;
+    }
+
+    const modal = document.querySelector('[x-show="showImportModal"]');
+    if (modal){
+      if (open){
+        modal.dataset.fallbackOpen = 'true';
+        modal.style.display = 'block';
+      } else {
+        delete modal.dataset.fallbackOpen;
+        modal.style.display = 'none';
+      }
+      return true;
+    }
+    return false;
+  }
+
   function ensureDb(){
     const db = new DexieRef('ComplianceMatrixDB');
     db.version(8).stores({
@@ -156,7 +186,7 @@
       const rows = await parseFile(file);
       const count = await importFromRows(rows);
       alert(`Imported ${count} employees.`);
-      document.getElementById('import-modal')?.close?.();
+      toggleImportModal(false);
     } catch (e) {
       console.error('Import failed:', e);
       alert(`Import failed: ${e.message || e}`);
@@ -168,14 +198,24 @@
   // Wire button and modal
   window.__initImportUI = function(){
     const btn = document.getElementById('import-btn');
-    const modal = document.getElementById('import-modal');
-    const fileInput = document.getElementById('import-file');
+    const fileInput = document.getElementById('file-upload');
 
-    if (btn && modal && fileInput){
-      btn.addEventListener('click', ()=> modal.showModal ? modal.showModal() : (modal.open = true));
-      fileInput.addEventListener('change', ()=> handleImport(fileInput));
-    } else {
-      console.warn('Import UI elements missing (#import-btn, #import-modal, #import-file)');
+    if (btn && !btn.dataset.importHelperBound){
+      btn.dataset.importHelperBound = 'true';
+      btn.addEventListener('click', ()=>{
+        if (!toggleImportModal(true)){
+          console.warn('Import modal could not be opened — element not found.');
+        }
+      });
+    }
+
+    if (fileInput && !fileInput.dataset.importHelperBound){
+      fileInput.dataset.importHelperBound = 'true';
+      fileInput.addEventListener('change', ()=>{
+        if (!isAlpineReady()){
+          handleImport(fileInput);
+        }
+      });
     }
   };
 })();
