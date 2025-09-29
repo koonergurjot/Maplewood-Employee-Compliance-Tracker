@@ -196,12 +196,13 @@ export class DeleteRequirement {
 }
 
 export class BulkUpdateStatus {
-  constructor(db, { employeeIds = [], requirementIds = [], status, completedOn = null } = {}) {
+  constructor(db, { employeeIds = [], requirementIds = [], status, completedOn = null, expiresOn = null } = {}) {
     this.db = db;
     this.employeeIds = employeeIds;
     this.requirementIds = requirementIds;
     this.status = status;
     this.completedOn = completedOn;
+    this.expiresOn = expiresOn;
   }
 
   async execute() {
@@ -211,6 +212,26 @@ export class BulkUpdateStatus {
 
     const changes = [];
     const timestamp = nowISO();
+    const resolveExpiresOn = (requirementId, fallback = null) => {
+      if (this.status !== 'Completed' || this.expiresOn == null) {
+        return this.status === 'Completed' ? fallback : null;
+      }
+      if (this.expiresOn instanceof Map) {
+        return this.expiresOn.has(requirementId)
+          ? (this.expiresOn.get(requirementId) ?? null)
+          : fallback;
+      }
+      if (typeof this.expiresOn === 'object' && !Array.isArray(this.expiresOn)) {
+        if (Object.prototype.hasOwnProperty.call(this.expiresOn, requirementId)) {
+          return this.expiresOn[requirementId] ?? null;
+        }
+        return fallback;
+      }
+      if (typeof this.expiresOn === 'string') {
+        return this.expiresOn;
+      }
+      return fallback;
+    };
 
     await this.db.transaction('rw', this.db.employeeRequirements, async () => {
       for (const employeeId of this.employeeIds) {
@@ -222,10 +243,11 @@ export class BulkUpdateStatus {
 
           if (existing) {
             changes.push({ type: 'update', record: clone(existing) });
+            const expiresOnValue = resolveExpiresOn(requirementId, existing.expiresOn ?? null);
             await this.db.employeeRequirements.update(existing.id, {
               status: this.status,
               completedOn: this.status === 'Completed' ? this.completedOn : null,
-              expiresOn: this.status === 'Completed' ? (existing.expiresOn || null) : null,
+              expiresOn: this.status === 'Completed' ? expiresOnValue : null,
               updatedAt: timestamp
             });
           } else {
@@ -235,7 +257,7 @@ export class BulkUpdateStatus {
               requirementId,
               status: this.status,
               completedOn: this.status === 'Completed' ? this.completedOn : null,
-              expiresOn: null,
+              expiresOn: this.status === 'Completed' ? resolveExpiresOn(requirementId, null) : null,
               notes: null,
               updatedAt: timestamp
             };
