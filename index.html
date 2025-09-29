@@ -61,6 +61,8 @@
     .tour-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000}
     .tour-tooltip{position:absolute;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:.5rem;padding:1rem;max-width:18rem;z-index:1001}
     .tour-highlight{position:relative;z-index:1002;box-shadow:0 0 0 4px var(--accent);border-radius:.25rem}
+    .help-highlight{position:relative;animation:tour-pulse 1.5s ease-in-out infinite;box-shadow:0 0 0 4px rgba(37,99,235,0.45)}
+    @keyframes tour-pulse{0%{box-shadow:0 0 0 0 rgba(37,99,235,0.45)}70%{box-shadow:0 0 0 10px rgba(37,99,235,0)}100%{box-shadow:0 0 0 0 rgba(37,99,235,0)}}
     mark{background:var(--warn);color:var(--text);padding:0 .2rem}
   </style>
 </head>
@@ -82,7 +84,7 @@
         <button id="activity-log-btn" @click="openActivityLog()" class="btn"><i data-feather="list" class="w-4 h-4"></i><span>Activity Log</span></button>
         <button id="calendar-btn" @click="window.open('calendar.html', '_blank')" class="btn"><i data-feather="calendar" class="w-4 h-4"></i><span>Calendar</span></button>
         <button id="settings-btn" @click="openSettingsModal()" class="btn"><i data-feather="settings" class="w-4 h-4"></i><span>Settings</span></button>
-        <button id="help-btn" @click="startTour()" class="btn"><i data-feather="help-circle" class="w-4 h-4"></i><span>Help</span></button>
+        <button id="help-btn" @click="beginTour()" class="btn" :class="{'help-highlight': highlightHelpButton}"><i data-feather="help-circle" class="w-4 h-4"></i><span>Help</span></button>
         <button @click="toggleDarkMode()" class="btn" aria-label="Toggle dark mode"><i :data-feather="darkMode ? 'sun' : 'moon'"></i></button>
       </div>
     </div>
@@ -865,8 +867,11 @@
         db:null, activityLog:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
         importHeaders: [], // ensure array exists before templates iterate over it
         // Toast notification variables
-        showToast: false, toastMessage: '', toastColor: 'var(--success)', toastUndo:null,
+        showToast: false, toastMessage: '', toastColor: 'var(--success)', toastUndo:null, toastTimeout:null,
         lastDeletedRequirement:null,
+        highlightHelpButton:false,
+        tourMarkedSeen:false,
+        tourPromptActive:false,
         // Import UI state
         importType:'excel', importMode:'employees', importData:[],
         importSheets:[], importSheetName:'', importWarning:'', importError:'', importLoading:false,
@@ -902,6 +907,11 @@
 
         async init(){
           this.initDB();
+
+          const markTourSeenHandler = () => this.markTourSeen();
+          window.addEventListener('tour:started', markTourSeenHandler);
+          window.addEventListener('tour:ended', markTourSeenHandler);
+
           await this.initActivityLog();
           await this.loadData();
           const s = await this.db.settings.get('app');
@@ -925,9 +935,9 @@
           if ('serviceWorker' in navigator) try{ await navigator.serviceWorker.register('/sw.js?v=1'); }catch(e){}
 
           const tourSetting = await this.db.settings.get('hasSeenTour');
-          if (!tourSetting?.value && typeof startTour === 'function') {
-            startTour();
-            await this.db.settings.put({id:'hasSeenTour', value:true});
+          this.tourMarkedSeen = !!tourSetting?.value;
+          if (!this.tourMarkedSeen) {
+            this.promptTour();
           }
         },
 
@@ -1097,12 +1107,61 @@
         },
 
         // UI helpers
-        notify(msg,color='var(--success)',undoHandler=null){
+        notify(msg,color='var(--success)',undoHandler=null,duration=3000){
           this.toastMessage=msg;
           this.toastColor=color;
           this.toastUndo=undoHandler;
           this.showToast=true;
-          setTimeout(()=>{this.showToast=false; this.toastUndo=null;},3000);
+          if(this.toastTimeout){
+            clearTimeout(this.toastTimeout);
+          }
+          this.toastTimeout=setTimeout(()=>{
+            this.showToast=false;
+            this.toastUndo=null;
+            this.toastTimeout=null;
+          },duration);
+        },
+        promptTour(){
+          this.tourPromptActive=true;
+          this.highlightHelpButton=true;
+          this.notify('Need a walkthrough? Click Help to start the tour.', 'var(--accent)', null, 6000);
+        },
+        async beginTour(){
+          if(typeof startTour === 'function'){
+            startTour();
+          }
+          await this.markTourSeen();
+        },
+        async markTourSeen(){
+          this.highlightHelpButton=false;
+          if(this.tourPromptActive){
+            this.tourPromptActive=false;
+            if(this.toastTimeout){
+              clearTimeout(this.toastTimeout);
+              this.toastTimeout=null;
+            }
+            this.showToast=false;
+            this.toastUndo=null;
+          }
+          if(this.tourMarkedSeen){
+            return;
+          }
+          if(!this.db){
+            this.tourMarkedSeen=true;
+            return;
+          }
+          try{
+            const existing = await this.db.settings.get('hasSeenTour');
+            if(existing?.value){
+              this.tourMarkedSeen=true;
+              return;
+            }
+            const payload = existing ? {...existing, value:true} : {id:'hasSeenTour', value:true};
+            await this.db.settings.put(payload);
+            this.tourMarkedSeen=true;
+          }catch(error){
+            console.error('Failed to persist tour completion', error);
+          }
         },
         async recordActivity(actionType, targets = [], metadata = {}, undoPayload = null){
           if(!this.activityLog) return;
