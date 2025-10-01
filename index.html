@@ -177,7 +177,7 @@
     <div class="mb-3 text-sm" :style="'color:var(--muted)'">
       <span>Total employees: </span>
       <strong x-text="employees.length"></strong>
-      <template x-if="filteredEmployees.length">
+      <template x-if="isFiltering">
         <span> (showing <span x-text="filteredEmployees.length"></span>)</span>
       </template>
     </div>
@@ -966,7 +966,7 @@
         // Admin panel state
         showAddEmployeeModal:false, showAddRequirementModal:false, showBulkActionsModal:false,
         showEditEmployeeModal:false, showEditRequirementModal:false,
-          searchQuery:'', roleFilter:'', statusFilter:'', reqStatusFilter:'', filteredEmployees:[], sortField:'firstName', sortDirection:'asc',
+          searchQuery:'', roleFilter:'', statusFilter:'', reqStatusFilter:'', filteredEmployees:[], isFiltering:false, sortField:'firstName', sortDirection:'asc',
           globalSearch:'', searchResults:[],
         newEmployee:{firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''},
           newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
@@ -1819,8 +1819,10 @@
           },
         filterEmployees(){
           let filtered = [...this.employees];
-          if (this.searchQuery) {
-            const query = this.searchQuery.toLowerCase();
+          const rawQuery = this.searchQuery || '';
+          const trimmedQuery = rawQuery.trim();
+          if (trimmedQuery) {
+            const query = trimmedQuery.toLowerCase();
             filtered = filtered.filter(emp =>
               emp.firstName.toLowerCase().includes(query) ||
               emp.lastName.toLowerCase().includes(query) ||
@@ -1839,7 +1841,8 @@
               this.requirements.some(req => this.getStatus(emp.id, req.id) === this.reqStatusFilter)
             );
           }
-          this.filteredEmployees = filtered;
+          this.isFiltering = Boolean(trimmedQuery || this.roleFilter || this.statusFilter || this.reqStatusFilter);
+          this.filteredEmployees = this.isFiltering ? filtered : [];
         },
         performGlobalSearch(query){
           const requirementSource = this.orderedVisibleRequirements();
@@ -1943,7 +1946,8 @@
           }
         },
         sortedEmployees(){
-          const arr = this.filteredEmployees.length ? [...this.filteredEmployees] : [...this.employees];
+          const source = this.isFiltering ? this.filteredEmployees : this.employees;
+          const arr = [...source];
           return arr.sort((a,b) => {
             let aVal = (a[this.sortField] || '').toString().toLowerCase();
             let bVal = (b[this.sortField] || '').toString().toLowerCase();
