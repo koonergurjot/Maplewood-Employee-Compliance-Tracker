@@ -59,6 +59,12 @@
     .requirement-header:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,0.1)}
     .admin-card{transition:all 0.2s ease}
     .admin-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.1)}
+    .chart-wrapper{position:relative;height:160px}
+    .chart-wrapper canvas{width:100%!important;height:100%!important}
+    .trend-chart-wrapper{height:220px}
+    @media (min-width:768px){
+      .trend-chart-wrapper{height:260px}
+    }
     .tour-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000}
     .tour-tooltip{position:absolute;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:.5rem;padding:1rem;max-width:18rem;z-index:1001}
     .tour-highlight{position:relative;z-index:1002;box-shadow:0 0 0 4px var(--accent);border-radius:.25rem}
@@ -324,7 +330,22 @@
           <div class="text-sm" style="color:var(--muted)">Incomplete Requirements</div>
         </div>
         <div class="admin-card card p-4 md:col-span-5">
-          <canvas id="complianceChart" class="mx-auto" height="160"></canvas>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-base font-semibold">Compliance Breakdown</h3>
+            <span class="text-xs" style="color:var(--muted)">Current totals</span>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="complianceChart" class="mx-auto" height="160"></canvas>
+          </div>
+        </div>
+        <div class="admin-card card p-4 md:col-span-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-base font-semibold">Compliance Trend</h3>
+            <span class="text-xs" style="color:var(--muted)">Recent snapshots</span>
+          </div>
+          <div class="chart-wrapper trend-chart-wrapper">
+            <canvas id="complianceTrendChart"></canvas>
+          </div>
         </div>
       </div>
 
@@ -973,6 +994,10 @@
           editingEmployee:{}, editingRequirement:{},
         selectedEmployees:[], selectedRequirements:[], bulkAction:'',
         complianceChart:null,
+        complianceTrendChart:null,
+        complianceHistory:[],
+        complianceHistoryMemory:[],
+        complianceHistoryLimit:30,
         // Chart.js plugin container so we can safely set properties during init
         chartBgPlugin: {
           id: 'chartBgColor',
@@ -1045,6 +1070,14 @@
             settings:'id',
             activityLog:'id,timestamp,actionType'
           });
+          this.db.version(9).stores({
+            employees:'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
+            requirements:'id, name, defaultExpiryDays, color',
+            employeeRequirements:'id, [employeeId+requirementId], status, completedOn, expiresOn, notes',
+            settings:'id',
+            activityLog:'id,timestamp,actionType',
+            complianceSnapshots:'date'
+          });
           this.db.on('populate', (tx) => {
             const now = new Date().toISOString();
             const seed = (name, days=null, color='#fef3c7')=>({id:generateId(),name,defaultExpiryDays:days,color,createdAt:now,updatedAt:now});
@@ -1106,6 +1139,7 @@
             this.erMap.get(er.employeeId).set(er.requirementId, er);
           }
           await this.loadVisibleRequirements();
+          await this.collectComplianceSnapshot();
           this.renderComplianceChart();
           if (!this.loadError) {
             this.filterEmployees();
@@ -1305,6 +1339,7 @@
         async toggleDarkMode(){
           this.darkMode=!this.darkMode;
           document.documentElement.classList.toggle('dark', this.darkMode);
+          this.renderComplianceChart();
           if (this.loadError || !this.db) return;
           const prev=await this.db.settings.get('app')||{id:'app'};
           await this.db.settings.put({...prev, darkMode:this.darkMode});
@@ -1797,24 +1832,227 @@
             return new Date(er.expiresOn) <= new Date();
           }).length;
         },
-          getIncompleteCount(){
-            return this.employeeRequirements.filter(er => er.status === 'NotCompleted').length;
-          },
-          renderComplianceChart(){
+        getIncompleteCount(){
+          return this.employeeRequirements.filter(er => er.status === 'NotCompleted').length;
+        },
+        renderComplianceChart(){
             const ctx=document.getElementById('complianceChart');
             if(!ctx) return;
             const data=[this.getCompletedCount(),this.getExpiringSoonCount(),this.getExpiredCount(),this.getIncompleteCount()];
+            const colors=['--success','--expiring','--warn','--danger'].map(v=>this.getThemeColor(v));
+            const legendColor=this.getThemeColor('--muted','#6b7280');
+            const pluginColor=this.getThemeColor('--card','#ffffff');
             if(this.complianceChart){
-              this.complianceChart.data.datasets[0].data=data;
+              const dataset=this.complianceChart.data.datasets[0];
+              dataset.data=data;
+              dataset.backgroundColor=colors;
+              this.complianceChart.options.plugins=this.complianceChart.options.plugins||{};
+              this.complianceChart.options.plugins.chartBgColor={color:pluginColor};
+              if(this.complianceChart.options.plugins.legend?.labels){
+                this.complianceChart.options.plugins.legend.labels.color=legendColor;
+              }
               this.complianceChart.update();
             } else {
               this.complianceChart=new Chart(ctx,{
                 type:'doughnut',
                 data:{
                   labels:['Completed','Expiring Soon','Expired','Incomplete'],
-                  datasets:[{data,backgroundColor:['var(--success)','var(--expiring)','var(--warn)','var(--danger)']}]
+                  datasets:[{
+                    data,
+                    backgroundColor:colors,
+                    borderWidth:0
+                  }]
                 },
-                options:{responsive:true,maintainAspectRatio:false}
+                options:{
+                  responsive:true,
+                  maintainAspectRatio:false,
+                  plugins:{
+                    chartBgColor:{color:pluginColor},
+                    legend:{
+                      labels:{color:legendColor}
+                    }
+                  }
+                }
+              });
+            }
+            this.renderComplianceTrendChart();
+          },
+          async collectComplianceSnapshot(){
+            const snapshot=this.buildComplianceSnapshot();
+            const todayKey=snapshot.date;
+            if(!todayKey){
+              this.updateInMemoryHistory(snapshot);
+              return;
+            }
+            if(!this.db?.complianceSnapshots){
+              this.updateInMemoryHistory(snapshot);
+              return;
+            }
+            try{
+              const existing=await this.db.complianceSnapshots.get(todayKey);
+              if(!existing||existing.compliant!==snapshot.compliant||existing.expiring!==snapshot.expiring||existing.overdue!==snapshot.overdue||existing.incomplete!==snapshot.incomplete||existing.total!==snapshot.total){
+                await this.db.complianceSnapshots.put(snapshot);
+              }
+              const limit=this.complianceHistoryLimit || 30;
+              const totalCount=await this.db.complianceSnapshots.count();
+              if(totalCount>limit){
+                const overflow=totalCount-limit;
+                const staleKeys=await this.db.complianceSnapshots.orderBy('date').limit(overflow).keys();
+                if(staleKeys.length){
+                  await this.db.complianceSnapshots.bulkDelete(staleKeys);
+                }
+              }
+              const history=await this.db.complianceSnapshots.orderBy('date').reverse().limit(limit).toArray();
+              this.complianceHistory=history.reverse();
+              this.complianceHistoryMemory=[];
+            }catch(error){
+              console.warn('Failed to persist compliance snapshot', error);
+              this.updateInMemoryHistory(snapshot);
+            }
+          },
+          updateInMemoryHistory(snapshot){
+            if(!snapshot) return;
+            this.complianceHistoryMemory.push(snapshot);
+            if(this.complianceHistoryMemory.length>this.complianceHistoryLimit){
+              this.complianceHistoryMemory=this.complianceHistoryMemory.slice(-this.complianceHistoryLimit);
+            }
+            this.complianceHistory=[...this.complianceHistoryMemory];
+          },
+          buildComplianceSnapshot(){
+            const now=new Date();
+            const isoDate=Number.isNaN(now.getTime())?null:now.toISOString();
+            const snapshot={
+              date:isoDate?isoDate.slice(0,10):null,
+              capturedAt:isoDate,
+              compliant:0,
+              expiring:0,
+              overdue:0,
+              incomplete:0,
+              total:this.employeeRequirements.length
+            };
+            for(const er of this.employeeRequirements){
+              const status=this.calcStatus(er.employeeId, er.requirementId);
+              if(status==='compliant') snapshot.compliant++;
+              else if(status==='expiring') snapshot.expiring++;
+              else if(status==='overdue') snapshot.overdue++;
+              else snapshot.incomplete++;
+            }
+            return snapshot;
+          },
+          getThemeColor(variable,fallback='#000000'){
+            if(!variable) return fallback;
+            try{
+              const style=getComputedStyle(document.documentElement);
+              const value=style.getPropertyValue(variable)?.trim();
+              return value||fallback;
+            }catch(error){
+              return fallback;
+            }
+          },
+          withAlpha(color,alpha){
+            if(!color) return `rgba(0,0,0,${alpha})`;
+            if(color.startsWith('#')){
+              let hex=color.replace('#','');
+              if(hex.length===3){
+                hex=hex.split('').map(ch=>ch+ch).join('');
+              }
+              if(hex.length===6){
+                const bigint=parseInt(hex,16);
+                const r=(bigint>>16)&255;
+                const g=(bigint>>8)&255;
+                const b=bigint&255;
+                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+              }
+            }
+            if(color.startsWith('rgb(')){
+              return color.replace('rgb','rgba').replace(')',`, ${alpha})`);
+            }
+            if(color.startsWith('rgba(')){
+              return color.replace(/rgba\(([^)]+)\)/,(_,inner)=>{
+                const parts=inner.split(',').map(p=>p.trim());
+                return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${alpha})`;
+              });
+            }
+            return color;
+          },
+          renderComplianceTrendChart(){
+            const ctx=document.getElementById('complianceTrendChart');
+            if(!ctx) return;
+            const history=this.complianceHistory?.length?this.complianceHistory:[];
+            const labels=history.length?history.map(entry=>entry.date):[new Date().toISOString().slice(0,10)];
+            const datasets=[
+              {key:'compliant',label:'Compliant',colorVar:'--success'},
+              {key:'expiring',label:'Expiring Soon',colorVar:'--expiring'},
+              {key:'overdue',label:'Overdue',colorVar:'--warn'}
+            ].map(cfg=>{
+              const baseColor=this.getThemeColor(cfg.colorVar);
+              return {
+                label:cfg.label,
+                data:history.length?history.map(entry=>entry?.[cfg.key]||0):[0],
+                borderColor:baseColor,
+                backgroundColor:this.withAlpha(baseColor,0.2),
+                fill:true,
+                tension:0.35,
+                pointRadius:3,
+                pointHoverRadius:5
+              };
+            });
+            const legendColor=this.getThemeColor('--muted','#6b7280');
+            const gridColor=this.withAlpha(this.getThemeColor('--line','#d1d5db'),0.35);
+            const tickColor=this.getThemeColor('--text','#111827');
+            const pluginColor=this.getThemeColor('--card','#ffffff');
+            if(this.complianceTrendChart){
+              this.complianceTrendChart.data.labels=labels;
+              if(this.complianceTrendChart.data.datasets.length!==datasets.length){
+                this.complianceTrendChart.data.datasets=datasets;
+              }else{
+                this.complianceTrendChart.data.datasets.forEach((dataset,idx)=>{
+                  const incoming=datasets[idx];
+                  if(!incoming) return;
+                  dataset.data=incoming.data;
+                  dataset.borderColor=incoming.borderColor;
+                  dataset.backgroundColor=incoming.backgroundColor;
+                });
+              }
+              this.complianceTrendChart.options.plugins.chartBgColor={color:pluginColor};
+              if(this.complianceTrendChart.options.plugins.legend?.labels){
+                this.complianceTrendChart.options.plugins.legend.labels.color=legendColor;
+              }
+              if(this.complianceTrendChart.options.scales?.x){
+                this.complianceTrendChart.options.scales.x.ticks.color=tickColor;
+                this.complianceTrendChart.options.scales.x.grid.color=gridColor;
+              }
+              if(this.complianceTrendChart.options.scales?.y){
+                this.complianceTrendChart.options.scales.y.ticks.color=tickColor;
+                this.complianceTrendChart.options.scales.y.grid.color=gridColor;
+              }
+              this.complianceTrendChart.update();
+            }else{
+              this.complianceTrendChart=new Chart(ctx,{
+                type:'line',
+                data:{labels,datasets},
+                options:{
+                  responsive:true,
+                  maintainAspectRatio:false,
+                  plugins:{
+                    chartBgColor:{color:pluginColor},
+                    legend:{
+                      labels:{color:legendColor}
+                    }
+                  },
+                  interaction:{mode:'index',intersect:false},
+                  scales:{
+                    x:{
+                      ticks:{color:tickColor},
+                      grid:{color:gridColor,drawBorder:false}
+                    },
+                    y:{
+                      beginAtZero:true,
+                      ticks:{color:tickColor},
+                      grid:{color:gridColor,drawBorder:false}
+                    }
+                  }
+                }
               });
             }
           },
