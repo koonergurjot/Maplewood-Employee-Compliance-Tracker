@@ -2419,7 +2419,10 @@
             }
           },
           getUniqueRoles(){
-            return [...new Set(this.employees.map(emp => emp.role).filter(Boolean))];
+            const roles = this.employees
+              .map(emp => (emp.role ?? '').toString())
+              .filter(role => role);
+            return [...new Set(roles)];
           },
         filterEmployees(){
           let filtered = [...this.employees];
@@ -2427,12 +2430,18 @@
           const trimmedQuery = rawQuery.trim();
           if (trimmedQuery) {
             const query = trimmedQuery.toLowerCase();
-            filtered = filtered.filter(emp =>
-              emp.firstName.toLowerCase().includes(query) ||
-              emp.lastName.toLowerCase().includes(query) ||
-              emp.role.toLowerCase().includes(query) ||
-              (emp.employeeId ?? '').toString().toLowerCase().includes(query)
-            );
+            filtered = filtered.filter(emp => {
+              const first = (emp.firstName ?? '').toString().toLowerCase();
+              const last = (emp.lastName ?? '').toString().toLowerCase();
+              const role = (emp.role ?? '').toString().toLowerCase();
+              const employeeId = (emp.employeeId ?? '').toString().toLowerCase();
+              return (
+                first.includes(query) ||
+                last.includes(query) ||
+                role.includes(query) ||
+                employeeId.includes(query)
+              );
+            });
           }
           if (this.roleFilter) {
             filtered = filtered.filter(emp => emp.role === this.roleFilter);
