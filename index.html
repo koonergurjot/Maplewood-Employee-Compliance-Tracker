@@ -262,7 +262,7 @@
                             'badge--compliant': calcStatus(emp.id, req.id) === 'compliant',
                             'badge--expiring': calcStatus(emp.id, req.id) === 'expiring',
                             'badge--overdue': calcStatus(emp.id, req.id) === 'overdue',
-                            'badge--incomplete': calcStatus(emp.id, req.id) === 'incomplete'
+                            'badge--incomplete': ['incomplete','not-required'].includes(calcStatus(emp.id, req.id))
                           }"
                           @click="toggleStatus(emp, req)"
                           :title="getStatusTooltip(emp.id, req.id)"
@@ -271,7 +271,8 @@
                             compliant: '✔ Compliant',
                             expiring: '⚠ Expiring',
                             overdue: '✖ Overdue',
-                            incomplete: '○ Incomplete'
+                            incomplete: '○ Incomplete',
+                            'not-required': '◎ Not Required'
                           }[calcStatus(emp.id, req.id)]">
                         </button>
                       </div>
@@ -380,6 +381,7 @@
             <option value="Completed">Completed</option>
             <option value="Expired">Expired</option>
             <option value="NotCompleted">Incomplete</option>
+            <option value="NotRequired">Not Required</option>
           </select>
         </div>
       </div>
@@ -663,6 +665,69 @@
               </li>
             </template>
           </ul>
+          <div class="mt-6 pt-4 border-t space-y-4" style="border-color:var(--line)">
+            <div class="flex items-center justify-between">
+              <h4 class="text-base font-semibold">Role Templates</h4>
+              <button type="button" class="btn btn-primary text-sm" @click="startTemplateCreate()">New Template</button>
+            </div>
+            <template x-if="!templates.length">
+              <p class="text-sm" style="color:var(--muted)">No templates yet. Create one to tailor requirements per role.</p>
+            </template>
+            <ul class="space-y-2" x-show="templates.length">
+              <template x-for="template in templates" :key="template.id">
+                <li class="border rounded p-3" style="border-color:var(--line)">
+                  <div class="flex flex-col gap-3">
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div class="font-semibold" x-text="template.name"></div>
+                        <div class="text-xs" style="color:var(--muted)">
+                          <span x-text="template.roles.length ? template.roles.join(', ') : 'No roles assigned'"></span>
+                        </div>
+                        <div class="text-xs" style="color:var(--muted)">
+                          <span x-text="`Required: ${templateRequirementCount(template)} of ${requirements.length}`"></span>
+                        </div>
+                      </div>
+                      <div class="flex flex-wrap gap-2 justify-end">
+                        <button type="button" class="btn text-sm" @click="editTemplate(template)">Edit</button>
+                        <button type="button" class="btn text-sm" :disabled="templateApplyLoading" @click="applyTemplateToRoles(template)">Apply to Roles</button>
+                        <button type="button" class="btn text-sm" :disabled="templateApplyLoading" x-show="selectedEmployees.length" @click="applyTemplateToSelection(template)">Apply to Selection</button>
+                        <button type="button" class="btn text-sm" style="color:var(--danger)" @click="confirmDeleteTemplate(template)">Delete</button>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              </template>
+            </ul>
+            <div x-show="showTemplateForm" class="border rounded p-3" style="border-color:var(--line)">
+              <div class="grid gap-4">
+                <div>
+                  <label class="block text-sm font-medium mb-1">Template Name</label>
+                  <input type="text" x-model="templateEditor.name" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium mb-1">Roles</label>
+                  <input type="text" x-model="templateEditor.rolesInput" placeholder="Comma separated roles" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                  <p class="text-xs mt-1" style="color:var(--muted)">Roles are matched case-insensitively.</p>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium mb-2">Required Requirements</label>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                    <template x-for="req in getTemplateRequirementList()" :key="req.id">
+                      <label class="flex items-center gap-2 p-2 border rounded" style="border-color:var(--line)">
+                        <input type="checkbox" class="checkbox" :checked="!templateEditor.excludedRequirementIds.includes(req.id)" @change="toggleTemplateRequirement(req.id, $event.target.checked)">
+                        <span class="text-sm" x-text="req.name"></span>
+                      </label>
+                    </template>
+                  </div>
+                </div>
+                <div class="flex justify-end gap-2">
+                  <button type="button" class="btn" @click="cancelTemplateEdit()">Cancel</button>
+                  <button type="button" class="btn btn-primary" @click="saveTemplate()">Save Template</button>
+                </div>
+              </div>
+            </div>
+            <div x-show="templateApplyLoading" class="text-xs" style="color:var(--muted)">Applying template updates...</div>
+          </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
           <button @click="saveAndCloseSettings" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save</button>
@@ -969,6 +1034,9 @@
         showSettingsModal:false, settingsSortable:null,
         showActivityLogModal:false,
         db:null, activityLog:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
+        templates:[], templateRoleMap:new Map(), showTemplateForm:false,
+        templateEditor:{ id:null, name:'', rolesInput:'', excludedRequirementIds:[] },
+        templateApplyLoading:false,
         importHeaders: [], // ensure array exists before templates iterate over it
         // Toast notification variables
         showToast: false, toastMessage: '', toastColor: 'var(--success)', toastUndo:null, toastTimeout:null,
@@ -1078,6 +1146,25 @@
             activityLog:'id,timestamp,actionType',
             complianceSnapshots:'date'
           });
+          this.db.version(10).stores({
+            employees:'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
+            requirements:'id, name, defaultExpiryDays, color',
+            employeeRequirements:'id, [employeeId+requirementId], status, completedOn, expiresOn, notes',
+            settings:'id',
+            activityLog:'id,timestamp,actionType',
+            complianceSnapshots:'date',
+            roleRequirementProfiles:'id, name'
+          }).upgrade(async tx => {
+            try{
+              const settingsTable = tx.table('settings');
+              const existingSetting = await settingsTable.get('roleRequirementProfiles');
+              if(!existingSetting){
+                await settingsTable.put({ id:'roleRequirementProfiles', value:[] });
+              }
+            }catch(error){
+              console.warn('Failed to seed role requirement profile settings', error);
+            }
+          });
           this.db.on('populate', (tx) => {
             const now = new Date().toISOString();
             const seed = (name, days=null, color='#fef3c7')=>({id:generateId(),name,defaultExpiryDays:days,color,createdAt:now,updatedAt:now});
@@ -1095,6 +1182,7 @@
             ]);
             tx.table('settings').put({id:'app',darkMode:false});
             tx.table('settings').put({id:'hasSeenTour', value:false});
+            tx.table('settings').put({id:'roleRequirementProfiles', value:[]});
           });
         },
 
@@ -1139,6 +1227,7 @@
             this.erMap.get(er.employeeId).set(er.requirementId, er);
           }
           await this.loadVisibleRequirements();
+          await this.loadTemplates();
           await this.collectComplianceSnapshot();
           this.renderComplianceChart();
           if (!this.loadError) {
@@ -1172,11 +1261,266 @@
           });
         },
 
+        async loadTemplates(){
+          if (this.loadError || !this.db || !this.db.roleRequirementProfiles){
+            this.templates = [];
+            this.templateRoleMap = new Map();
+            return;
+          }
+          try{
+            const raw = await this.db.roleRequirementProfiles.toArray();
+            const validIds = new Set(this.requirements.map(r => r.id));
+            const sanitized = [];
+            const dirty = [];
+            for (const template of raw){
+              const roles = Array.isArray(template.roles)
+                ? template.roles.map(role => (role ?? '').toString().trim()).filter(Boolean)
+                : [];
+              const excluded = Array.isArray(template.excludedRequirementIds)
+                ? template.excludedRequirementIds.filter(id => validIds.has(id))
+                : [];
+              const sanitizedTemplate = {
+                ...template,
+                roles,
+                excludedRequirementIds: excluded
+              };
+              sanitized.push(sanitizedTemplate);
+              const originalRoleCount = Array.isArray(template.roles)
+                ? template.roles.filter(role => (role ?? '').toString().trim()).length
+                : 0;
+              const originalExcludedCount = Array.isArray(template.excludedRequirementIds)
+                ? template.excludedRequirementIds.length
+                : 0;
+              if (roles.length !== originalRoleCount || excluded.length !== originalExcludedCount){
+                dirty.push(sanitizedTemplate);
+              }
+            }
+            if (dirty.length){
+              await Promise.all(dirty.map(t => this.db.roleRequirementProfiles.put(t)));
+            }
+            this.templates = sanitized;
+          }catch(error){
+            console.error('Failed to load templates', error);
+            this.templates = [];
+          }
+          this.rebuildTemplateRoleMap();
+        },
+
+        rebuildTemplateRoleMap(){
+          const map = new Map();
+          for (const template of this.templates){
+            const roles = Array.isArray(template.roles) ? template.roles : [];
+            for (const role of roles){
+              const key = this.normalizeRole(role);
+              if (key && !map.has(key)){
+                map.set(key, template);
+              }
+            }
+          }
+          this.templateRoleMap = map;
+        },
+
+        normalizeRole(role){
+          return (role ?? '').toString().trim().toLowerCase();
+        },
+
+        getTemplateForRole(role){
+          return this.templateRoleMap.get(this.normalizeRole(role)) || null;
+        },
+
+        getTemplateRequirementList(){
+          const source = this.visibleRequirements?.length ? [...this.visibleRequirements] : [...this.requirements];
+          return source.sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
+        },
+
+        startTemplateCreate(){
+          this.showTemplateForm = true;
+          this.templateEditor = { id:null, name:'', rolesInput:'', excludedRequirementIds:[] };
+        },
+
+        editTemplate(template){
+          if(!template) return;
+          this.showTemplateForm = true;
+          this.templateEditor = {
+            id: template.id,
+            name: template.name || '',
+            rolesInput: (template.roles || []).join(', '),
+            excludedRequirementIds: Array.isArray(template.excludedRequirementIds) ? [...template.excludedRequirementIds] : []
+          };
+        },
+
+        cancelTemplateEdit(){
+          this.showTemplateForm = false;
+          this.templateEditor = { id:null, name:'', rolesInput:'', excludedRequirementIds:[] };
+        },
+
+        toggleTemplateRequirement(reqId, required){
+          const current = new Set(this.templateEditor.excludedRequirementIds || []);
+          if(required){
+            current.delete(reqId);
+          } else {
+            current.add(reqId);
+          }
+          this.templateEditor.excludedRequirementIds = Array.from(current);
+        },
+
+        templateRequirementCount(template){
+          if(!template) return 0;
+          const excluded = Array.isArray(template.excludedRequirementIds) ? template.excludedRequirementIds.length : 0;
+          return Math.max(0, this.requirements.length - excluded);
+        },
+
+        async saveTemplate(){
+          if (this.loadError || !this.db) return;
+          const name = (this.templateEditor.name || '').trim();
+          if(!name){
+            this.notify('Template name is required', 'var(--danger)');
+            return;
+          }
+          const roles = (this.templateEditor.rolesInput || '')
+            .split(',')
+            .map(r => r.trim())
+            .filter(Boolean);
+          const validIds = new Set(this.requirements.map(r => r.id));
+          const excluded = Array.from(new Set((this.templateEditor.excludedRequirementIds || []).filter(id => validIds.has(id))));
+          const timestamp = new Date().toISOString();
+          let createdAt = timestamp;
+          if (this.templateEditor.id){
+            const existing = this.templates.find(t => t.id === this.templateEditor.id);
+            if (existing?.createdAt){
+              createdAt = existing.createdAt;
+            }
+          }
+          const payload = {
+            id: this.templateEditor.id || generateId(),
+            name,
+            roles,
+            excludedRequirementIds: excluded,
+            createdAt,
+            updatedAt: timestamp
+          };
+          try{
+            await this.db.roleRequirementProfiles.put(payload);
+            await this.loadTemplates();
+            this.cancelTemplateEdit();
+            this.notify('Template saved');
+          }catch(error){
+            console.error('Failed to save template', error);
+            this.notify('Failed to save template', 'var(--danger)');
+          }
+        },
+
+        confirmDeleteTemplate(template){
+          if(!template) return;
+          if(confirm(`Delete template "${template.name}"?`)){
+            this.deleteTemplate(template.id);
+          }
+        },
+
+        async deleteTemplate(templateId){
+          if (this.loadError || !this.db || !templateId) return;
+          try{
+            await this.db.roleRequirementProfiles.delete(templateId);
+            if(this.templateEditor.id === templateId){
+              this.cancelTemplateEdit();
+            }
+            await this.loadTemplates();
+            this.notify('Template deleted', 'var(--warn)');
+          }catch(error){
+            console.error('Failed to delete template', error);
+            this.notify('Failed to delete template', 'var(--danger)');
+          }
+        },
+
+        async applyTemplateToRoles(template){
+          if(!template) return;
+          const roles = (template.roles || []).map(r => this.normalizeRole(r)).filter(Boolean);
+          if(!roles.length){
+            this.notify('Add at least one role before applying.', 'var(--warn)');
+            return;
+          }
+          const matches = this.employees
+            .filter(emp => roles.includes(this.normalizeRole(emp.role)))
+            .map(emp => emp.id);
+          if(!matches.length){
+            this.notify('No employees matched the template roles.', 'var(--warn)');
+            return;
+          }
+          await this.applyTemplateToEmployees(template, matches);
+        },
+
+        async applyTemplateToSelection(template){
+          if(!template) return;
+          const ids = Array.from(new Set(this.selectedEmployees));
+          if(!ids.length){
+            this.notify('Select employees before applying a template.', 'var(--warn)');
+            return;
+          }
+          await this.applyTemplateToEmployees(template, ids);
+        },
+
+        async applyTemplateToEmployees(template, employeeIds){
+          if (this.loadError || !this.db || !Array.isArray(employeeIds) || !employeeIds.length) return;
+          this.templateApplyLoading = true;
+          const timestamp = new Date().toISOString();
+          const excludedSet = new Set((template?.excludedRequirementIds || []).map(id => (id ?? '').toString().trim()).filter(Boolean));
+          const requirementIds = this.requirements.map(r => r.id);
+          try{
+            await this.db.transaction('rw', this.db.employeeRequirements, async () => {
+              for (const employeeId of employeeIds){
+                for (const requirementId of requirementIds){
+                  const isExcluded = excludedSet.has((requirementId ?? '').toString().trim());
+                  const existing = this.getER(employeeId, requirementId);
+                  if(existing){
+                    if(isExcluded){
+                      if(existing.status !== 'NotRequired' || existing.completedOn || existing.expiresOn){
+                        await this.db.employeeRequirements.update(existing.id, {
+                          status:'NotRequired',
+                          completedOn:null,
+                          expiresOn:null,
+                          updatedAt: timestamp
+                        });
+                      }
+                    } else if (existing.status === 'NotRequired') {
+                      await this.db.employeeRequirements.update(existing.id, {
+                        status:'NotCompleted',
+                        completedOn:null,
+                        expiresOn:null,
+                        updatedAt: timestamp
+                      });
+                    }
+                  } else {
+                    const record = {
+                      id: generateId(),
+                      employeeId,
+                      requirementId,
+                      status: isExcluded ? 'NotRequired' : 'NotCompleted',
+                      completedOn: null,
+                      expiresOn: null,
+                      notes: null,
+                      updatedAt: timestamp
+                    };
+                    await this.db.employeeRequirements.add(record);
+                  }
+                }
+              }
+            });
+            await this.loadData();
+            this.notify(`Template applied to ${employeeIds.length} employee${employeeIds.length === 1 ? '' : 's'}.`);
+          }catch(error){
+            console.error('Failed to apply template to employees', error);
+            this.notify('Failed to apply template', 'var(--danger)');
+          }finally{
+            this.templateApplyLoading = false;
+          }
+        },
+
         orderedVisibleRequirements(){
           return this.visibleRequirements.filter(r => r.visible).sort((a,b) => a.order - b.order);
         },
 
         openSettingsModal(){
+          this.cancelTemplateEdit();
           this.showSettingsModal = true;
           this.$nextTick(() => {
             if(this.settingsSortable) this.settingsSortable.destroy();
@@ -1196,16 +1540,29 @@
         async saveAndCloseSettings(){
           this.visibleRequirements.forEach((r,i)=> r.order=i);
           await this.saveRequirementsSettings();
+          this.cancelTemplateEdit();
           this.showSettingsModal = false;
           this.refreshFeatherIcons();
         },
 
         // Status helpers (minimal)
           getER(eId,rId){ return this.erMap.get(eId)?.get(rId) || null; },
-          getStatus(eId,rId){ const er=this.getER(eId,rId); if(!er||er.status==='NotCompleted') return 'NotCompleted'; if(er.expiresOn){ const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000); if(d<=0) return 'Expired'; } return 'Completed'; },
+          getStatus(eId,rId){
+            const er=this.getER(eId,rId);
+            if(!er) return 'NotCompleted';
+            if(er.status==='NotRequired') return 'NotRequired';
+            if(er.status!=='Completed') return 'NotCompleted';
+            if(er.expiresOn){
+              const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000);
+              if(d<=0) return 'Expired';
+            }
+            return 'Completed';
+          },
           calcStatus(eId,rId){
             const er=this.getER(eId,rId);
-            if(!er || er.status !== 'Completed') return 'incomplete';
+            if(!er) return 'incomplete';
+            if(er.status==='NotRequired') return 'not-required';
+            if(er.status!=='Completed') return 'incomplete';
             if(er.expiresOn){
               const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000);
               if(d<=0) return 'overdue';
@@ -1218,6 +1575,10 @@
 
             try {
               const er=this.getER(emp.id, req.id);
+              if(er?.status === 'NotRequired'){
+                this.notify('This requirement is marked as not required for this employee.', 'var(--warn)');
+                return;
+              }
               const previousStatus = er?.status ?? 'NotCompleted';
               const newStatus = previousStatus === 'Completed' ? 'NotCompleted' : 'Completed';
               console.log('Current status:', previousStatus, 'New status:', newStatus);
@@ -1928,9 +2289,10 @@
               expiring:0,
               overdue:0,
               incomplete:0,
-              total:this.employeeRequirements.length
+              total:this.employeeRequirements.filter(er => er.status !== 'NotRequired').length
             };
             for(const er of this.employeeRequirements){
+              if(er.status === 'NotRequired') continue;
               const status=this.calcStatus(er.employeeId, er.requirementId);
               if(status==='compliant') snapshot.compliant++;
               else if(status==='expiring') snapshot.expiring++;
@@ -2357,8 +2719,14 @@
         },
         getStatusTooltip(empId, reqId){
           const er = this.getER(empId, reqId);
-          if (!er || er.status !== 'Completed') {
-            return !er || !er.completedOn ? 'Not completed yet' : 'Marked incomplete';
+          if (!er) {
+            return 'Not completed yet';
+          }
+          if (er.status === 'NotRequired') {
+            return 'Not required for this employee';
+          }
+          if (er.status !== 'Completed') {
+            return !er.completedOn ? 'Not completed yet' : 'Marked incomplete';
           }
           if (er.expiresOn) {
             const daysLeft = Math.ceil((new Date(er.expiresOn) - new Date()) / 86400000);
