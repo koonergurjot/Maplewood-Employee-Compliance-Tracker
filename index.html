@@ -1043,6 +1043,9 @@
           }
           await this.loadVisibleRequirements();
           this.renderComplianceChart();
+          if (!this.loadError) {
+            this.filterEmployees();
+          }
         },
 
         async loadVisibleRequirements(){
