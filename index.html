@@ -34,8 +34,8 @@
     });
   </script>
   <style>
-    :root{ --bg:#f3f4f6; --card:#ffffff; --line:#e5e7eb; --text:#111827; --muted:#6b7280; --accent:#2563eb; --success:#10b981; --warn:#f59e0b; --danger:#ef4444; --badge-text:#111827; }
-    .dark:root, .dark{ --bg:#0b1220; --card:#111827; --line:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --accent:#60a5fa; --success:#34d399; --warn:#fbbf24; --danger:#f87171; --badge-text:#111827; }
+    :root{ --bg:#f3f4f6; --card:#ffffff; --line:#e5e7eb; --text:#111827; --muted:#6b7280; --accent:#2563eb; --success:#10b981; --expiring:#f97316; --warn:#f59e0b; --danger:#ef4444; --badge-text:#111827; }
+    .dark:root, .dark{ --bg:#0b1220; --card:#111827; --line:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --accent:#60a5fa; --success:#34d399; --expiring:#fb923c; --warn:#fbbf24; --danger:#f87171; --badge-text:#111827; }
     body{ background:var(--bg); color:var(--text); }
     [x-cloak]{display:none!important}
     .card{background:var(--card);border:1px solid var(--line)}
@@ -302,7 +302,7 @@
       </div>
 
       <!-- Quick Stats -->
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div class="admin-card card p-4 text-center">
           <div class="text-2xl font-bold" style="color:var(--accent)" x-text="employees.length"></div>
           <div class="text-sm" style="color:var(--muted)">Total Employees</div>
@@ -312,6 +312,10 @@
           <div class="text-sm" style="color:var(--muted)">Completed Requirements</div>
         </div>
         <div class="admin-card card p-4 text-center">
+          <div class="text-2xl font-bold" style="color:var(--expiring)" x-text="getExpiringSoonCount()"></div>
+          <div class="text-sm" style="color:var(--muted)">Expiring Soon</div>
+        </div>
+        <div class="admin-card card p-4 text-center">
           <div class="text-2xl font-bold" style="color:var(--warn)" x-text="getExpiredCount()"></div>
           <div class="text-sm" style="color:var(--muted)">Expired Requirements</div>
         </div>
@@ -319,7 +323,7 @@
           <div class="text-2xl font-bold" style="color:var(--danger)" x-text="getIncompleteCount()"></div>
           <div class="text-sm" style="color:var(--muted)">Incomplete Requirements</div>
         </div>
-        <div class="admin-card card p-4 md:col-span-4">
+        <div class="admin-card card p-4 md:col-span-5">
           <canvas id="complianceChart" class="mx-auto" height="160"></canvas>
         </div>
       </div>
@@ -1780,6 +1784,9 @@
         getCompletedCount(){
           return this.employeeRequirements.filter(er => er.status === 'Completed').length;
         },
+        getExpiringSoonCount(){
+          return this.employeeRequirements.filter(er => this.calcStatus(er.employeeId, er.requirementId) === 'expiring').length;
+        },
         getExpiredCount(){
           return this.employeeRequirements.filter(er => {
             if (er.status !== 'Completed' || !er.expiresOn) return false;
@@ -1792,7 +1799,7 @@
           renderComplianceChart(){
             const ctx=document.getElementById('complianceChart');
             if(!ctx) return;
-            const data=[this.getCompletedCount(),this.getExpiredCount(),this.getIncompleteCount()];
+            const data=[this.getCompletedCount(),this.getExpiringSoonCount(),this.getExpiredCount(),this.getIncompleteCount()];
             if(this.complianceChart){
               this.complianceChart.data.datasets[0].data=data;
               this.complianceChart.update();
@@ -1800,8 +1807,8 @@
               this.complianceChart=new Chart(ctx,{
                 type:'doughnut',
                 data:{
-                  labels:['Completed','Expired','Incomplete'],
-                  datasets:[{data,backgroundColor:['var(--success)','var(--warn)','var(--danger)']}]
+                  labels:['Completed','Expiring Soon','Expired','Incomplete'],
+                  datasets:[{data,backgroundColor:['var(--success)','var(--expiring)','var(--warn)','var(--danger)']}]
                 },
                 options:{responsive:true,maintainAspectRatio:false}
               });
