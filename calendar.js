@@ -1,10 +1,13 @@
 document.addEventListener('DOMContentLoaded', async () => {
   const db = new Dexie('ComplianceMatrixDB');
-  db.version(8).stores({
+  db.version(10).stores({
     employees:'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
     requirements:'id, name, defaultExpiryDays, color',
     employeeRequirements:'id, [employeeId+requirementId], status, completedOn, expiresOn, notes',
-    settings:'id'
+    settings:'id',
+    activityLog:'id,timestamp,actionType',
+    complianceSnapshots:'date',
+    roleRequirementProfiles:'id, name'
   });
 
   try {

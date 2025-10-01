@@ -17,6 +17,72 @@ function generateId(){
 
 const nowISO = () => new Date().toISOString();
 
+const normalizeRole = (role) => (role || '').trim().toLowerCase();
+
+const prepareTemplateIndex = (templates = []) => {
+  const roleIndex = new Map();
+  const prepared = templates.map(template => {
+    const roles = Array.isArray(template.roles) ? template.roles : [];
+    const excluded = Array.isArray(template.excludedRequirementIds)
+      ? template.excludedRequirementIds
+      : [];
+    const cleanedRoles = roles
+      .map(role => (role == null ? '' : String(role).trim()))
+      .filter(Boolean);
+    const cleanedExcluded = excluded
+      .map(id => (id == null ? '' : String(id).trim()))
+      .filter(Boolean);
+    const preparedTemplate = {
+      ...template,
+      roles: cleanedRoles,
+      excludedRequirementIds: cleanedExcluded,
+      _excludedSet: new Set(cleanedExcluded)
+    };
+    for (const role of cleanedRoles) {
+      const key = normalizeRole(role);
+      if (!key || roleIndex.has(key)) continue;
+      roleIndex.set(key, preparedTemplate);
+    }
+    return preparedTemplate;
+  });
+  return { prepared, roleIndex };
+};
+
+const fetchTemplateIndex = async (db) => {
+  if (!db?.roleRequirementProfiles) {
+    return { prepared: [], roleIndex: new Map() };
+  }
+  try {
+    const templates = await db.roleRequirementProfiles.toArray();
+    return prepareTemplateIndex(templates || []);
+  } catch (error) {
+    console.warn('Failed to load role requirement templates', error);
+    return { prepared: [], roleIndex: new Map() };
+  }
+};
+
+const resolveTemplateForRole = (role, roleIndex) => {
+  const key = normalizeRole(role);
+  return roleIndex.get(key) || null;
+};
+
+const templateExcludesRequirement = (template, requirementId) => {
+  if (!template) return false;
+  const normalisedId = requirementId == null ? '' : String(requirementId).trim();
+  if (!normalisedId) return false;
+  if (template._excludedSet instanceof Set) {
+    return template._excludedSet.has(normalisedId);
+  }
+  const excluded = Array.isArray(template.excludedRequirementIds)
+    ? template.excludedRequirementIds.map(id => (id == null ? '' : String(id).trim()))
+    : [];
+  return excluded.includes(normalisedId);
+};
+
+const determineStatusForTemplate = (template, requirementId, fallback = 'NotCompleted') => {
+  return templateExcludesRequirement(template, requirementId) ? 'NotRequired' : fallback;
+};
+
 export class AddEmployee {
   constructor(db, { employee } = {}) {
     this.db = db;
@@ -32,15 +98,17 @@ export class AddEmployee {
     const timestamp = nowISO();
     employee.createdAt = employee.createdAt || timestamp;
     employee.updatedAt = timestamp;
+    const { roleIndex } = await fetchTemplateIndex(this.db);
 
     return this.db.transaction('rw', this.db.employees, this.db.requirements, this.db.employeeRequirements, async () => {
       await this.db.employees.add(employee);
       const requirements = await this.db.requirements.toArray();
+      const template = resolveTemplateForRole(employee.role, roleIndex);
       const employeeRequirements = requirements.map(req => ({
         id: generateId(),
         employeeId: employee.id,
         requirementId: req.id,
-        status: 'NotCompleted',
+        status: determineStatusForTemplate(template, req.id),
         completedOn: null,
         expiresOn: null,
         notes: null,
@@ -104,6 +172,7 @@ export class AddRequirement {
     const timestamp = nowISO();
     requirement.createdAt = requirement.createdAt || timestamp;
     requirement.updatedAt = timestamp;
+    const { roleIndex } = await fetchTemplateIndex(this.db);
 
     return this.db.transaction('rw', this.db.requirements, this.db.employees, this.db.employeeRequirements, async () => {
       await this.db.requirements.add(requirement);
@@ -112,7 +181,7 @@ export class AddRequirement {
         id: generateId(),
         employeeId: emp.id,
         requirementId: requirement.id,
-        status: 'NotCompleted',
+        status: determineStatusForTemplate(resolveTemplateForRole(emp.role, roleIndex), requirement.id),
         completedOn: null,
         expiresOn: null,
         notes: null,
@@ -212,6 +281,15 @@ export class BulkUpdateStatus {
 
     const changes = [];
     const timestamp = nowISO();
+    const { roleIndex } = await fetchTemplateIndex(this.db);
+    const employees = await this.db.employees.bulkGet(this.employeeIds);
+    const employeeMap = new Map();
+    this.employeeIds.forEach((id, idx) => {
+      const employee = employees[idx];
+      if (employee) {
+        employeeMap.set(id, employee);
+      }
+    });
     const resolveExpiresOn = (requirementId, fallback = null) => {
       if (this.status !== 'Completed' || this.expiresOn == null) {
         return this.status === 'Completed' ? fallback : null;
@@ -235,11 +313,20 @@ export class BulkUpdateStatus {
 
     await this.db.transaction('rw', this.db.employeeRequirements, async () => {
       for (const employeeId of this.employeeIds) {
+        const employee = employeeMap.get(employeeId) || null;
+        const template = resolveTemplateForRole(employee?.role, roleIndex);
         for (const requirementId of this.requirementIds) {
+          if (templateExcludesRequirement(template, requirementId)) {
+            continue;
+          }
           const existing = await this.db.employeeRequirements
             .where('[employeeId+requirementId]')
             .equals([employeeId, requirementId])
             .first();
+
+          if (existing?.status === 'NotRequired') {
+            continue;
+          }
 
           if (existing) {
             changes.push({ type: 'update', record: clone(existing) });
@@ -355,6 +442,7 @@ export class ImportEmployees {
       const byEmpId = new Map(existing.filter(e => e.employeeId).map(e => [String(e.employeeId), e]));
       const byComposite = new Map(existing.map(e => [compositeKey(e), e]));
       const requirements = await this.db.requirements.toArray();
+      const { roleIndex } = await fetchTemplateIndex(this.db);
 
       for (const incoming of this.employees) {
         const normalizedId = incoming.employeeId ? String(incoming.employeeId) : '';
@@ -385,12 +473,13 @@ export class ImportEmployees {
           employee.updatedAt = timestamp;
           await this.db.employees.add(employee);
           addedEmployees.push(clone(employee));
+          const template = resolveTemplateForRole(employee.role, roleIndex);
           if (requirements.length) {
             const rows = requirements.map(req => ({
               id: generateId(),
               employeeId: employee.id,
               requirementId: req.id,
-              status: 'NotCompleted',
+              status: determineStatusForTemplate(template, req.id),
               completedOn: null,
               expiresOn: null,
               notes: null,
@@ -440,13 +529,25 @@ export class ImportCompletions {
     }
 
     const changes = [];
+    const { roleIndex } = await fetchTemplateIndex(this.db);
+    const employees = await this.db.employees.toArray();
+    const employeeMap = new Map(employees.map(emp => [emp.id, emp]));
     await this.db.transaction('rw', this.db.employeeRequirements, async () => {
       for (const update of this.updates) {
         const { employeeId, requirementId, status, completedOn, expiresOn, notes = null } = update;
+        const employee = employeeMap.get(employeeId) || null;
+        const template = resolveTemplateForRole(employee?.role, roleIndex);
+        if (templateExcludesRequirement(template, requirementId)) {
+          continue;
+        }
         const existing = await this.db.employeeRequirements
           .where('[employeeId+requirementId]')
           .equals([employeeId, requirementId])
           .first();
+
+        if (existing?.status === 'NotRequired') {
+          continue;
+        }
 
         if (existing) {
           changes.push({ type: 'update', record: clone(existing) });
