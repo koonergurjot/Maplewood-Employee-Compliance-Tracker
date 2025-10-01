@@ -12,7 +12,7 @@
 const Dexie = window.Dexie;
 import ActivityLog from './activity-log.js';
 import {
-  EditEmployee,
+  UpdateEmployee,
   ImportEmployees,
   BulkUpdateStatus
 } from './commands.js';
@@ -38,17 +38,23 @@ export function timeline() {
 
     async undo(entry) {
       const factories = {
-        EditEmployee: e =>
-          new EditEmployee(this.db, e.targets[0], e.metadata.newData),
+        UpdateEmployee: e =>
+          new UpdateEmployee(this.db, {
+            employeeId: e.targets[0],
+            newData: e.metadata.newData
+          }),
         ImportEmployees: e =>
-          new ImportEmployees(this.db, e.metadata.rows),
+          new ImportEmployees(this.db, {
+            employees: e.metadata.employees
+          }),
         BulkUpdateStatus: e =>
-          new BulkUpdateStatus(
-            this.db,
-            e.targets,
-            e.metadata.requirementId,
-            e.metadata.status
-          )
+          new BulkUpdateStatus(this.db, {
+            employeeIds: e.targets,
+            requirementIds: e.metadata.requirementIds,
+            status: e.metadata.status,
+            completedOn: e.metadata.completedOn ?? null,
+            expiresOn: e.metadata.expiresOn ?? null
+          })
       };
       const factory = factories[entry.actionType];
       if (!factory) return;
@@ -63,11 +69,11 @@ export function timeline() {
    Replace with actual UI handlers in your application.
 ------------------------------------------------------------------ */
 
-export async function editEmployee(db, activityLog, employeeId, newData, actor) {
-  const cmd = new EditEmployee(db, employeeId, newData);
+export async function updateEmployee(db, activityLog, employeeId, newData, actor) {
+  const cmd = new UpdateEmployee(db, { employeeId, newData });
   const undoPayload = await cmd.execute();
   await activityLog.record({
-    actionType: 'EditEmployee',
+    actionType: 'UpdateEmployee',
     actor,
     targets: [employeeId],
     metadata: { newData },
@@ -75,14 +81,14 @@ export async function editEmployee(db, activityLog, employeeId, newData, actor) 
   });
 }
 
-export async function importEmployees(db, activityLog, rows, actor) {
-  const cmd = new ImportEmployees(db, rows);
+export async function importEmployees(db, activityLog, employees, actor) {
+  const cmd = new ImportEmployees(db, { employees });
   const undoPayload = await cmd.execute();
   await activityLog.record({
     actionType: 'ImportEmployees',
     actor,
-    targets: [],          // IDs are in undoPayload.ids
-    metadata: { rows },
+    targets: [],
+    metadata: { employees },
     undoPayload
   });
 }
@@ -91,17 +97,29 @@ export async function bulkUpdateStatus(
   db,
   activityLog,
   employeeIds,
-  requirementId,
+  requirementIds,
   status,
-  actor
+  actor,
+  { completedOn = null, expiresOn = null } = {}
 ) {
-  const cmd = new BulkUpdateStatus(db, employeeIds, requirementId, status);
+  const cmd = new BulkUpdateStatus(db, {
+    employeeIds,
+    requirementIds,
+    status,
+    completedOn,
+    expiresOn
+  });
   const undoPayload = await cmd.execute();
   await activityLog.record({
     actionType: 'BulkUpdateStatus',
     actor,
     targets: employeeIds,
-    metadata: { requirementId, status },
+    metadata: {
+      requirementIds,
+      status,
+      completedOn,
+      expiresOn
+    },
     undoPayload
   });
 }
