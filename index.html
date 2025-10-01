@@ -54,6 +54,7 @@
     .badge--compliant{background:var(--success)}
     .badge--expiring{background:var(--warn)}
     .badge--overdue{background:var(--danger)}
+    .badge--incomplete{background:var(--muted);color:var(--card)}
     .requirement-header{transition:all 0.2s ease;position:relative}
     .requirement-header:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,0.1)}
     .admin-card{transition:all 0.2s ease}
@@ -197,7 +198,8 @@
                           :class="{
                             'badge--compliant': calcStatus(emp.id, req.id) === 'compliant',
                             'badge--expiring': calcStatus(emp.id, req.id) === 'expiring',
-                            'badge--overdue': calcStatus(emp.id, req.id) === 'overdue'
+                            'badge--overdue': calcStatus(emp.id, req.id) === 'overdue',
+                            'badge--incomplete': calcStatus(emp.id, req.id) === 'incomplete'
                           }"
                           @click="toggleStatus(emp, req)"
                           :title="getStatusTooltip(emp.id, req.id)"
@@ -205,7 +207,8 @@
                           x-text="{
                             compliant: '✔ Compliant',
                             expiring: '⚠ Expiring',
-                            overdue: '✖ Overdue'
+                            overdue: '✖ Overdue',
+                            incomplete: '○ Incomplete'
                           }[calcStatus(emp.id, req.id)]">
                         </button>
                       </div>
@@ -1104,7 +1107,7 @@
           getStatus(eId,rId){ const er=this.getER(eId,rId); if(!er||er.status==='NotCompleted') return 'NotCompleted'; if(er.expiresOn){ const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000); if(d<=0) return 'Expired'; } return 'Completed'; },
           calcStatus(eId,rId){
             const er=this.getER(eId,rId);
-            if(!er||er.status==='NotCompleted') return 'overdue';
+            if(!er || er.status !== 'Completed') return 'incomplete';
             if(er.expiresOn){
               const d=Math.ceil((new Date(er.expiresOn)-new Date())/86400000);
               if(d<=0) return 'overdue';
@@ -1956,16 +1959,15 @@
         },
         getStatusTooltip(empId, reqId){
           const er = this.getER(empId, reqId);
-          if (!er || er.status === 'NotCompleted') return 'Not completed';
-          if (er.status === 'Completed') {
-            if (er.expiresOn) {
-              const daysLeft = Math.ceil((new Date(er.expiresOn) - new Date()) / 86400000);
-              if (daysLeft <= 0) return 'Expired';
-              return `Completed, expires in ${daysLeft} days`;
-            }
-            return 'Completed (no expiry)';
+          if (!er || er.status !== 'Completed') {
+            return !er || !er.completedOn ? 'Not completed yet' : 'Marked incomplete';
           }
-          return er.status;
+          if (er.expiresOn) {
+            const daysLeft = Math.ceil((new Date(er.expiresOn) - new Date()) / 86400000);
+            if (daysLeft <= 0) return 'Expired';
+            return `Completed, expires in ${daysLeft} days`;
+          }
+          return 'Completed (no expiry)';
         },
         async executeBulkAction(){
           if (!this.bulkAction || !this.selectedEmployees.length) return;
