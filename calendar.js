@@ -25,6 +25,42 @@ document.addEventListener('DOMContentLoaded', async () => {
   const empMap = new Map(employees.map(e => [e.id, e]));
   const reqMap = new Map(requirements.map(r => [r.id, r]));
 
+  const normaliseToIsoDate = value => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+
+    const trimmed = value.trim();
+    const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+    if (isoDatePattern.test(trimmed)) {
+      return trimmed;
+    }
+
+    if (trimmed.includes('T')) {
+      const [datePart] = trimmed.split('T');
+      if (isoDatePattern.test(datePart)) {
+        return datePart;
+      }
+    }
+
+    const parsed = Date.parse(trimmed);
+    if (Number.isNaN(parsed)) {
+      return trimmed;
+    }
+
+    try {
+      const date = new Date(parsed);
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(date.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch (error) {
+      console.warn('Failed to parse expiration date', value, error);
+      return trimmed;
+    }
+  };
+
   const events = employeeRequirements
     .filter(er => er.expiresOn)
     .map(er => {
@@ -32,8 +68,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const req = reqMap.get(er.requirementId);
       return {
         title: `${emp?.firstName ?? ''} ${emp?.lastName ?? ''} - ${req?.name ?? ''}`.trim(),
-        start: (function(d){ try { return new Date(d).toISOString(); } catch(e){ return d; } })(er.expiresOn),
-
+        start: normaliseToIsoDate(er.expiresOn),
         allDay: true
       };
     });
