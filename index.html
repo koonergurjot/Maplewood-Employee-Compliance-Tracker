@@ -1121,37 +1121,53 @@
           async toggleStatus(emp, req){
             console.log('Toggle clicked for:', emp.firstName, emp.lastName, req.name);
 
-          try {
-            const er=this.getER(emp.id, req.id);
-            const newStatus = er && er.status === 'Completed' ? 'NotCompleted' : 'Completed';
-            console.log('Current status:', er?.status, 'New status:', newStatus);
+            try {
+              const er=this.getER(emp.id, req.id);
+              const previousStatus = er?.status ?? 'NotCompleted';
+              const newStatus = previousStatus === 'Completed' ? 'NotCompleted' : 'Completed';
+              console.log('Current status:', previousStatus, 'New status:', newStatus);
 
-            const completedOn = newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null;
-            const hasDefaultExpiry = req?.defaultExpiryDays !== undefined && req?.defaultExpiryDays !== null;
-            const expiresOn = newStatus === 'Completed'
-              ? (hasDefaultExpiry ? this.addDays(completedOn, req.defaultExpiryDays) : null)
-              : null;
-            const record = {
-              id: er?.id || generateId(),
-              employeeId: emp.id,
-              requirementId: req.id,
-              status: newStatus,
-              completedOn,
-              expiresOn,
-              updatedAt: new Date().toISOString()
-            };
-            await this.db.employeeRequirements.put(record);
-            await this.loadData();
-            console.log('Toggle completed');
-          } catch (error) {
-            console.error('Error toggling status:', error);
-            if (error && error.stack) {
-              console.error(error.stack);
+              const completedOn = newStatus === 'Completed' ? new Date().toISOString().slice(0,10) : null;
+              const hasDefaultExpiry = req?.defaultExpiryDays !== undefined && req?.defaultExpiryDays !== null;
+              const expiresOn = newStatus === 'Completed'
+                ? (hasDefaultExpiry ? this.addDays(completedOn, req.defaultExpiryDays) : null)
+                : null;
+
+              const { BulkUpdateStatus } = await import('./commands.js');
+              const command = new BulkUpdateStatus(this.db, {
+                employeeIds: [emp.id],
+                requirementIds: [req.id],
+                status: newStatus,
+                completedOn,
+                expiresOn
+              });
+
+              const undoPayload = await command.execute();
+              await this.loadData();
+
+              if (undoPayload?.changes?.length) {
+                await this.recordActivity('BulkUpdateStatus', [emp.id], {
+                  employeeIds: [emp.id],
+                  requirementIds: [req.id],
+                  requirementName: req?.name,
+                  status: newStatus,
+                  previousStatus,
+                  completedOn,
+                  expiresOn,
+                  triggeredBy: 'toggleStatus'
+                }, undoPayload);
+              }
+
+              console.log('Toggle completed');
+            } catch (error) {
+              console.error('Error toggling status:', error);
+              if (error && error.stack) {
+                console.error(error.stack);
+              }
+              const message = error && error.message ? `Error updating status: ${String(error.message)}` : 'Error updating status. Please try again.';
+              this.notify(message, 'var(--danger)');
             }
-            const message = error && error.message ? `Error updating status: ${String(error.message)}` : 'Error updating status. Please try again.';
-            this.notify(message, 'var(--danger)');
-          }
-        },
+          },
 
         // UI helpers
         notify(msg,color='var(--success)',undoHandler=null,duration=3000){
