@@ -65,6 +65,16 @@
     .help-highlight{position:relative;animation:tour-pulse 1.5s ease-in-out infinite;box-shadow:0 0 0 4px rgba(37,99,235,0.45)}
     @keyframes tour-pulse{0%{box-shadow:0 0 0 0 rgba(37,99,235,0.45)}70%{box-shadow:0 0 0 10px rgba(37,99,235,0)}100%{box-shadow:0 0 0 0 rgba(37,99,235,0)}}
     mark{background:var(--warn);color:var(--text);padding:0 .2rem}
+    .search-results-panel{position:absolute;top:100%;left:0;right:0;margin-top:.5rem;background:var(--card);border:1px solid var(--line);border-radius:.75rem;box-shadow:0 20px 35px rgba(15,23,42,0.18);max-height:18rem;overflow-y:auto;z-index:60}
+    .search-result-item{display:flex;gap:.75rem;width:100%;text-align:left;padding:.65rem .9rem;border-bottom:1px solid var(--line);background:transparent;color:inherit;transition:background .2s ease,transform .2s ease}
+    .search-result-item:last-child{border-bottom:none}
+    .search-result-item:hover{background:rgba(37,99,235,0.08);transform:translateY(-1px)}
+    .dark .search-result-item:hover{background:rgba(96,165,250,0.18)}
+    .search-result-icon{display:inline-flex;align-items:center;justify-content:center;width:1.75rem;height:1.75rem;border-radius:9999px;background:rgba(37,99,235,0.1);color:var(--accent);flex-shrink:0}
+    .dark .search-result-icon{background:rgba(96,165,250,0.15)}
+    .search-result-type{display:inline-block;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.15rem;color:var(--muted)}
+    .search-focus-ring{outline:2px solid var(--accent);outline-offset:2px;animation:search-focus-pulse 1.6s ease-out}
+    @keyframes search-focus-pulse{0%{box-shadow:0 0 0 0 rgba(37,99,235,0.55);}50%{box-shadow:0 0 0 6px rgba(37,99,235,0.25);}100%{box-shadow:0 0 0 0 rgba(37,99,235,0);}}
   </style>
 </head>
 <body x-data="app" x-init="init()" x-cloak :class="{'dark': darkMode}">
@@ -109,11 +119,58 @@
     </div>
 
     <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50">
-      <div class="relative">
-        <input id="global-search" x-model="globalSearch" @input="performGlobalSearch(globalSearch)" type="text" placeholder="Search..." class="pl-3 pr-8 py-1 border rounded bg-white dark:bg-gray-800" style="border-color:var(--line);"/>
-        <button x-show="globalSearch" @click="clearGlobalSearch" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500">
+      <div class="relative" @keydown.escape.window="dismissSearchResults()">
+        <input
+          id="global-search"
+          x-model="globalSearch"
+          @input="performGlobalSearch(globalSearch)"
+          type="text"
+          placeholder="Search..."
+          class="pl-3 pr-8 py-1 border rounded bg-white dark:bg-gray-800"
+          style="border-color:var(--line);"
+        />
+        <button
+          x-show="globalSearch"
+          @click="clearGlobalSearch"
+          class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
+        >
           <i data-feather="x" class="w-4 h-4"></i>
         </button>
+
+        <div
+          x-show="searchResults.length"
+          x-transition
+          class="search-results-panel"
+          @click.outside="dismissSearchResults()"
+        >
+          <template x-for="result in searchResults" :key="`${result.item.id}-${result.item.type}`">
+            <button
+              type="button"
+              class="search-result-item"
+              @click="focusSearchResult(result)"
+            >
+              <span class="search-result-icon">
+                <i
+                  :data-feather="result.item.type === 'employee' ? 'user' : 'target'"
+                  class="w-4 h-4"
+                ></i>
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="search-result-type" x-text="result.item.type === 'employee' ? 'Employee' : 'Requirement'"></span>
+                <span class="block text-sm font-semibold" x-html="highlightText(result.item.label)"></span>
+                <template x-if="result.item.type === 'employee'">
+                  <span class="block text-xs" style="color:var(--muted)">
+                    <span x-show="result.item.meta?.role" x-html="highlightText(result.item.meta?.role)"></span>
+                    <template x-if="result.item.meta?.role && result.item.meta?.employeeId">
+                      <span class="mx-1">•</span>
+                    </template>
+                    <span x-show="result.item.meta?.employeeId" x-html="highlightText(result.item.meta?.employeeId)"></span>
+                  </span>
+                </template>
+              </span>
+            </button>
+          </template>
+        </div>
       </div>
     </div>
 
@@ -155,7 +212,7 @@
                 </div>
               </th>
               <template x-for="req in orderedVisibleRequirements()" :key="req.id">
-                <th class="requirement-header px-4 py-3 text-left text-xs font-medium uppercase tracking-wider relative" :style="`background:${req.color || '#f8fafc'}; border-left: 3px solid ${req.color ? req.color.replace('f', '8').replace('e', '6') : '#94a3b8'};`">
+                <th class="requirement-header px-4 py-3 text-left text-xs font-medium uppercase tracking-wider relative" :data-requirement-header="req.id" :style="`background:${req.color || '#f8fafc'}; border-left: 3px solid ${req.color ? req.color.replace('f', '8').replace('e', '6') : '#94a3b8'};`">
                   <div class="flex items-center justify-between">
                     <span x-html="highlightText(req.name)" class="font-semibold"></span>
                     <div class="flex items-center gap-1">
@@ -173,7 +230,7 @@
           </thead>
           <tbody class="divide-y virtual-scroll">
             <template x-for="emp in sortedEmployees()" :key="emp.id">
-              <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800" :data-employee-row="emp.id">
                 <td class="sticky-col px-6 py-4">
                   <div class="flex items-center justify-between">
                     <div>
@@ -1778,16 +1835,85 @@
           this.filteredEmployees = filtered;
         },
         performGlobalSearch(query){
+          const requirementSource = this.orderedVisibleRequirements();
+          const requirementsList = requirementSource.length ? requirementSource : this.requirements;
           const data = [
-            ...this.employees.map(e => ({type:'employee', id:e.id, text:`${e.firstName} ${e.lastName} ${e.role} ${e.employeeId}`})),
-            ...(this.visibleRequirements.length ? this.visibleRequirements : this.requirements).map(r => ({type:'requirement', id:r.id, text:r.name}))
+            ...this.employees.map(e => {
+              const firstName = e.firstName || '';
+              const lastName = e.lastName || '';
+              const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+              const role = e.role || '';
+              const employeeId = e.employeeId ? String(e.employeeId) : '';
+              const textParts = [fullName, role, employeeId].filter(Boolean);
+              return {
+                type: 'employee',
+                id: e.id,
+                text: textParts.join(' ').trim(),
+                label: fullName || role || employeeId || 'Employee',
+                meta: {
+                  role,
+                  employeeId: employeeId ? `ID: ${employeeId}` : ''
+                }
+              };
+            }),
+            ...requirementsList.map(r => ({
+              type: 'requirement',
+              id: r.id,
+              text: r.name || '',
+              label: r.name || 'Requirement'
+            }))
           ];
-          const fuse = new Fuse(data, {keys:['text'], includeMatches:true, threshold:0.3});
-          this.searchResults = query ? fuse.search(query) : [];
+          const fuse = new Fuse(data, { keys:['text'], includeMatches:true, threshold:0.3 });
+          this.searchResults = query ? fuse.search(query).slice(0, 12) : [];
+          this.refreshFeatherIcons();
         },
         clearGlobalSearch(){
           this.globalSearch='';
+          this.dismissSearchResults();
+        },
+        dismissSearchResults(){
           this.searchResults=[];
+          this.refreshFeatherIcons();
+        },
+        focusSearchResult(result){
+          if(!result?.item) return;
+          const { type, id } = result.item;
+          this.$nextTick(() => {
+            let selector = '';
+            if(type === 'employee'){
+              selector = `[data-employee-row="${id}"]`;
+            } else if(type === 'requirement'){
+              selector = `[data-requirement-header="${id}"]`;
+            }
+            if(!selector) return;
+            const target = document.querySelector(selector);
+            if(!target) return;
+
+            if(target.dataset && target.dataset.searchFocusTimeout){
+              clearTimeout(Number(target.dataset.searchFocusTimeout));
+            }
+
+            const scrollOptions = type === 'employee'
+              ? { behavior:'smooth', block:'center', inline:'nearest' }
+              : { behavior:'smooth', block:'nearest', inline:'center' };
+
+            try{
+              target.scrollIntoView(scrollOptions);
+            }catch(error){
+              target.scrollIntoView({ behavior:'smooth' });
+            }
+
+            target.classList.add('search-focus-ring');
+            const timeout = window.setTimeout(() => {
+              target.classList.remove('search-focus-ring');
+              if(target.dataset){
+                delete target.dataset.searchFocusTimeout;
+              }
+            }, 1700);
+            if(target.dataset){
+              target.dataset.searchFocusTimeout = String(timeout);
+            }
+          });
         },
         getEscapedGlobalSearch(){
           if(!this.globalSearch) return '';
