@@ -1330,6 +1330,8 @@
         // ---------- Import ----------
         async handleFileUpload(event){
           this.importError=''; this.importWarning=''; this.importData=[]; this.importHeaders=[]; this.importSheets=[]; this.importSheetName=''; this.previewEligible=0; this.dryRunDetails=[]; this.importLoading=true; this.importProgress=0; this.importErrors=[];
+          this.columnMap = { firstName:'', lastName:'', payrollName:'', role:'', employmentType:'', employeeId:'', status:'', seniorityHours:'' };
+          this.completionMap = {};
           const file = event.target.files[0];
           if(!file) { this.importLoading=false; return; }
           
@@ -1439,6 +1441,8 @@
           this.importError = '';
           this.importProgress = 0;
           this.importErrors = [];
+          this.columnMap = { firstName:'', lastName:'', payrollName:'', role:'', employmentType:'', employeeId:'', status:'', seniorityHours:'' };
+          this.completionMap = {};
           const reader = new FileReader();
           reader.onload = async (e) => {
             try {
