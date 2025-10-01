@@ -125,14 +125,14 @@
     </div>
 
     <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50">
-      <div class="relative" @keydown.escape.window="dismissSearchResults()">
+      <div class="relative w-72 md:w-96" @keydown.escape.window="dismissSearchResults()">
         <input
           id="global-search"
           x-model="globalSearch"
           @input="performGlobalSearch(globalSearch)"
           type="text"
           placeholder="Search..."
-          class="pl-3 pr-8 py-1 border rounded bg-white dark:bg-gray-800"
+          class="w-full pl-3 pr-8 py-1 border rounded bg-white dark:bg-gray-800"
           style="border-color:var(--line);"
         />
         <button
