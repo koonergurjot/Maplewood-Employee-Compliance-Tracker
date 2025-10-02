@@ -954,7 +954,7 @@
     </div>
   </div>
 
-  <div x-show="showToast" class="fixed bottom-4 right-4 px-4 py-2 rounded shadow-lg" :style="'background:'+toastColor+';color:white'">
+  <div x-show="showToast" class="fixed bottom-4 right-4 px-4 py-2 rounded shadow-lg" :style="'background:'+toastColor+';color:white'" role="status" aria-live="polite" aria-atomic="true"><!-- Provide polite live toast announcements for assistive technology -->
     <span x-text="toastMessage"></span>
     <button x-show="toastUndo" @click="toastUndo()" class="ml-3 underline font-semibold">Undo</button>
   </div>
