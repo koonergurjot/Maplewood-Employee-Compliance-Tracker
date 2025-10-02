@@ -105,42 +105,24 @@
   </div>
 
   <div id="dashboard-app" class="container mx-auto px-4 py-6" x-show="!loadError">
-    <div class="flex justify-between items-center mb-4">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+      <!-- Mobile stacks branding, search, and actions for clarity -->
       <!-- Anchors Maplewood branding to the primary view -->
       <div class="flex items-center gap-3">
         <img src="icon-192.svg" alt="Maplewood icon" class="w-10 h-10 rounded-lg shadow-sm">
         <h1 class="text-2xl font-bold">Maplewood Compliance Matrix</h1>
       </div>
-      <div class="flex flex-wrap gap-2 gap-y-2 sm:flex-nowrap"><!-- Wrap intentionally enabled on small screens -->
-        <button id="import-btn" @click="showImportModal = true" class="btn"><i data-feather="upload" class="w-4 h-4"></i><span>Import</span></button>
-        <div class="relative">
-          <button id="export-btn" @click="showExportDropdown = !showExportDropdown" class="btn"><i data-feather="download" class="w-4 h-4"></i><span>Export</span></button>
-          <div x-show="showExportDropdown" @click.away="showExportDropdown = false" class="absolute right-0 mt-2 w-32 border rounded shadow bg-white dark:bg-gray-800 z-10">
-            <button @click="exportData('json'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">JSON</button>
-            <button @click="exportData('csv'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">CSV</button>
-            <button @click="exportData('xlsx'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">Excel</button>
-          </div>
-        </div>
-        <button @click="clearAllData" class="btn"><i data-feather="trash-2" class="w-4 h-4"></i><span>Clear</span></button>
-        <button id="activity-log-btn" @click="openActivityLog()" class="btn"><i data-feather="list" class="w-4 h-4"></i><span>Activity Log</span></button>
-        <button id="calendar-btn" @click="window.open('calendar.html', '_blank')" class="btn"><i data-feather="calendar" class="w-4 h-4"></i><span>Calendar</span></button>
-        <button id="settings-btn" @click="openSettingsModal()" class="btn"><i data-feather="settings" class="w-4 h-4"></i><span>Settings</span></button>
-        <button id="help-btn" @click="beginTour()" class="btn" :class="{'help-highlight': highlightHelpButton}"><i data-feather="help-circle" class="w-4 h-4"></i><span>Help</span></button>
-        <button @click="toggleDarkMode()" class="btn" aria-label="Toggle dark mode"><i :data-feather="darkMode ? 'sun' : 'moon'" class="w-4 h-4"></i></button>
-      </div>
-    </div>
-
-    <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50 search-float">
-      <div class="relative w-72 md:w-96" @keydown.escape.window="dismissSearchResults()">
-        <input
-          id="global-search"
-          aria-label="Search employees and requirements"
-          x-model="globalSearch"
-          @input="performGlobalSearch(globalSearch)"
-          type="text"
-          placeholder="Search..."
-          class="w-full pl-3 pr-8 py-1 border rounded bg-white dark:bg-gray-800"
-          style="border-color:var(--line);"
+      <div class="search-float w-full md:w-auto">
+        <div class="relative w-full md:w-72 md:max-w-md" @keydown.escape.window="dismissSearchResults()">
+          <input
+            id="global-search"
+            aria-label="Search employees and requirements"
+            x-model="globalSearch"
+            @input="performGlobalSearch(globalSearch)"
+            type="text"
+            placeholder="Search..."
+            class="w-full pl-3 pr-8 py-1 border rounded bg-white dark:bg-gray-800"
+            style="border-color:var(--line);"
         />
         <!-- Added for accessibility: ensure global search field has an accessible label -->
         <button
@@ -185,6 +167,25 @@
             </button>
           </template>
         </div>
+      </div>
+    </div>
+
+      <div class="flex flex-wrap gap-2 gap-y-2 sm:flex-nowrap"><!-- Wrap intentionally enabled on small screens -->
+        <button id="import-btn" @click="showImportModal = true" class="btn"><i data-feather="upload" class="w-4 h-4"></i><span>Import</span></button>
+        <div class="relative">
+          <button id="export-btn" @click="showExportDropdown = !showExportDropdown" class="btn"><i data-feather="download" class="w-4 h-4"></i><span>Export</span></button>
+          <div x-show="showExportDropdown" @click.away="showExportDropdown = false" class="absolute right-0 mt-2 w-32 border rounded shadow bg-white dark:bg-gray-800 z-10">
+            <button @click="exportData('json'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">JSON</button>
+            <button @click="exportData('csv'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">CSV</button>
+            <button @click="exportData('xlsx'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">Excel</button>
+          </div>
+        </div>
+        <button @click="clearAllData" class="btn"><i data-feather="trash-2" class="w-4 h-4"></i><span>Clear</span></button>
+        <button id="activity-log-btn" @click="openActivityLog()" class="btn"><i data-feather="list" class="w-4 h-4"></i><span>Activity Log</span></button>
+        <button id="calendar-btn" @click="window.open('calendar.html', '_blank')" class="btn"><i data-feather="calendar" class="w-4 h-4"></i><span>Calendar</span></button>
+        <button id="settings-btn" @click="openSettingsModal()" class="btn"><i data-feather="settings" class="w-4 h-4"></i><span>Settings</span></button>
+        <button id="help-btn" @click="beginTour()" class="btn" :class="{'help-highlight': highlightHelpButton}"><i data-feather="help-circle" class="w-4 h-4"></i><span>Help</span></button>
+        <button @click="toggleDarkMode()" class="btn" aria-label="Toggle dark mode"><i :data-feather="darkMode ? 'sun' : 'moon'" class="w-4 h-4"></i></button>
       </div>
     </div>
 
