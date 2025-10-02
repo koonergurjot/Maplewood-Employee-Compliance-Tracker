@@ -84,6 +84,7 @@ window.addEventListener('DOMContentLoaded', function () {
     }
 
     document.addEventListener('alpine:init', () => {
+      Alpine.data('activityTimeline', activityTimeline);
       Alpine.data('app', () => ({
         loadError:'',
         darkMode:false, showImportModal:false, showExportDropdown:false,
