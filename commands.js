@@ -5,7 +5,7 @@ const clone = (value) => {
   return JSON.parse(JSON.stringify(value));
 };
 
-function generateId(){
+export function generateId(){
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
@@ -48,7 +48,7 @@ const prepareTemplateIndex = (templates = []) => {
   return { prepared, roleIndex };
 };
 
-const fetchTemplateIndex = async (db) => {
+export const fetchTemplateIndex = async (db) => {
   if (!db?.roleRequirementProfiles) {
     return { prepared: [], roleIndex: new Map() };
   }
@@ -61,7 +61,7 @@ const fetchTemplateIndex = async (db) => {
   }
 };
 
-const resolveTemplateForRole = (role, roleIndex) => {
+export const resolveTemplateForRole = (role, roleIndex) => {
   const key = normalizeRole(role);
   return roleIndex.get(key) || null;
 };
@@ -79,7 +79,7 @@ const templateExcludesRequirement = (template, requirementId) => {
   return excluded.includes(normalisedId);
 };
 
-const determineStatusForTemplate = (template, requirementId, fallback = 'NotCompleted') => {
+export const determineStatusForTemplate = (template, requirementId, fallback = 'NotCompleted') => {
   return templateExcludesRequirement(template, requirementId) ? 'NotRequired' : fallback;
 };
 

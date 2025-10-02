@@ -250,6 +250,7 @@
 
     const timestamp = new Date().toISOString();
     const employees = [];
+    const newEmployeeIds = new Set();
 
     for (const r of rows){
       const nameVal = nameCol ? r[nameCol] : (r['Name'] ?? r['Employee'] ?? '');
@@ -268,7 +269,8 @@
         existingMatch = existingByComposite.get(compositeKey);
       }
 
-      const id = existingMatch ? existingMatch.id : (employeeIdValue || localGenerateId());
+      const isExisting = Boolean(existingMatch);
+      const id = isExisting ? existingMatch.id : (employeeIdValue || localGenerateId());
       const roleValue = roleCol ? (r[roleCol] ?? null) : null;
       const employmentTypeValue = etypeCol ? String(r[etypeCol] ?? '').toUpperCase() || null : null;
       const statusValue = String(statusCol ? (r[statusCol] ?? 'ACTIVE') : 'ACTIVE').toUpperCase();
@@ -302,6 +304,10 @@
 
       employees.push(employee);
 
+      if (!isExisting) {
+        newEmployeeIds.add(id);
+      }
+
       if (employeeIdKey && !existingByEmployeeId.has(employeeIdKey)) {
         existingByEmployeeId.set(employeeIdKey, employee);
       }
@@ -321,13 +327,53 @@
     });
 
     // Write to DB
-    await db.transaction('readwrite', db.employees, async () => {
+    const newlyCreatedEmployees = employees.filter(emp => newEmployeeIds.has(emp.id));
+
+    await db.transaction('readwrite', db.employees, db.employeeRequirements, db.requirements, db.roleRequirementProfiles, async () => {
       if (typeof db.employees.bulkPut === 'function') {
         await db.employees.bulkPut(employees);
       } else {
         for (const emp of employees) {
           await db.employees.put(emp);
         }
+      }
+
+      if (!newlyCreatedEmployees.length) {
+        return;
+      }
+
+      const requirements = await db.requirements.toArray();
+      if (!requirements.length) {
+        return;
+      }
+
+      const {
+        fetchTemplateIndex,
+        resolveTemplateForRole,
+        determineStatusForTemplate,
+        generateId
+      } = await import('./commands.js');
+      const { roleIndex } = await fetchTemplateIndex(db);
+
+      const employeeRequirementRows = [];
+      for (const employee of newlyCreatedEmployees) {
+        const template = resolveTemplateForRole(employee.role, roleIndex);
+        for (const requirement of requirements) {
+          employeeRequirementRows.push({
+            id: generateId(),
+            employeeId: employee.id,
+            requirementId: requirement.id,
+            status: determineStatusForTemplate(template, requirement.id),
+            completedOn: null,
+            expiresOn: null,
+            notes: null,
+            updatedAt: timestamp
+          });
+        }
+      }
+
+      if (employeeRequirementRows.length) {
+        await db.employeeRequirements.bulkAdd(employeeRequirementRows);
       }
     });
     return employees.length;
