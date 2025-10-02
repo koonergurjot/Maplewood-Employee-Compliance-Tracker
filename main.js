@@ -1202,6 +1202,14 @@ window.addEventListener('DOMContentLoaded', function () {
         renderComplianceChart(){
             const ctx=document.getElementById('complianceChart');
             if(!ctx) return;
+            const existingChart=typeof Chart!=='undefined'&&typeof Chart.getChart==='function'?Chart.getChart(ctx):null;
+            if(existingChart&&existingChart!==this.complianceChart&&typeof existingChart.destroy==='function'){
+              existingChart.destroy();
+            }
+            if(this.complianceChart&&this.complianceChart.ctx?.canvas!==ctx&&typeof this.complianceChart.destroy==='function'){
+              this.complianceChart.destroy();
+              this.complianceChart=null;
+            }
             const data=[this.getCompletedCount(),this.getExpiringSoonCount(),this.getExpiredCount(),this.getIncompleteCount()];
             const colors=['--success','--expiring','--warn','--danger'].map(v=>this.getThemeColor(v));
             const legendColor=this.getThemeColor('--muted','#6b7280');
@@ -1343,6 +1351,14 @@ window.addEventListener('DOMContentLoaded', function () {
           renderComplianceTrendChart(){
             const ctx=document.getElementById('complianceTrendChart');
             if(!ctx) return;
+            const existingChart=typeof Chart!=='undefined'&&typeof Chart.getChart==='function'?Chart.getChart(ctx):null;
+            if(existingChart&&existingChart!==this.complianceTrendChart&&typeof existingChart.destroy==='function'){
+              existingChart.destroy();
+            }
+            if(this.complianceTrendChart&&this.complianceTrendChart.ctx?.canvas!==ctx&&typeof this.complianceTrendChart.destroy==='function'){
+              this.complianceTrendChart.destroy();
+              this.complianceTrendChart=null;
+            }
             const history=this.complianceHistory?.length?this.complianceHistory:[];
             const labels=history.length?history.map(entry=>entry.date):[new Date().toISOString().slice(0,10)];
             const datasets=[
