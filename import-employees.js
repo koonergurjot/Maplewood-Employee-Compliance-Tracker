@@ -192,6 +192,28 @@
     return null;
   }
 
+  const localGenerateId = (typeof window !== 'undefined' && typeof window.generateId === 'function')
+    ? window.generateId
+    : () => {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          return crypto.randomUUID();
+        }
+        if (typeof DexieRef !== 'undefined' && typeof DexieRef.uuid === 'function') {
+          return DexieRef.uuid();
+        }
+        return Date.now().toString(36) + Math.random().toString(36).slice(2);
+      };
+
+  function normalizeEmployeeId(value){
+    if (value == null) return '';
+    return String(value).trim();
+  }
+
+  function normalizeComposite(lastName, firstName, role){
+    const parts = [lastName, firstName, role].map(part => (part == null ? '' : String(part).trim().toLowerCase()));
+    return parts.join('|');
+  }
+
   async function importFromRows(rows){
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('No rows detected.');
 
@@ -205,30 +227,88 @@
     const wingCol      = detectColumn(header, ['wing','unit','department','dept']);
     const startCol     = detectColumn(header, ['start date','hire date','seniority date']);
 
-    const employees = rows.map((r, idx) => {
+    const db = ensureDb();
+    await db.open();
+
+    const existingEmployees = await db.employees.toArray();
+    const existingByEmployeeId = new Map();
+    const existingByComposite = new Map();
+
+    for (const existing of existingEmployees){
+      const employeeIdKey = normalizeEmployeeId(existing.employeeId);
+      if (employeeIdKey) {
+        const key = employeeIdKey.toLowerCase();
+        if (!existingByEmployeeId.has(key)) {
+          existingByEmployeeId.set(key, existing);
+        }
+      }
+      const compositeKey = normalizeComposite(existing.lastName, existing.firstName, existing.role);
+      if (compositeKey && !existingByComposite.has(compositeKey)) {
+        existingByComposite.set(compositeKey, existing);
+      }
+    }
+
+    const timestamp = new Date().toISOString();
+    const employees = [];
+
+    for (const r of rows){
       const nameVal = nameCol ? r[nameCol] : (r['Name'] ?? r['Employee'] ?? '');
       const { firstName, lastName } = splitName(nameVal);
       const sh = seniorityCol ? parseSeniority(r[seniorityCol]) : null;
 
       const idVal = empidCol ? r[empidCol] : null;
-      const id = (idVal != null && String(idVal).trim() !== '') ? String(idVal) : `emp-${idx+1}`;
+      const employeeIdValue = normalizeEmployeeId(idVal);
+      const employeeIdKey = employeeIdValue ? employeeIdValue.toLowerCase() : '';
+      const compositeKey = normalizeComposite(lastName, firstName, roleCol ? (r[roleCol] ?? null) : null);
 
-      return {
+      let existingMatch = null;
+      if (employeeIdKey && existingByEmployeeId.has(employeeIdKey)) {
+        existingMatch = existingByEmployeeId.get(employeeIdKey);
+      } else if (compositeKey && existingByComposite.has(compositeKey)) {
+        existingMatch = existingByComposite.get(compositeKey);
+      }
+
+      const id = existingMatch ? existingMatch.id : (employeeIdValue || localGenerateId());
+      const roleValue = roleCol ? (r[roleCol] ?? null) : null;
+      const employmentTypeValue = etypeCol ? String(r[etypeCol] ?? '').toUpperCase() || null : null;
+      const statusValue = String(statusCol ? (r[statusCol] ?? 'ACTIVE') : 'ACTIVE').toUpperCase();
+
+      const meta = { ...(existingMatch?.meta || {}) };
+      meta.sourceName = nameVal ?? null;
+      if (wingCol) {
+        meta.wing = r[wingCol] ?? null;
+      }
+      if (startCol) {
+        meta.startDate = r[startCol] ?? null;
+      }
+
+      const employee = {
+        ...(existingMatch || {}),
         id,
-        employeeId: idVal != null ? String(idVal) : null,
+        employeeId: employeeIdValue || null,
         firstName,
         lastName,
-        role: roleCol ? (r[roleCol] ?? null) : null,
-        employmentType: etypeCol ? String(r[etypeCol] ?? '').toUpperCase() || null : null,
-        status: String(statusCol ? (r[statusCol] ?? 'ACTIVE') : 'ACTIVE').toUpperCase(),
+        role: roleValue,
+        employmentType: employmentTypeValue,
+        status: statusValue,
         seniorityHours: sh,
-        meta: {
-          sourceName: nameVal ?? null,
-          wing: wingCol ? (r[wingCol] ?? null) : null,
-          startDate: startCol ? (r[startCol] ?? null) : null
-        }
+        meta,
+        updatedAt: timestamp
       };
-    });
+
+      if (!employee.createdAt) {
+        employee.createdAt = timestamp;
+      }
+
+      employees.push(employee);
+
+      if (employeeIdKey && !existingByEmployeeId.has(employeeIdKey)) {
+        existingByEmployeeId.set(employeeIdKey, employee);
+      }
+      if (compositeKey && !existingByComposite.has(compositeKey)) {
+        existingByComposite.set(compositeKey, employee);
+      }
+    }
 
     // Sort by seniority desc
     employees.sort((a,b)=>{
@@ -241,11 +321,13 @@
     });
 
     // Write to DB
-    const db = ensureDb();
-    await db.open();
     await db.transaction('readwrite', db.employees, async () => {
-      for (const emp of employees){
-        await db.employees.put(emp);
+      if (typeof db.employees.bulkPut === 'function') {
+        await db.employees.bulkPut(employees);
+      } else {
+        for (const emp of employees) {
+          await db.employees.put(emp);
+        }
       }
     });
     return employees.length;
