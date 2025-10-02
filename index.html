@@ -71,6 +71,8 @@
     .help-highlight{position:relative;animation:tour-pulse 1.5s ease-in-out infinite;box-shadow:0 0 0 4px rgba(37,99,235,0.45)}
     @keyframes tour-pulse{0%{box-shadow:0 0 0 0 rgba(37,99,235,0.45)}70%{box-shadow:0 0 0 10px rgba(37,99,235,0)}100%{box-shadow:0 0 0 0 rgba(37,99,235,0)}}
     mark{background:var(--warn);color:var(--text);padding:0 .2rem}
+    /* Fixed search shell styled like other cards */
+    .search-float{padding:.75rem;border:1px solid var(--line);border-radius:.75rem;background:var(--card);box-shadow:0 12px 28px rgba(15,23,42,0.18)}
     .search-results-panel{position:absolute;top:100%;left:0;right:0;margin-top:.5rem;background:var(--card);border:1px solid var(--line);border-radius:.75rem;box-shadow:0 20px 35px rgba(15,23,42,0.18);max-height:18rem;overflow-y:auto;z-index:60}
     .search-result-item{display:flex;gap:.75rem;width:100%;text-align:left;padding:.65rem .9rem;border-bottom:1px solid var(--line);background:transparent;color:inherit;transition:background .2s ease,transform .2s ease}
     .search-result-item:last-child{border-bottom:none}
@@ -128,7 +130,7 @@
       </div>
     </div>
 
-    <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50">
+    <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50 search-float">
       <div class="relative w-72 md:w-96" @keydown.escape.window="dismissSearchResults()">
         <input
           id="global-search"
