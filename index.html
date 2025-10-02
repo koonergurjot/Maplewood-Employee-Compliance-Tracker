@@ -2542,13 +2542,49 @@
           if(!this.globalSearch) return '';
           return String(this.globalSearch).replace(/[.*+?^${}()|[\]\\]/g, '\$&');
         },
+        escapeHtml(text){
+          if(text == null) return '';
+          return String(text).replace(/[&<>"']/g, (char) => {
+            switch(char){
+              case '&': return '&amp;';
+              case '<': return '&lt;';
+              case '>': return '&gt;';
+              case '"': return '&quot;';
+              case "'": return '&#39;';
+              default: return char;
+            }
+          });
+        },
         highlightText(text){
           if(text == null) return '';
           const value = String(text);
-          if(!this.globalSearch) return value;
+          if(!this.globalSearch) return this.escapeHtml(value);
           const escapedSearch = this.getEscapedGlobalSearch();
-          if(!escapedSearch) return value;
-          return value.replace(new RegExp(`(${escapedSearch})`, 'gi'), '<mark>$1</mark>');
+          if(!escapedSearch) return this.escapeHtml(value);
+
+          const regex = new RegExp(`(${escapedSearch})`, 'gi');
+          let match;
+          let lastIndex = 0;
+          const segments = [];
+
+          while((match = regex.exec(value)) !== null){
+            const preceding = value.slice(lastIndex, match.index);
+            if(preceding){
+              segments.push(this.escapeHtml(preceding));
+            }
+            segments.push(`<mark>${this.escapeHtml(match[0])}</mark>`);
+            lastIndex = match.index + match[0].length;
+          }
+
+          if(!segments.length){
+            return this.escapeHtml(value);
+          }
+
+          if(lastIndex < value.length){
+            segments.push(this.escapeHtml(value.slice(lastIndex)));
+          }
+
+          return segments.join('');
         },
         sortEmployees(field){
           if (this.sortField === field) {
