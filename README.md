@@ -27,6 +27,7 @@ Read the full project overview in [docs/OVERVIEW.md](docs/OVERVIEW.md).
 - 🧪 **Dry run mode** to preview add/update counts and skipped rows
 - 📊 **Post-import summary** with toast notifications and total employee counts
 - ♻️ **Cache clearing** via [`clear-cache.html`](clear-cache.html) for fresh testing
+- 💾 **Full backups** that capture employees, templates, snapshots, and the activity log
 
 ## Quick Start
 
@@ -44,6 +45,14 @@ Read the full project overview in [docs/OVERVIEW.md](docs/OVERVIEW.md).
    ```
 
 3. Open `http://localhost:3000` (or the port shown) to use the app.
+
+## Backup & Restore
+
+The dashboard now supports a dedicated backup workflow:
+
+1. Open **Export → JSON** to download a complete backup. The file includes employees, requirements, completions, settings, templates, compliance snapshots, and the activity log.
+2. To restore, choose **Import → Backup**, upload the JSON file, review the summary counts, and click **Restore Backup**. The restore runs inside a single IndexedDB transaction to replace every table.
+3. Backup restores cannot be undone from the activity timeline, so keep a copy of the exported file if you plan to compare states.
 
 ## Documentation
 
