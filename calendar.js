@@ -1,14 +1,14 @@
+import { createDatabase } from './db.js';
+
 document.addEventListener('DOMContentLoaded', async () => {
-  const db = new Dexie('ComplianceMatrixDB');
-  db.version(10).stores({
-    employees:'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
-    requirements:'id, name, defaultExpiryDays, color',
-    employeeRequirements:'id, [employeeId+requirementId], status, completedOn, expiresOn, notes',
-    settings:'id',
-    activityLog:'id,timestamp,actionType',
-    complianceSnapshots:'date',
-    roleRequirementProfiles:'id, name'
-  });
+  const db = createDatabase();
+
+  try {
+    await db.open();
+  } catch (error) {
+    console.error('Failed to open database for calendar', error);
+    return;
+  }
 
   try {
     const setting = await db.settings.get('app');

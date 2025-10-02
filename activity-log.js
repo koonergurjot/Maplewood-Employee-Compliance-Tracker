@@ -1,4 +1,6 @@
 // ActivityLog – simple audit trail with undo capability.
+import { generateId } from './db.js';
+
 export default class ActivityLog {
   static async init(db) {
     // Ensure the table exists before opening.
@@ -30,7 +32,7 @@ export default class ActivityLog {
   // Record a completed command.
   async record({ actionType, actor, targets = [], metadata = {}, undoPayload }) {
     const entry = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       timestamp: Date.now(),
       actor,
       actionType,
