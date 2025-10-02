@@ -1231,14 +1231,31 @@ window.addEventListener('DOMContentLoaded', function () {
           if (this.importMode === 'backup') return;
           // Simulate import and list first skipped reasons
           const existing = await this.db.employees.toArray();
-          const byEmpId = new Map(existing.filter(e=>e.employeeId).map(e=>[String(e.employeeId), e]));
-          const keyOf = (e) => e.employeeId || `${e.firstName}|${e.lastName}|${e.role}`;
+          const normalizeId = (value) => {
+            if (value === null || value === undefined) return '';
+            return String(value).trim().toLowerCase();
+          };
+          const compositeOf = (employee) => {
+            const first = String(employee.firstName || '').trim().toLowerCase();
+            const last = String(employee.lastName || '').trim().toLowerCase();
+            const role = String(employee.role || '').trim().toLowerCase();
+            return `${first}|${last}|${role}`;
+          };
+          const byEmpId = new Map();
+          const byComposite = new Map();
+          for (const record of existing){
+            const idKey = normalizeId(record.employeeId);
+            if (idKey) byEmpId.set(idKey, record);
+            byComposite.set(compositeOf(record), record);
+          }
           let added=0, updated=0, skipped=0; const details=[];
           for (const row of this.importData){
             const a = this.analyzeRow(row);
             if (!a.first || !a.last){ skipped++; if(details.length<15) details.push('Skipped row: missing name'); continue; }
             const emp = { id:'-', firstName:a.first, lastName:a.last, role:a.role||'Other', employmentType:a.type||'FT', employeeId:a.empId||'', status:/inactive|leave/i.test(a.status||'')?'Inactive':'Active' };
-            const match = emp.employeeId ? byEmpId.get(String(emp.employeeId)) : existing.find(e=>keyOf(e)===keyOf(emp));
+            const match = emp.employeeId
+              ? byEmpId.get(normalizeId(emp.employeeId))
+              : byComposite.get(compositeOf(emp));
             if (match) updated++; else added++;
           }
           this.dryRunSummary = { added, updated, skipped };
