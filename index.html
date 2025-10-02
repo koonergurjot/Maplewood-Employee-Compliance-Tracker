@@ -128,6 +128,7 @@
       <div class="relative w-72 md:w-96" @keydown.escape.window="dismissSearchResults()">
         <input
           id="global-search"
+          aria-label="Search employees and requirements"
           x-model="globalSearch"
           @input="performGlobalSearch(globalSearch)"
           type="text"
@@ -135,6 +136,7 @@
           class="w-full pl-3 pr-8 py-1 border rounded bg-white dark:bg-gray-800"
           style="border-color:var(--line);"
         />
+        <!-- Added for accessibility: ensure global search field has an accessible label -->
         <button
           x-show="globalSearch"
           @click="clearGlobalSearch"
