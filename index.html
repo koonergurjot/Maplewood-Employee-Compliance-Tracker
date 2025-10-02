@@ -104,7 +104,11 @@
 
   <div id="dashboard-app" class="container mx-auto px-4 py-6" x-show="!loadError">
     <div class="flex justify-between items-center mb-4">
-      <h1 class="text-2xl font-bold">Compliance Matrix</h1>
+      <!-- Anchors Maplewood branding to the primary view -->
+      <div class="flex items-center gap-3">
+        <img src="icon-192.svg" alt="Maplewood icon" class="w-10 h-10 rounded-lg shadow-sm">
+        <h1 class="text-2xl font-bold">Maplewood Compliance Matrix</h1>
+      </div>
       <div class="flex gap-2">
         <button id="import-btn" @click="showImportModal = true" class="btn"><i data-feather="upload" class="w-4 h-4"></i><span>Import</span></button>
         <div class="relative">
