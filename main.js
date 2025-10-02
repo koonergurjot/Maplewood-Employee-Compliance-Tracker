@@ -2,6 +2,7 @@
 // Ensures bundler processes the entire dashboard logic.
 
 import './import-employees.js';
+import { createDatabase, generateId } from './db.js';
 
 window.addEventListener('DOMContentLoaded', function () {
   // Fallback for XLSX library loading
@@ -15,17 +16,6 @@ window.addEventListener('DOMContentLoaded', function () {
     document.head.appendChild(script);
   }
 });
-
-    function generateId(){
-      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-        return crypto.randomUUID();
-      }
-      if (typeof Dexie !== 'undefined' && typeof Dexie.uuid === 'function') {
-        return Dexie.uuid();
-      }
-      return Date.now().toString(36) + Math.random().toString(36).slice(2);
-    }
-
     function activityTimeline(){
       return {
         entries: [],
@@ -195,60 +185,7 @@ window.addEventListener('DOMContentLoaded', function () {
           if (this.loadError || typeof window === 'undefined' || typeof window.Dexie === 'undefined') {
             return;
           }
-          this.db = new window.Dexie('ComplianceMatrixDB');
-          this.db.version(8).stores({
-            employees:'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
-            requirements:'id, name, defaultExpiryDays, color',
-            employeeRequirements:'id, [employeeId+requirementId], status, completedOn, expiresOn, notes',
-            settings:'id',
-            activityLog:'id,timestamp,actionType'
-          });
-          this.db.version(9).stores({
-            employees:'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
-            requirements:'id, name, defaultExpiryDays, color',
-            employeeRequirements:'id, [employeeId+requirementId], status, completedOn, expiresOn, notes',
-            settings:'id',
-            activityLog:'id,timestamp,actionType',
-            complianceSnapshots:'date'
-          });
-          this.db.version(10).stores({
-            employees:'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
-            requirements:'id, name, defaultExpiryDays, color',
-            employeeRequirements:'id, [employeeId+requirementId], status, completedOn, expiresOn, notes',
-            settings:'id',
-            activityLog:'id,timestamp,actionType',
-            complianceSnapshots:'date',
-            roleRequirementProfiles:'id, name'
-          }).upgrade(async tx => {
-            try{
-              const settingsTable = tx.table('settings');
-              const existingSetting = await settingsTable.get('roleRequirementProfiles');
-              if(!existingSetting){
-                await settingsTable.put({ id:'roleRequirementProfiles', value:[] });
-              }
-            }catch(error){
-              console.warn('Failed to seed role requirement profile settings', error);
-            }
-          });
-          this.db.on('populate', (tx) => {
-            const now = new Date().toISOString();
-            const seed = (name, days=null, color='#fef3c7')=>({id:generateId(),name,defaultExpiryDays:days,color,createdAt:now,updatedAt:now});
-            tx.table('requirements').bulkAdd([
-              seed('Resume', null, '#e0e7ff'), // Light blue
-              seed('References', null, '#f0f9ff'), // Light cyan
-              seed('First Aid', 1095, '#fef3c7'), // Light yellow
-              seed('CPR', 365, '#dcfce7'), // Light green
-              seed('FoodSafe', 1825, '#fce7f3'), // Light pink
-              seed('Violence Prevention', 365, '#f3e8ff'), // Light purple
-              seed('Background Check', 1095, '#fef2f2'), // Light red
-              seed('Drug Test', 365, '#fffbeb'), // Light amber
-              seed('TB Test', 365, '#f0fdf4'), // Light emerald
-              seed('Immunization', 365, '#ecfdf5') // Light green
-            ]);
-            tx.table('settings').put({id:'app',darkMode:false});
-            tx.table('settings').put({id:'hasSeenTour', value:false});
-            tx.table('settings').put({id:'roleRequirementProfiles', value:[]});
-          });
+          this.db = createDatabase();
         },
 
         async initActivityLog(){

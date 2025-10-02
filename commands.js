@@ -1,19 +1,13 @@
 // Command implementations used by the activity log.
 
+import { generateId as sharedGenerateId } from './db.js';
+
 const clone = (value) => {
   if (value === undefined || value === null) return value;
   return JSON.parse(JSON.stringify(value));
 };
 
-export function generateId(){
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  if (typeof Dexie !== 'undefined' && typeof Dexie.uuid === 'function') {
-    return Dexie.uuid();
-  }
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
+export const generateId = sharedGenerateId;
 
 const nowISO = () => new Date().toISOString();
 

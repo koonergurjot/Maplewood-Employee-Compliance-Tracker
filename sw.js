@@ -16,6 +16,7 @@ const PRECACHE_PATHS = [
   'icon-512.svg',
   'commands.js',
   'activity-log.js',
+  'db.js',
   'calendar.js',
   'onboarding.js'
 ,
