@@ -1,21 +1,19 @@
 // Consolidated application initialization script extracted from index.html
 // Ensures bundler processes the entire dashboard logic.
 
+import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
+import Chart from 'chart.js/auto';
+import Sortable from 'sortablejs';
+import Fuse from 'fuse.js';
+import feather from 'feather-icons';
+
+import './styles.css';
 import './import-employees.js';
+import './onboarding.js';
 import { createDatabase, generateId } from './db.js';
 
-window.addEventListener('DOMContentLoaded', function () {
-  // Fallback for XLSX library loading
-  if (typeof XLSX === 'undefined') {
-    console.error('XLSX library failed to load. Trying alternative CDN...');
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
-    script.onerror = function () {
-      console.error('Alternative XLSX CDN also failed to load');
-    };
-    document.head.appendChild(script);
-  }
-});
+const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev';
     function activityTimeline(){
       return {
         entries: [],
@@ -308,13 +306,11 @@ window.addEventListener('DOMContentLoaded', function () {
         },
 
         async init(){
-          if (typeof window.Dexie === 'undefined') {
-            this.loadError = 'The offline database library (Dexie.js) did not load. Data cannot be displayed without it.';
+          this.initDB();
+          if (this.loadError || !this.db) {
             this.$nextTick(() => this.$root?.removeAttribute('x-cloak'));
             return;
           }
-
-          this.initDB();
 
           this.$nextTick(() => this.$root?.removeAttribute('x-cloak'));
 
@@ -331,9 +327,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
           // Ensure our custom chart plugin exists before charts initialize
           this.chartBgPlugin.fullSize = true;
-          if (typeof Chart !== 'undefined') {
-            Chart.register(this.chartBgPlugin);
-          }
+          Chart.register(this.chartBgPlugin);
 
           // Initialize feather icons after DOM is ready
           this.$nextTick(() => {
@@ -342,8 +336,15 @@ window.addEventListener('DOMContentLoaded', function () {
               this.initializeFeatherIcons();
             }, 100);
           });
-          
-          if ('serviceWorker' in navigator) try{ await navigator.serviceWorker.register('/sw.js?v=1'); }catch(e){}
+
+          if ('serviceWorker' in navigator) {
+            const swUrl = `/sw.js?build=${encodeURIComponent(BUILD_HASH)}`;
+            try {
+              await navigator.serviceWorker.register(swUrl);
+            } catch (error) {
+              console.warn('Service worker registration failed', error);
+            }
+          }
 
           const tourSetting = await this.db.settings.get('hasSeenTour');
           this.tourMarkedSeen = !!tourSetting?.value;
@@ -353,10 +354,15 @@ window.addEventListener('DOMContentLoaded', function () {
         },
 
         initDB(){
-          if (this.loadError || typeof window === 'undefined' || typeof window.Dexie === 'undefined') {
+          if (this.loadError || typeof window === 'undefined') {
             return;
           }
-          this.db = createDatabase();
+          try {
+            this.db = createDatabase();
+          } catch (error) {
+            console.error('Failed to initialize Dexie database', error);
+            this.loadError = 'The offline database library (Dexie.js) did not load. Data cannot be displayed without it.';
+          }
         },
 
         async initActivityLog(){
@@ -2218,7 +2224,7 @@ window.addEventListener('DOMContentLoaded', function () {
       }, 1200);
     });
     const replaceFeatherIcons = () => {
-      if (window.feather && typeof feather.replace === 'function') {
+      if (typeof feather !== 'undefined' && typeof feather.replace === 'function') {
         feather.replace();
       }
     };
