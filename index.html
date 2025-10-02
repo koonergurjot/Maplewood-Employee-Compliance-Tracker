@@ -15,6 +15,13 @@
     body{ background:var(--bg); color:var(--text); }
     [x-cloak]{display:none!important}
     .card{background:var(--card);border:1px solid var(--line)}
+    .form-field{display:block;width:100%;padding:.55rem .85rem;border:1px solid var(--line);border-radius:.75rem;background:var(--card);color:var(--text);transition:border-color .2s ease,box-shadow .2s ease,background .2s ease,color .2s ease}
+    .form-field::placeholder{color:var(--muted);opacity:.75;transition:color .2s ease,opacity .2s ease}
+    .form-field:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,0.18)}
+    .dark .form-field{background:rgba(17,24,39,0.85);border-color:var(--line);color:var(--text)}
+    .dark .form-field::placeholder{color:var(--muted);opacity:.65}
+    .dark .form-field:focus-visible{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,0.25)}
+    .form-field--search{padding-right:2.75rem;min-height:2.5rem}
     .btn{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;border-radius:.75rem;padding:.5rem .85rem;border:1px solid var(--line);background:var(--card);font-weight:600;transition:background .2s ease,color .2s ease,border-color .2s ease,box-shadow .2s ease}
     .btn:hover,.btn:focus-visible{box-shadow:0 4px 12px rgba(15,23,42,0.12);outline:none}
     .btn:focus-visible{border-color:var(--accent)}
@@ -122,8 +129,7 @@
               @input="performGlobalSearch(globalSearch)"
               type="text"
               placeholder="Search..."
-              class="w-full pl-3 pr-8 py-1 border rounded bg-white dark:bg-gray-800"
-              style="border-color:var(--line);"
+              class="form-field form-field--search w-full"
             />
             <!-- Added for accessibility: ensure global search field has an accessible label -->
             <button
@@ -392,12 +398,12 @@
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
         <div>
           <label class="block text-sm font-medium mb-1">Search Employees</label>
-          <input x-model="searchQuery" @input="filterEmployees()" type="text" placeholder="Name, role, or ID..." 
-                 class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+          <input x-model="searchQuery" @input="filterEmployees()" type="text" placeholder="Name, role, or ID..."
+                 class="form-field w-full">
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Filter by Role</label>
-          <select x-model="roleFilter" @change="filterEmployees()" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+          <select x-model="roleFilter" @change="filterEmployees()" class="form-field w-full">
             <option value="">All Roles</option>
             <template x-for="role in getUniqueRoles()" :key="role">
               <option :value="role" x-text="role"></option>
@@ -406,7 +412,7 @@
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Filter by Status</label>
-          <select x-model="statusFilter" @change="filterEmployees()" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+          <select x-model="statusFilter" @change="filterEmployees()" class="form-field w-full">
             <option value="">All Status</option>
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
@@ -414,7 +420,7 @@
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Requirement Status</label>
-          <select x-model="reqStatusFilter" @change="filterEmployees()" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+          <select x-model="reqStatusFilter" @change="filterEmployees()" class="form-field w-full">
             <option value="">Any</option>
             <option value="Completed">Completed</option>
             <option value="Expired">Expired</option>
