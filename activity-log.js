@@ -30,7 +30,7 @@ export default class ActivityLog {
   }
 
   // Record a completed command.
-  async record({ actionType, actor, targets = [], metadata = {}, undoPayload }) {
+  async record({ actionType, actor, targets = [], metadata = {}, undoPayload, supportsUndo = true }) {
     // Use the shared generator to ensure consistent IDs even when crypto.randomUUID
     // is unavailable (e.g., in some workers or legacy browsers).
     const entry = {
@@ -41,6 +41,7 @@ export default class ActivityLog {
       targets,
       metadata,
       undoPayload,
+      supportsUndo,
       status: 'completed'
     };
     await this.table.add(entry);

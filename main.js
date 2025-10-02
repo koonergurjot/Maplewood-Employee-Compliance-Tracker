@@ -99,6 +99,9 @@ window.addEventListener('DOMContentLoaded', function () {
         fieldLabels:{ firstName:'First Name', lastName:'Last Name', payrollName:'Payroll/Employee Name', role:'Role / Job Title', employmentType:'Employment Type / Class', employeeId:'Employee ID / Position ID', status:'Position Status', seniorityHours:'Seniority Hours' },
         columnMap:{ firstName:'', lastName:'', payrollName:'', role:'', employmentType:'', employeeId:'', status:'', seniorityHours:'' },
         completionMap:{},
+        backupPayload:null,
+        backupSummary:null,
+        backupValidationErrors:[],
         // Admin panel state
         showAddEmployeeModal:false, showAddRequirementModal:false, showBulkActionsModal:false,
         showEditEmployeeModal:false, showEditRequirementModal:false,
@@ -123,6 +126,173 @@ window.addEventListener('DOMContentLoaded', function () {
             ctx.fillStyle = opts?.color || getComputedStyle(document.documentElement).getPropertyValue('--card') || '#fff';
             ctx.fillRect(0, 0, width, height);
             ctx.restore();
+          }
+        },
+
+        async loadBackupFromFile(file){
+          try {
+            const text = await file.text();
+            let parsed;
+            try {
+              parsed = JSON.parse(text);
+            } catch (parseError) {
+              console.error('Failed to parse backup JSON', parseError);
+              this.importError = 'Backup file is not valid JSON.';
+              this.backupPayload = null;
+              this.backupSummary = null;
+              this.backupValidationErrors = ['The uploaded file could not be parsed as JSON.'];
+              return;
+            }
+
+            const { normalized, summary, errors } = this.analyzeBackupPayload(parsed);
+            if (!normalized) {
+              this.importError = 'Backup file is missing required sections. See errors below.';
+              this.backupPayload = null;
+              this.backupSummary = null;
+              this.backupValidationErrors = errors;
+              return;
+            }
+
+            this.backupPayload = normalized;
+            this.backupSummary = summary;
+            this.backupValidationErrors = errors;
+            if (errors.length) {
+              this.importWarning = 'The backup contains validation issues. Review the messages below before restoring.';
+            } else {
+              this.importWarning = '';
+            }
+          } catch (error) {
+            console.error('Failed to load backup file', error);
+            this.importError = 'We were unable to read the backup file. Please try again.';
+            this.backupPayload = null;
+            this.backupSummary = null;
+            this.backupValidationErrors = [];
+          }
+        },
+
+        analyzeBackupPayload(payload){
+          const errors = [];
+          if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+            errors.push('Backup payload must be a JSON object.');
+            return { normalized: null, summary: null, errors };
+          }
+
+          const readArray = (primaryKey, fallbacks = [], label = primaryKey) => {
+            let source = payload[primaryKey];
+            for (const key of fallbacks) {
+              if (!Array.isArray(source)) {
+                source = payload[key];
+              }
+            }
+            if (!Array.isArray(source)) {
+              errors.push(`Missing array for "${label}".`);
+              return [];
+            }
+            const sanitized = [];
+            let rejected = 0;
+            for (const entry of source) {
+              if (!entry || typeof entry !== 'object') {
+                rejected++;
+                continue;
+              }
+              sanitized.push({ ...entry });
+            }
+            if (rejected) {
+              errors.push(`${rejected} ${label} entr${rejected === 1 ? 'y was' : 'ies were'} skipped because they are not objects.`);
+            }
+            return sanitized;
+          };
+
+          const normalized = {
+            employees: readArray('employees'),
+            requirements: readArray('requirements'),
+            employeeRequirements: readArray('employeeRequirements', ['completions'], 'employeeRequirements'),
+            settings: readArray('settings'),
+            templates: readArray('templates', ['roleRequirementProfiles'], 'templates'),
+            snapshots: readArray('snapshots', ['complianceSnapshots'], 'snapshots'),
+            activityLog: readArray('activityLog', ['logs'], 'activityLog').map(entry => ({
+              ...entry,
+              supportsUndo: entry?.supportsUndo === false ? false : true
+            }))
+          };
+
+          const metadata = (payload.meta && typeof payload.meta === 'object') ? { ...payload.meta } : {};
+          if (payload.generatedAt && !metadata.generatedAt) {
+            metadata.generatedAt = payload.generatedAt;
+          }
+
+          const summary = {
+            employees: normalized.employees.length,
+            requirements: normalized.requirements.length,
+            completions: normalized.employeeRequirements.length,
+            settings: normalized.settings.length,
+            templates: normalized.templates.length,
+            snapshots: normalized.snapshots.length,
+            activityLog: normalized.activityLog.length,
+            generatedAt: metadata.generatedAt || null
+          };
+
+          return { normalized: { ...normalized, metadata }, summary, errors };
+        },
+
+        async restoreBackup(){
+          if (this.loadError || !this.db) {
+            this.importError = 'Database is not ready. Reload the page and try again.';
+            return null;
+          }
+          if (!this.backupPayload) {
+            this.importError = 'Upload a backup file before restoring.';
+            return null;
+          }
+          if (this.backupValidationErrors.length) {
+            this.importError = 'Resolve the backup validation issues before restoring.';
+            return null;
+          }
+
+          const payload = this.backupPayload;
+          const summary = this.backupSummary || this.analyzeBackupPayload(payload).summary;
+
+          try {
+            await this.db.transaction('rw',
+              this.db.employees,
+              this.db.requirements,
+              this.db.employeeRequirements,
+              this.db.settings,
+              this.db.roleRequirementProfiles,
+              this.db.complianceSnapshots,
+              this.db.activityLog,
+              async () => {
+                await this.db.employees.clear();
+                await this.db.requirements.clear();
+                await this.db.employeeRequirements.clear();
+                await this.db.settings.clear();
+                if (this.db.roleRequirementProfiles) await this.db.roleRequirementProfiles.clear();
+                if (this.db.complianceSnapshots) await this.db.complianceSnapshots.clear();
+                if (this.db.activityLog) await this.db.activityLog.clear();
+
+                if (payload.employees.length) await this.db.employees.bulkPut(payload.employees);
+                if (payload.requirements.length) await this.db.requirements.bulkPut(payload.requirements);
+                if (payload.employeeRequirements.length) await this.db.employeeRequirements.bulkPut(payload.employeeRequirements);
+                if (payload.settings.length) await this.db.settings.bulkPut(payload.settings);
+                if (this.db.roleRequirementProfiles && payload.templates.length) await this.db.roleRequirementProfiles.bulkPut(payload.templates);
+                if (this.db.complianceSnapshots && payload.snapshots.length) await this.db.complianceSnapshots.bulkPut(payload.snapshots);
+                if (this.db.activityLog && payload.activityLog.length) await this.db.activityLog.bulkPut(payload.activityLog);
+                if (payload.metadata && Object.keys(payload.metadata).length) {
+                  await this.db.settings.put({ id: 'backupMeta', value: payload.metadata });
+                }
+              }
+            );
+
+            await this.recordActivity('RestoreBackup', [], { summary }, null, { supportsUndo: false });
+            this.notify('Backup restored successfully.');
+            this.backupPayload = null;
+            this.backupSummary = null;
+            this.backupValidationErrors = [];
+            return summary;
+          } catch (error) {
+            console.error('Failed to restore backup', error);
+            this.importError = 'Restoring the backup failed. Check the console for details.';
+            return null;
           }
         },
 
@@ -204,6 +374,10 @@ window.addEventListener('DOMContentLoaded', function () {
           this.$nextTick(() => {
             this.$refs.activityTimeline?.load();
           });
+        },
+
+        openCalendar(){
+          window.open('calendar.html', '_blank');
         },
 
         async clearAllData(){
@@ -685,7 +859,7 @@ window.addEventListener('DOMContentLoaded', function () {
             console.error('Failed to persist tour completion', error);
           }
         },
-        async recordActivity(actionType, targets = [], metadata = {}, undoPayload = null){
+        async recordActivity(actionType, targets = [], metadata = {}, undoPayload = null, options = {}){
           if(!this.activityLog) return;
           try{
             await this.activityLog.record({
@@ -693,7 +867,8 @@ window.addEventListener('DOMContentLoaded', function () {
               actor:'user',
               targets,
               metadata,
-              undoPayload
+              undoPayload,
+              supportsUndo: options.supportsUndo !== false
             });
             this.$refs.activityTimeline?.load();
           }catch(error){
@@ -728,12 +903,17 @@ window.addEventListener('DOMContentLoaded', function () {
 
         // ---------- Import ----------
         async handleFileUpload(event){
-          this.importError=''; this.importWarning=''; this.importData=[]; this.importHeaders=[]; this.importSheets=[]; this.importSheetName=''; this.previewEligible=0; this.dryRunDetails=[]; this.importLoading=true; this.importProgress=0; this.importErrors=[];
+          this.importError=''; this.importWarning=''; this.importData=[]; this.importHeaders=[]; this.importSheets=[]; this.importSheetName=''; this.previewEligible=0; this.dryRunDetails=[]; this.importProgress=0; this.importErrors=[];
+          this.dryRunSummary = { added:0, updated:0, skipped:0 };
           this.columnMap = { firstName:'', lastName:'', payrollName:'', role:'', employmentType:'', employeeId:'', status:'', seniorityHours:'' };
           this.completionMap = {};
-          const file = event.target.files[0];
+          this.backupPayload = null;
+          this.backupSummary = null;
+          this.backupValidationErrors = [];
+          this.importLoading=true;
+          const file = event.target.files?.[0];
           if(!file) { this.importLoading=false; return; }
-          
+
           // File validation
           const maxSize = 10 * 1024 * 1024; // 10MB
           if (file.size > maxSize) {
@@ -741,29 +921,44 @@ window.addEventListener('DOMContentLoaded', function () {
             this.importLoading = false;
             return;
           }
-          
-          const allowedTypes = ['.csv', '.xlsx', '.xls'];
+
           const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+
+          if (this.importMode === 'backup') {
+            if (fileExtension !== '.json') {
+              this.importError = 'Backups must be uploaded as JSON (.json).';
+              this.importLoading = false;
+              return;
+            }
+            try {
+              await this.loadBackupFromFile(file);
+            } finally {
+              this.importLoading = false;
+            }
+            return;
+          }
+
+          const allowedTypes = ['.csv', '.xlsx', '.xls'];
           if (!allowedTypes.includes(fileExtension)) {
             this.importError = 'Invalid file type. Please upload a CSV or Excel file (.csv, .xlsx, .xls).';
             this.importLoading = false;
             return;
           }
-          
+
           // Auto-detect import type based on file extension if not set correctly
           if (fileExtension === '.csv' && this.importType === 'excel') {
             this.importType = 'csv';
           } else if ((fileExtension === '.xlsx' || fileExtension === '.xls') && this.importType === 'csv') {
             this.importType = 'excel';
           }
-          
+
           // Check if XLSX library is available for Excel files
           if (this.importType === 'excel' && typeof XLSX === 'undefined') {
             this.importError = 'Excel processing library is not loaded. Please refresh the page and try again.';
             this.importLoading = false;
             return;
           }
-          
+
           if (this.importType === 'csv') {
             if (typeof Papa === 'undefined') {
               this.importError = 'CSV parsing library is unavailable. Check your internet connection and try again.';
@@ -853,8 +1048,12 @@ window.addEventListener('DOMContentLoaded', function () {
           this.importError = '';
           this.importProgress = 0;
           this.importErrors = [];
+          this.dryRunSummary = { added:0, updated:0, skipped:0 };
           this.columnMap = { firstName:'', lastName:'', payrollName:'', role:'', employmentType:'', employeeId:'', status:'', seniorityHours:'' };
           this.completionMap = {};
+          this.backupPayload = null;
+          this.backupSummary = null;
+          this.backupValidationErrors = [];
           const reader = new FileReader();
           reader.onload = async (e) => {
             try {
@@ -1029,6 +1228,7 @@ window.addEventListener('DOMContentLoaded', function () {
         },
 
         async dryRun(){
+          if (this.importMode === 'backup') return;
           // Simulate import and list first skipped reasons
           const existing = await this.db.employees.toArray();
           const byEmpId = new Map(existing.filter(e=>e.employeeId).map(e=>[String(e.employeeId), e]));
@@ -1047,6 +1247,13 @@ window.addEventListener('DOMContentLoaded', function () {
 
         async processImport(){
           this.importError='';
+          if (this.importMode === 'backup'){
+            const summary = await this.restoreBackup();
+            if(!summary) return;
+            this.showImportModal=false;
+            await this.loadData();
+            return;
+          }
           if (!this.importData.length || !this.importHeaders.length){ this.importError='Nothing to import'; return; }
           if (this.importMode==='employees'){
             if (!(this.columnMap.firstName || this.columnMap.lastName || this.columnMap.payrollName)){
@@ -1168,8 +1375,26 @@ window.addEventListener('DOMContentLoaded', function () {
         },
         addDays(dateOnly, days){ if(!dateOnly) return null; const [y,m,d]=dateOnly.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+Number(days)); return dt.toISOString().slice(0,10); },
         exportData: async function(format='json'){
-          const data={ employees:await this.db.employees.toArray(), requirements:await this.db.requirements.toArray(), employeeRequirements:await this.db.employeeRequirements.toArray(), settings:await this.db.settings.toArray() };
-          const date=`compliance-matrix-${new Date().toISOString().split('T')[0]}`;
+          const generatedAt = new Date().toISOString();
+          const hasTemplatesTable = this.db.roleRequirementProfiles && typeof this.db.roleRequirementProfiles.toArray === 'function';
+          const hasSnapshotsTable = this.db.complianceSnapshots && typeof this.db.complianceSnapshots.toArray === 'function';
+          const hasActivityLogTable = this.db.activityLog && typeof this.db.activityLog.toArray === 'function';
+          const [templates, snapshots, activityLog] = await Promise.all([
+            hasTemplatesTable ? this.db.roleRequirementProfiles.toArray() : [],
+            hasSnapshotsTable ? this.db.complianceSnapshots.toArray() : [],
+            hasActivityLogTable ? this.db.activityLog.toArray() : []
+          ]);
+          const data={
+            employees:await this.db.employees.toArray(),
+            requirements:await this.db.requirements.toArray(),
+            employeeRequirements:await this.db.employeeRequirements.toArray(),
+            settings:await this.db.settings.toArray(),
+            templates,
+            snapshots,
+            activityLog,
+            generatedAt
+          };
+          const date=`compliance-matrix-${generatedAt.split('T')[0]}`;
           let blob, filename, message;
           if(format==='csv'){
             const csv=Papa.unparse(data.employees);
@@ -1182,6 +1407,9 @@ window.addEventListener('DOMContentLoaded', function () {
             XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.requirements),'Requirements');
             XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.employeeRequirements),'EmployeeRequirements');
             XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.settings),'Settings');
+            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.templates),'Templates');
+            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.snapshots),'Snapshots');
+            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.activityLog),'ActivityLog');
             const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
             blob=new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
             filename=`${date}.xlsx`;

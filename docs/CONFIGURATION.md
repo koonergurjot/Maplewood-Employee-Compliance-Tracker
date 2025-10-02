@@ -38,3 +38,11 @@ Existing workbooks will contain legacy `NotCompleted` rows for requirements that
 2. Select the affected employees in the grid (or rely on the automatic role match) and open **Settings → Column Settings → Role Templates**.
 3. Choose the relevant template and apply it. All matching employee/requirement pairs are normalised—excluded items become `NotRequired`, while previously excluded items that are now required revert to `NotCompleted` so progress can be tracked.
 4. Repeat for each role-specific template until the dashboard KPIs reflect the desired scope.
+
+## Backups
+
+Use the built-in backup mode when you need to migrate data between browsers or seed a new device:
+
+1. Export a JSON backup via **Export → JSON**. The file captures every IndexedDB table, including templates, compliance snapshots, and the activity log.
+2. On the destination device, open **Import → Backup** and upload the JSON file. The app validates the structure, displays table counts, and highlights any issues before restoring.
+3. Click **Restore Backup** to replace the existing database in a single transaction. Because the operation rewrites every table, it cannot be undone from the activity log.
