@@ -46,7 +46,7 @@
           toggleImportModal(false);
         };
 
-        modal.querySelectorAll('[\@click="showImportModal=false"]').forEach((el) => {
+        modal.querySelectorAll('[data-close-import-modal], [x-on\\:click="showImportModal=false"]').forEach((el) => {
           el.addEventListener('click', closeHandler);
           cleanupFns.push(() => el.removeEventListener('click', closeHandler));
         });
