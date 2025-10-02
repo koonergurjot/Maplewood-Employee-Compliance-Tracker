@@ -31,6 +31,8 @@ export default class ActivityLog {
 
   // Record a completed command.
   async record({ actionType, actor, targets = [], metadata = {}, undoPayload }) {
+    // Use the shared generator to ensure consistent IDs even when crypto.randomUUID
+    // is unavailable (e.g., in some workers or legacy browsers).
     const entry = {
       id: generateId(),
       timestamp: Date.now(),
