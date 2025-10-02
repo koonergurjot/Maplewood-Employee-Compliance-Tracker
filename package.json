@@ -1,0 +1,24 @@
+{
+  "name": "maplewood-employee-compliance-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:legacy": "npm run build && playwright test --project=webkit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.41.2",
+    "@vitejs/plugin-legacy": "^5.0.0",
+    "vite": "^5.0.11"
+  },
+  "dependencies": {
+    "regenerator-runtime": "^0.14.1"
+  },
+  "browserslist": [
+    "defaults",
+    "last 2 versions",
+    "not dead"
+  ]
+}
