@@ -377,7 +377,7 @@ window.addEventListener('DOMContentLoaded', function () {
         },
 
         openCalendar(){
-          window.open('calendar.html', '_blank');
+          window.open('calendar.html', '_blank', 'noopener');
         },
 
         async clearAllData(){
