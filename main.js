@@ -765,10 +765,23 @@ window.addEventListener('DOMContentLoaded', function () {
           }
           
           if (this.importType === 'csv') {
+            if (typeof Papa === 'undefined') {
+              this.importError = 'CSV parsing library is unavailable. Check your internet connection and try again.';
+              this.importLoading = false;
+              return;
+            }
             const text = await file.text();
             const lines = text.split(/\r?\n/);
             const body = this.stripTitleLines(lines);
-            const res = Papa.parse(body, { header:true, skipEmptyLines:true });
+            let res;
+            try {
+              res = Papa.parse(body, { header:true, skipEmptyLines:true });
+            } catch (parseError) {
+              console.error('Failed to parse CSV file', parseError);
+              this.importError = 'We could not read the CSV file. Ensure it is properly formatted and try again.';
+              this.importLoading = false;
+              return;
+            }
             this.importData = res.data; this.importHeaders = res.meta.fields || [];
             const trimmed = (res.meta.fields || []).map(h => h.trim());
             this.importData = res.data.map(row => {
