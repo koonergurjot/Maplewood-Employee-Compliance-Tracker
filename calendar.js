@@ -1,4 +1,9 @@
+import { Calendar } from 'fullcalendar';
+import feather from 'feather-icons';
+import './fullcalendar.css';
+
 import { createDatabase } from './db.js';
+import './styles.css';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const db = createDatabase();
@@ -77,10 +82,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
   const calendarEl = document.getElementById('calendar');
-  const calendar = new FullCalendar.Calendar(calendarEl, {
+  const calendar = new Calendar(calendarEl, {
     initialView: 'dayGridMonth',
     height: '100%',
     events
   });
   calendar.render();
+
+  if (typeof feather !== 'undefined' && typeof feather.replace === 'function') {
+    feather.replace();
+  }
 });

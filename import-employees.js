@@ -1,3 +1,5 @@
+import Papa from 'papaparse';
+
 import { createDatabase, generateId } from './db.js';
 
 /**
@@ -5,14 +7,9 @@ import { createDatabase, generateId } from './db.js';
  * - Supports CSV or JSON files via <input type="file">.
  * - Auto-detects columns (Name, Employee ID, Seniority Hours, Status, Role, Employment Type, Wing/Unit, Start/Hire Date).
  * - Sorts by seniority hours (desc) before writing to IndexedDB (Dexie).
- * - Requires Dexie and PapaParse to be available globally.
- */
+ * - Uses Dexie and PapaParse modules provided via the bundled build.
+*/
 (function(){
-  const DexieRef = window.Dexie;
-  if (!DexieRef) {
-    console.warn("Dexie not found; import will fail until Dexie loads.");
-  }
-
   function getAlpineRoot(){
     const root = document.querySelector('[x-data="app"]');
     return root && root.__x ? root.__x : null;
@@ -312,11 +309,11 @@ import { createDatabase, generateId } from './db.js';
       throw new Error('JSON file must contain an array or {employees: []}');
     }
     // CSV path
-    if (!window.Papa){
+    if (!Papa){
       throw new Error('PapaParse not loaded; CSV import unavailable.');
     }
     return new Promise((resolve, reject)=>{
-      window.Papa.parse(file, {
+      Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
         complete: (res)=> resolve(res.data),

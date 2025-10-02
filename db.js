@@ -1,16 +1,9 @@
+import Dexie from 'dexie';
+
 const DB_NAME = 'ComplianceMatrixDB';
 
 export function getDexie() {
-  if (typeof window !== 'undefined' && window.Dexie) {
-    return window.Dexie;
-  }
-  if (typeof self !== 'undefined' && self.Dexie) {
-    return self.Dexie;
-  }
-  if (typeof globalThis !== 'undefined' && globalThis.Dexie) {
-    return globalThis.Dexie;
-  }
-  return null;
+  return Dexie;
 }
 
 export function generateId() {
@@ -89,9 +82,6 @@ function defineSchema(db) {
 
 export function createDatabase() {
   const DexieRef = getDexie();
-  if (!DexieRef) {
-    throw new Error('Dexie is not available in the current environment');
-  }
   const db = new DexieRef(DB_NAME);
   defineSchema(db);
   return db;

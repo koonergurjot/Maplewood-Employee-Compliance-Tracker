@@ -1,9 +1,20 @@
-const BUILD_HASH = self.__SW_BUILD_HASH__ || self.__BUILD_HASH__ || 'v3';
-const CACHE = `cmatrix-${BUILD_HASH}`;
-
 const scopeUrl = self.registration.scope;
-const PRECACHE_PATHS = [
 
+const initialHash = (() => {
+  if (self.__SW_BUILD_HASH__) return self.__SW_BUILD_HASH__;
+  if (self.__BUILD_HASH__) return self.__BUILD_HASH__;
+  try {
+    const swUrl = new URL(self.location.href);
+    return swUrl.searchParams.get('build') || 'dev';
+  } catch (error) {
+    console.warn('Failed to determine build hash from service worker URL', error);
+    return 'dev';
+  }
+})();
+
+let currentCacheName = `cmatrix-${initialHash}`;
+
+const STATIC_PATHS = [
   './',
   'index.html',
   'calendar.html',
@@ -11,99 +22,161 @@ const PRECACHE_PATHS = [
   'clear-cache.html',
   'timeline-component.html',
   'manifest.webmanifest',
-  'styles.css',
+  'manifest.json',
   'icon-192.svg',
-  'icon-512.svg',
-  'commands.js',
-  'activity-log.js',
-  'db.js',
-  'calendar.js',
-  'onboarding.js'
-,
-  'manifest.webmanifest?v=1',
-  'styles.css?v=1'
+  'icon-512.svg'
 ];
 
-const PRECACHE_URLS = PRECACHE_PATHS.map(path => new URL(path, scopeUrl).toString());
+const STATIC_URLS = STATIC_PATHS.map(path => new URL(path, scopeUrl).toString());
 const INDEX_URL = new URL('index.html', scopeUrl).toString();
 
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(PRECACHE_URLS))
-  );
-});
+let manifestPromise;
 
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))
-    )
-  );
-});
+function extractHashFromAssets(assets) {
+  for (const url of assets) {
+    const match = url.match(/[-.]([a-f0-9]{8,})(?:\.(?:js|css|mjs))$/i);
+    if (match) {
+      return match[1];
+    }
+  }
+  return null;
+}
 
-const cacheFirst = request =>
-  caches.match(request).then(cachedResponse => {
-    if (cachedResponse) return cachedResponse;
+async function loadManifestAssets() {
+  if (!manifestPromise) {
+    manifestPromise = (async () => {
+      const assets = new Set(STATIC_URLS);
+      try {
+        const manifestUrl = new URL('manifest.json', scopeUrl);
+        assets.add(manifestUrl.toString());
+        const response = await fetch(manifestUrl, { cache: 'no-store' });
+        if (response.ok) {
+          const manifest = await response.json();
+          const visited = new Set();
 
-    return fetch(request).then(response => {
-      if (response && response.ok) {
-        const clone = response.clone();
-        caches.open(CACHE).then(cache => cache.put(request, clone));
+          const addEntry = (key) => {
+            if (visited.has(key)) return;
+            visited.add(key);
+            const entry = manifest[key];
+            if (!entry) return;
+
+            if (entry.file) {
+              assets.add(new URL(entry.file, scopeUrl).toString());
+            }
+
+            if (Array.isArray(entry.css)) {
+              entry.css.forEach(file => assets.add(new URL(file, scopeUrl).toString()));
+            }
+
+            if (Array.isArray(entry.assets)) {
+              entry.assets.forEach(file => assets.add(new URL(file, scopeUrl).toString()));
+            }
+
+            if (Array.isArray(entry.imports)) {
+              entry.imports.forEach(addEntry);
+            }
+          };
+
+          Object.keys(manifest).forEach(addEntry);
+
+          const derivedHash = extractHashFromAssets(assets);
+          if (derivedHash) {
+            currentCacheName = `cmatrix-${derivedHash}`;
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load Vite manifest for precache', error);
       }
-      return response;
-    });
-  });
 
-const isVersionedAsset = url => {
-  if (url.searchParams && url.searchParams.has('v')) return true;
-  return /\.[0-9a-f]{8,}\./i.test(url.pathname);
+      return { cacheName: currentCacheName, urls: Array.from(assets) };
+    })();
+  }
+
+  return manifestPromise;
+}
+
+loadManifestAssets().catch(() => {});
+
+const cacheFirst = async (request) => {
+  const cache = await caches.open(currentCacheName);
+  const cachedResponse = await cache.match(request);
+  if (cachedResponse) return cachedResponse;
+
+  const response = await fetch(request);
+  if (response && response.ok) {
+    cache.put(request, response.clone());
+  }
+  return response;
 };
 
-self.addEventListener('fetch', event => {
+const isVersionedAsset = (url) => {
+  if (url.searchParams && url.searchParams.has('v')) return true;
+  return /\.[0-9a-f]{8,}\.[a-z0-9]+$/i.test(url.pathname);
+};
+
+self.addEventListener('install', (event) => {
+  event.waitUntil((async () => {
+    const { cacheName, urls } = await loadManifestAssets();
+    const cache = await caches.open(cacheName);
+    await cache.addAll(urls);
+    self.skipWaiting();
+  })());
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const { cacheName } = await loadManifestAssets();
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(key => key !== cacheName).map(key => caches.delete(key)));
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
-  const acceptHeader = request.headers.get('Accept') || '';
-  const url = new URL(request.url);
+  event.respondWith((async () => {
+    await loadManifestAssets().catch(() => {});
 
-  if (acceptHeader.includes('text/html')) {
-    event.respondWith(
-      fetch(request)
-        .then(response => {
-          if (response && response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE).then(cache => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(INDEX_URL))
-    );
-    return;
-  }
+    const acceptHeader = request.headers.get('Accept') || '';
+    const url = new URL(request.url);
 
-  if (url.origin === self.location.origin && isVersionedAsset(url)) {
-    event.respondWith(cacheFirst(request));
-    return;
-  }
+    if (acceptHeader.includes('text/html')) {
+      try {
+        const networkResponse = await fetch(request);
+        if (networkResponse && networkResponse.ok) {
+          const cache = await caches.open(currentCacheName);
+          cache.put(request, networkResponse.clone());
+        }
+        return networkResponse;
+      } catch (error) {
+        const cached = await caches.match(INDEX_URL);
+        if (cached) return cached;
+        throw error;
+      }
+    }
 
-  event.respondWith(
-    caches.match(request).then(cachedResponse => {
-      if (cachedResponse) return cachedResponse;
+    if (url.origin === self.location.origin && isVersionedAsset(url)) {
+      return cacheFirst(request);
+    }
 
-      return fetch(request)
-        .then(response => {
-          if (response && response.ok && url.origin === self.location.origin) {
-            const clone = response.clone();
-            caches.open(CACHE).then(cache => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => {
-          if (url.origin === self.location.origin && (url.pathname === '/' || url.pathname.endsWith('.html'))) {
-            return caches.match(INDEX_URL);
-          }
-          return Promise.reject('offline');
-        });
-    })
-  );
+    const cachedResponse = await caches.match(request);
+    if (cachedResponse) return cachedResponse;
+
+    try {
+      const response = await fetch(request);
+      if (response && response.ok && url.origin === self.location.origin) {
+        const cache = await caches.open(currentCacheName);
+        cache.put(request, response.clone());
+      }
+      return response;
+    } catch (error) {
+      if (url.origin === self.location.origin && (url.pathname === '/' || url.pathname.endsWith('.html'))) {
+        const fallback = await caches.match(INDEX_URL);
+        if (fallback) return fallback;
+      }
+      throw error;
+    }
+  })());
 });
