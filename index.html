@@ -227,7 +227,8 @@
                 </div>
               </th>
               <template x-for="req in orderedVisibleRequirements()" :key="req.id">
-                <th class="requirement-header px-4 py-3 text-left text-xs font-medium uppercase tracking-wider relative" :data-requirement-header="req.id" :style="`background:${req.color || '#f8fafc'}; border-left: 3px solid ${req.color ? req.color.replace('f', '8').replace('e', '6') : '#94a3b8'};`">
+                <!-- Append 1A alpha for softer fills when valid hex colors are provided -->
+                <th class="requirement-header px-4 py-3 text-left text-xs font-medium uppercase tracking-wider relative" :data-requirement-header="req.id" :style="requirementHeaderStyle(req.color)">
                   <div class="flex items-center justify-between">
                     <span x-html="highlightText(req.name)" class="font-semibold"></span>
                     <div class="flex items-center gap-1">
@@ -1089,6 +1090,15 @@
         },
 
         formatYears(days){ return Math.floor(days/365)+'y'; },
+
+        normalizeRequirementColor(color){
+          return typeof color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(color) ? color : '';
+        },
+
+        requirementHeaderStyle(color){
+          const validColor = this.normalizeRequirementColor(color);
+          return `background:${validColor ? `${validColor}1A` : '#f8fafc'}; border-left:3px solid ${validColor || '#94a3b8'}`;
+        },
 
         async init(){
           if (typeof window.Dexie === 'undefined') {
