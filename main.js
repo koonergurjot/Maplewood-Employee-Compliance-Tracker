@@ -402,9 +402,14 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
         async loadData(){
           if (this.loadError || !this.db) return;
-          this.employees = await this.db.employees.toArray();
-          this.requirements = await this.db.requirements.toArray();
-          this.employeeRequirements = await this.db.employeeRequirements.toArray();
+          const [employees, requirements, employeeRequirements] = await Promise.all([
+            this.db.employees.toArray(),
+            this.db.requirements.toArray(),
+            this.db.employeeRequirements.toArray()
+          ]);
+          this.employees = employees;
+          this.requirements = requirements;
+          this.employeeRequirements = employeeRequirements;
           this.erMap = new Map();
           for (const er of this.employeeRequirements){
             if(!this.erMap.has(er.employeeId)) this.erMap.set(er.employeeId,new Map());
