@@ -106,6 +106,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         showEditEmployeeModal:false, showEditRequirementModal:false,
           searchQuery:'', roleFilter:'', statusFilter:'', reqStatusFilter:'', filteredEmployees:[], isFiltering:false, sortField:'firstName', sortDirection:'asc',
           globalSearch:'', searchResults:[],
+          globalSearchIndex:null, globalSearchIndexVersion:-1, globalSearchDataVersion:0, globalSearchData:[],
         newEmployee:{firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''},
           newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
           editingEmployee:{}, editingRequirement:{},
@@ -419,9 +420,17 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           await this.loadTemplates();
           await this.collectComplianceSnapshot();
           this.renderComplianceChart();
+          this.touchGlobalSearchVersion();
           if (!this.loadError) {
             this.filterEmployees();
           }
+        },
+
+        touchGlobalSearchVersion(){
+          this.globalSearchDataVersion += 1;
+          this.globalSearchIndex = null;
+          this.globalSearchIndexVersion = -1;
+          this.globalSearchData = [];
         },
 
         async loadVisibleRequirements(){
@@ -731,6 +740,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           await this.saveRequirementsSettings();
           this.cancelTemplateEdit();
           this.showSettingsModal = false;
+          this.touchGlobalSearchVersion();
           this.refreshFeatherIcons();
         },
 
@@ -1749,34 +1759,41 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         performGlobalSearch(query){
           const requirementSource = this.orderedVisibleRequirements();
           const requirementsList = requirementSource.length ? requirementSource : this.requirements;
-          const data = [
-            ...this.employees.map(e => {
-              const firstName = e.firstName || '';
-              const lastName = e.lastName || '';
-              const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
-              const role = e.role || '';
-              const employeeId = e.employeeId ? String(e.employeeId) : '';
-              const textParts = [fullName, role, employeeId].filter(Boolean);
-              return {
-                type: 'employee',
-                id: e.id,
-                text: textParts.join(' ').trim(),
-                label: fullName || role || employeeId || 'Employee',
-                meta: {
-                  role,
-                  employeeId: employeeId ? `ID: ${employeeId}` : ''
-                }
-              };
-            }),
-            ...requirementsList.map(r => ({
-              type: 'requirement',
-              id: r.id,
-              text: r.name || '',
-              label: r.name || 'Requirement'
-            }))
-          ];
-          const fuse = new Fuse(data, { keys:['text'], includeMatches:true, threshold:0.3 });
-          this.searchResults = query ? fuse.search(query).slice(0, 12) : [];
+          const needsRebuild = !this.globalSearchIndex || this.globalSearchIndexVersion !== this.globalSearchDataVersion;
+
+          if (needsRebuild) {
+            const data = [
+              ...this.employees.map(e => {
+                const firstName = e.firstName || '';
+                const lastName = e.lastName || '';
+                const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+                const role = e.role || '';
+                const employeeId = e.employeeId ? String(e.employeeId) : '';
+                const textParts = [fullName, role, employeeId].filter(Boolean);
+                return {
+                  type: 'employee',
+                  id: e.id,
+                  text: textParts.join(' ').trim(),
+                  label: fullName || role || employeeId || 'Employee',
+                  meta: {
+                    role,
+                    employeeId: employeeId ? `ID: ${employeeId}` : ''
+                  }
+                };
+              }),
+              ...requirementsList.map(r => ({
+                type: 'requirement',
+                id: r.id,
+                text: r.name || '',
+                label: r.name || 'Requirement'
+              }))
+            ];
+            this.globalSearchData = data;
+            this.globalSearchIndex = new Fuse(data, { keys:['text'], includeMatches:true, threshold:0.3 });
+            this.globalSearchIndexVersion = this.globalSearchDataVersion;
+          }
+
+          this.searchResults = query ? this.globalSearchIndex.search(query).slice(0, 12) : [];
           this.refreshFeatherIcons();
         },
         clearGlobalSearch(){
