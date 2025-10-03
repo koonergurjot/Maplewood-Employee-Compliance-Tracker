@@ -48,9 +48,9 @@ async function loadManifestAssets() {
       const assets = new Set(STATIC_URLS);
       try {
         const manifestUrl = new URL('manifest.json', scopeUrl);
-        assets.add(manifestUrl.toString());
         const response = await fetch(manifestUrl, { cache: 'no-store' });
-        if (response.ok) {
+        if (response && response.ok) {
+          assets.add(manifestUrl.toString());
           const manifest = await response.json();
           const visited = new Set();
 
@@ -83,8 +83,12 @@ async function loadManifestAssets() {
           if (derivedHash) {
             currentCacheName = `cmatrix-${derivedHash}`;
           }
+        } else {
+          assets.delete(manifestUrl.toString());
         }
       } catch (error) {
+        const manifestUrl = new URL('manifest.json', scopeUrl);
+        assets.delete(manifestUrl.toString());
         console.warn('Failed to load Vite manifest for precache', error);
       }
 
@@ -118,7 +122,13 @@ self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const { cacheName, urls } = await loadManifestAssets();
     const cache = await caches.open(cacheName);
-    await cache.addAll(urls);
+    const validUrls = urls.filter(Boolean);
+    const results = await Promise.allSettled(validUrls.map((url) => cache.add(url)));
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.warn(`Failed to precache asset: ${validUrls[index]}`, result.reason);
+      }
+    });
     self.skipWaiting();
   })());
 });
