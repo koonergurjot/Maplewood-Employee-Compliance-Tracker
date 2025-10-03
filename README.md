@@ -38,13 +38,22 @@ Read the full project overview in [docs/OVERVIEW.md](docs/OVERVIEW.md).
    cd Maplewood-Employee-Compliance-Tracker
    ```
 
-2. Serve the site from the project root so `index.html`, `sw.js`, and `manifest.webmanifest` load correctly. For example:
+2. Install dependencies and start the development server:
 
    ```bash
-   npx serve .
+   npm install
+   npm run dev
    ```
 
-3. Open `http://localhost:3000` (or the port shown) to use the app.
+   Then open the local URL shown in the terminal to use the app.
+
+3. For production, run a build and serve the generated `dist` directory from your preferred static host:
+
+   ```bash
+   npm run build
+   ```
+
+   Serving the repository root directly (for example, via `npx serve .`) will break Dexie, XLSX, and Alpine imports because the bare module specifiers are only resolved by Vite's dev server or the bundled build. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for more deployment details.
 
 ## Backup & Restore
 
