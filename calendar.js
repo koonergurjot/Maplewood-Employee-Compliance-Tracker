@@ -6,9 +6,10 @@ import { createDatabase } from './db.js';
 import './styles.css';
 
 document.addEventListener('DOMContentLoaded', async () => {
-  const db = createDatabase();
+  let db;
 
   try {
+    db = await createDatabase();
     await db.open();
   } catch (error) {
     console.error('Failed to open database for calendar', error);

@@ -2,8 +2,153 @@ import Dexie from 'dexie';
 
 const DB_NAME = 'ComplianceMatrixDB';
 
+let DexieRef = Dexie ?? null;
+let dexieLoaderPromise = null;
+let cdnLoaderPromise = null;
+
+function setDexie(module) {
+  if (!module) {
+    DexieRef = null;
+    return DexieRef;
+  }
+
+  DexieRef = module?.default ?? module;
+  return DexieRef;
+}
+
+setDexie(Dexie);
+
 export function getDexie() {
-  return Dexie;
+  return DexieRef;
+}
+
+async function loadDexieFromDynamicImport() {
+  const module = await import('dexie');
+  return setDexie(module);
+}
+
+async function loadDexieFromCdn() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return null;
+  }
+
+  if (window.Dexie) {
+    return setDexie(window.Dexie);
+  }
+
+  if (!cdnLoaderPromise) {
+    cdnLoaderPromise = new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-dexie-cdn]');
+
+      if (existing) {
+        const handleLoad = () => {
+          existing.removeEventListener('load', handleLoad);
+          existing.removeEventListener('error', handleError);
+          if (window.Dexie) {
+            resolve(setDexie(window.Dexie));
+          } else {
+            reject(new Error('Dexie CDN script loaded without exposing Dexie'));
+          }
+        };
+
+        const handleError = event => {
+          existing.removeEventListener('load', handleLoad);
+          existing.removeEventListener('error', handleError);
+          reject(event?.error || new Error('Failed to load Dexie from CDN'));
+        };
+
+        existing.addEventListener('load', handleLoad, { once: true });
+        existing.addEventListener('error', handleError, { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js';
+      script.async = true;
+      script.dataset.dexieCdn = 'true';
+
+      const handleLoad = () => {
+        script.removeEventListener('load', handleLoad);
+        script.removeEventListener('error', handleError);
+        if (window.Dexie) {
+          resolve(setDexie(window.Dexie));
+        } else {
+          reject(new Error('Dexie CDN script loaded without exposing Dexie'));
+        }
+      };
+
+      const handleError = event => {
+        script.removeEventListener('load', handleLoad);
+        script.removeEventListener('error', handleError);
+        reject(event?.error || new Error('Failed to load Dexie from CDN'));
+      };
+
+      script.addEventListener('load', handleLoad);
+      script.addEventListener('error', handleError);
+      document.head.appendChild(script);
+    }).finally(() => {
+      if (!getDexie()) {
+        cdnLoaderPromise = null;
+      }
+    });
+  }
+
+  return cdnLoaderPromise;
+}
+
+async function loadDexie() {
+  if (getDexie()) {
+    return getDexie();
+  }
+
+  if (!dexieLoaderPromise) {
+    dexieLoaderPromise = (async () => {
+      try {
+        return await loadDexieFromDynamicImport();
+      } catch (dynamicError) {
+        if (typeof window === 'undefined') {
+          throw dynamicError;
+        }
+
+        try {
+          const cdnDexie = await loadDexieFromCdn();
+          if (cdnDexie) {
+            return cdnDexie;
+          }
+        } catch (cdnError) {
+          const aggregate = new Error('Dexie failed to load');
+          aggregate.cause = { dynamicError, cdnError };
+          throw aggregate;
+        }
+
+        throw dynamicError;
+      }
+    })().finally(() => {
+      if (!getDexie()) {
+        dexieLoaderPromise = null;
+      }
+    });
+  }
+
+  return dexieLoaderPromise;
+}
+
+export async function ensureDexieLoaded() {
+  if (getDexie()) {
+    return getDexie();
+  }
+
+  try {
+    const DexieInstance = await loadDexie();
+    if (!DexieInstance) {
+      throw new Error('Dexie resolved to a falsy value');
+    }
+    return DexieInstance;
+  } catch (error) {
+    const loadError = new Error('Dexie failed to load');
+    loadError.cause = error;
+    throw loadError;
+  }
 }
 
 export function generateId() {
@@ -80,15 +225,23 @@ function defineSchema(db) {
   });
 }
 
-export function createDatabase() {
-  const DexieRef = getDexie();
-  const db = new DexieRef(DB_NAME);
+export async function createDatabase() {
+  let DexieInstance = getDexie();
+  if (!DexieInstance) {
+    DexieInstance = await ensureDexieLoaded();
+  }
+
+  if (!DexieInstance) {
+    throw new Error('Dexie failed to load');
+  }
+
+  const db = new DexieInstance(DB_NAME);
   defineSchema(db);
   return db;
 }
 
 export async function openDatabase() {
-  const db = createDatabase();
+  const db = await createDatabase();
   await db.open();
   return db;
 }

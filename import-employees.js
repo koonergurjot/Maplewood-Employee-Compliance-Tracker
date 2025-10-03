@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 
-import { createDatabase, generateId } from './db.js';
+import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
 
 /**
  * Client-side importer for Employees.
@@ -75,8 +75,9 @@ import { createDatabase, generateId } from './db.js';
     return false;
   }
 
-  function ensureDb(){
-    return createDatabase();
+  async function ensureDb(){
+    await ensureDexieLoaded();
+    return await createDatabase();
   }
 
   function parseSeniority(val){
@@ -142,7 +143,7 @@ import { createDatabase, generateId } from './db.js';
     const wingCol      = detectColumn(header, ['wing','unit','department','dept']);
     const startCol     = detectColumn(header, ['start date','hire date','seniority date']);
 
-    const db = ensureDb();
+    const db = await ensureDb();
     await db.open();
 
     const existingEmployees = await db.employees.toArray();
