@@ -12,7 +12,7 @@ import feather from 'feather-icons';
 import './styles.css';
 import './import-employees.js';
 import './onboarding.js';
-import { createDatabase, generateId } from './db.js';
+import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
 
 window.Alpine = Alpine;
 
@@ -308,7 +308,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
 
         async init(){
-          this.initDB();
+          await this.initDB();
           if (this.loadError || !this.db) {
             this.$nextTick(() => this.$root?.removeAttribute('x-cloak'));
             return;
@@ -355,15 +355,17 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
         },
 
-        initDB(){
+        async initDB(){
           if (this.loadError || typeof window === 'undefined') {
             return;
           }
           try {
-            this.db = createDatabase();
+            await ensureDexieLoaded();
+            this.db = await createDatabase();
           } catch (error) {
             console.error('Failed to initialize Dexie database', error);
             this.loadError = 'The offline database library (Dexie.js) did not load. Data cannot be displayed without it.';
+            this.db = null;
           }
         },
 
@@ -395,7 +397,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             return;
           }
           await this.db.delete();
-          this.initDB();
+          await this.initDB();
           await this.initActivityLog();
           await this.loadData();
           this.notify('All data cleared');
