@@ -1565,10 +1565,11 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               expiring:0,
               overdue:0,
               incomplete:0,
-              total:this.employeeRequirements.filter(er => er.status !== 'NotRequired').length
+              total:0
             };
             for(const er of this.employeeRequirements){
               if(er.status === 'NotRequired') continue;
+              snapshot.total++;
               const status=this.calcStatus(er.employeeId, er.requirementId);
               if(status==='compliant') snapshot.compliant++;
               else if(status==='expiring') snapshot.expiring++;
