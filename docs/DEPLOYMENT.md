@@ -6,16 +6,21 @@ The application is a static site and can be hosted on any web server.
 
 1. Fork the repository.
 2. Connect the fork to Netlify.
-3. Deploy from the `main` or `work` branch with the publish directory set to the repository root.
+3. Configure the build command to `npm run build` and the publish directory to `dist`.
 
 ## Other Hosts
 
-Serve the contents of the repository with any static file server or CDN.
+1. Install dependencies with `npm install`.
+2. Generate a production build with `npm run build`.
+3. Deploy the contents of the `dist` directory to your static host or CDN.
 
-For local testing run:
+For local development, run:
 
 ```bash
-npx serve .
+npm install
+npm run dev
 ```
 
-and open the provided URL.
+and open the provided URL from the Vite dev server.
+
+> **Note:** The source code uses bare module imports. Serve it through the Vite dev server (`npm run dev`) or deploy the compiled `dist` artifacts; otherwise dependencies such as Dexie, XLSX, and Alpine.js will fail to load when served directly from the repository root.
