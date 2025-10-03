@@ -3,7 +3,6 @@
 
 import Alpine from 'alpinejs';
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 import Chart from 'chart.js/auto';
 import Sortable from 'sortablejs';
 import Fuse from 'fuse.js';
@@ -13,6 +12,98 @@ import './styles.css';
 import './import-employees.js';
 import './onboarding.js';
 import { createDatabase, generateId } from './db.js';
+
+let cachedXlsx = (typeof window !== 'undefined' && (window.__xlsxModule || window.XLSX)) || null;
+let xlsxLoadPromise = null;
+
+function resolveXlsxFromGlobals(){
+  if(typeof window === 'undefined') return null;
+  return window.__xlsxModule || window.XLSX || null;
+}
+
+function rememberXlsxModule(mod){
+  if(!mod) return null;
+  const resolved = mod.default || mod.XLSX || mod;
+  if(!resolved) return null;
+  cachedXlsx = resolved;
+  if(typeof window !== 'undefined'){
+    window.__xlsxModule = resolved;
+    if(!window.XLSX) window.XLSX = resolved;
+  }
+  return resolved;
+}
+
+function injectXlsxFromCdn(){
+  return new Promise((resolve, reject) => {
+    if(typeof document === 'undefined'){
+      reject(new Error('No document available to load XLSX script.'));
+      return;
+    }
+
+    const finalize = () => {
+      const module = resolveXlsxFromGlobals();
+      if(module){
+        resolve(module);
+      } else {
+        reject(new Error('XLSX still unavailable after loading CDN script.'));
+      }
+    };
+
+    const existing = document.querySelector('script[data-xlsx-loader]');
+    if(existing){
+      if(resolveXlsxFromGlobals()){
+        finalize();
+        return;
+      }
+      existing.addEventListener('load', finalize, { once: true });
+      existing.addEventListener('error', () => reject(new Error('Failed to load XLSX from CDN.')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.async = true;
+    script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    script.dataset.xlsxLoader = 'true';
+    script.addEventListener('load', finalize, { once: true });
+    script.addEventListener('error', () => reject(new Error('Failed to load XLSX from CDN.')), { once: true });
+    document.head.appendChild(script);
+  });
+}
+
+export async function loadXlsx(){
+  if(cachedXlsx) return cachedXlsx;
+
+  const existing = resolveXlsxFromGlobals();
+  if(existing) return rememberXlsxModule(existing);
+
+  if(!xlsxLoadPromise){
+    xlsxLoadPromise = (async () => {
+      try {
+        const mod = await import('xlsx');
+        const resolved = rememberXlsxModule(mod);
+        if(resolved) return resolved;
+      } catch (importError) {
+        console.warn('Dynamic XLSX import failed, attempting CDN fallback.', importError);
+        await injectXlsxFromCdn();
+        const resolvedAfterCdn = rememberXlsxModule(resolveXlsxFromGlobals());
+        if(resolvedAfterCdn) return resolvedAfterCdn;
+        throw new Error('XLSX still unavailable');
+      }
+
+      const finalModule = rememberXlsxModule(resolveXlsxFromGlobals());
+      if(finalModule) return finalModule;
+      throw new Error('XLSX still unavailable');
+    })().catch(error => {
+      cachedXlsx = null;
+      throw error;
+    }).finally(() => {
+      if(!cachedXlsx) xlsxLoadPromise = null;
+    });
+  }
+
+  return xlsxLoadPromise;
+}
 
 window.Alpine = Alpine;
 
@@ -974,13 +1065,6 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.importType = 'excel';
           }
 
-          // Check if XLSX library is available for Excel files
-          if (this.importType === 'excel' && typeof XLSX === 'undefined') {
-            this.importError = 'Excel processing library is not loaded. Please refresh the page and try again.';
-            this.importLoading = false;
-            return;
-          }
-
           if (this.importType === 'csv') {
             if (typeof Papa === 'undefined') {
               this.importError = 'CSV parsing library is unavailable. Check your internet connection and try again.';
@@ -1013,23 +1097,32 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             if (!this.importHeaders.length) this.importError = 'No headers detected — check the CSV file.';
             this.importLoading = false;
           } else {
+            let xlsx;
+            try {
+              xlsx = await loadXlsx();
+            } catch (loaderError) {
+              console.error('Failed to load XLSX library:', loaderError);
+              this.importError = 'XLSX still unavailable. Please check your connection and try again.';
+              this.importLoading = false;
+              return;
+            }
             const reader = new FileReader();
             reader.onload = async (e) => {
               try{
                 const data = new Uint8Array(e.target.result);
-                const wb = XLSX.read(data, { type:'array', cellDates: true, cellNF: false, cellText: false });
-                
+                const wb = xlsx.read(data, { type:'array', cellDates: true, cellNF: false, cellText: false });
+
                 if (!wb.SheetNames || wb.SheetNames.length === 0) {
                   this.importError = 'No worksheets found in the Excel file.';
                   return;
                 }
-                
+
                 this.importSheets = wb.SheetNames;
                 let best = { name: wb.SheetNames[0], score: -1, headers: [], rows: [] };
-                
+
                 for (const name of wb.SheetNames){
                   try {
-                    const { headers, rows, score } = this.extractFromSheet(wb.Sheets[name]);
+                    const { headers, rows, score } = this.extractFromSheet(wb.Sheets[name], xlsx);
                     if (score > best.score) best = { name, score, headers, rows };
                   } catch (sheetErr) {
                     console.warn(`Error processing sheet "${name}":`, sheetErr);
@@ -1076,24 +1169,32 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.backupPayload = null;
           this.backupSummary = null;
           this.backupValidationErrors = [];
+          let xlsx;
+          try {
+            xlsx = await loadXlsx();
+          } catch (loaderError) {
+            console.error('Failed to load XLSX library:', loaderError);
+            this.importError = 'XLSX still unavailable. Please check your connection and try again.';
+            return;
+          }
           const reader = new FileReader();
           reader.onload = async (e) => {
             try {
               const data = new Uint8Array(e.target.result);
-              const wb = XLSX.read(data, { type:'array', cellDates: true, cellNF: false, cellText: false });
-              
+              const wb = xlsx.read(data, { type:'array', cellDates: true, cellNF: false, cellText: false });
+
               if (!wb.Sheets[name]) {
                 this.importError = `Worksheet "${name}" not found in the file.`;
                 return;
               }
-              
-            const { headers, rows } = this.extractFromSheet(wb.Sheets[name]);
-            this.importHeaders = headers;
-            this.importData = rows;
-            this.autoMapColumns(this.importHeaders);
-            this.updateEligibilityPreview();
-            await this.validateImportData();
-              
+
+              const { headers, rows } = this.extractFromSheet(wb.Sheets[name], xlsx);
+              this.importHeaders = headers;
+              this.importData = rows;
+              this.autoMapColumns(this.importHeaders);
+              this.updateEligibilityPreview();
+              await this.validateImportData();
+
               if (!this.importHeaders.length) {
                 this.importError = `No headers detected in worksheet "${name}".`;
               } else if (this.importData.length === 0) {
@@ -1137,9 +1238,11 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           const newline = '\n';
           return lines.slice(bestIdx).join(newline);
         },
-        extractFromSheet(sheet){
+        extractFromSheet(sheet, xlsxLib){
           try {
-            const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
+            const lib = xlsxLib || cachedXlsx || resolveXlsxFromGlobals();
+            if(!lib) throw new Error('XLSX still unavailable');
+            const aoa = lib.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
             
             if (!aoa || aoa.length === 0) {
               return { headers: [], rows: [], score: -1 };
@@ -1441,15 +1544,23 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             filename=`${date}.csv`;
             message='Exported CSV';
           } else if(format==='xlsx'){
-            const wb=XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.employees),'Employees');
-            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.requirements),'Requirements');
-            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.employeeRequirements),'EmployeeRequirements');
-            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.settings),'Settings');
-            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.templates),'Templates');
-            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.snapshots),'Snapshots');
-            XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data.activityLog),'ActivityLog');
-            const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+            let xlsx;
+            try {
+              xlsx = await loadXlsx();
+            } catch (loaderError) {
+              console.error('Failed to load XLSX library for export:', loaderError);
+              this.notify('Excel export unavailable: XLSX still unavailable.', 'var(--danger)');
+              return;
+            }
+            const wb=xlsx.utils.book_new();
+            xlsx.utils.book_append_sheet(wb,xlsx.utils.json_to_sheet(data.employees),'Employees');
+            xlsx.utils.book_append_sheet(wb,xlsx.utils.json_to_sheet(data.requirements),'Requirements');
+            xlsx.utils.book_append_sheet(wb,xlsx.utils.json_to_sheet(data.employeeRequirements),'EmployeeRequirements');
+            xlsx.utils.book_append_sheet(wb,xlsx.utils.json_to_sheet(data.settings),'Settings');
+            xlsx.utils.book_append_sheet(wb,xlsx.utils.json_to_sheet(data.templates),'Templates');
+            xlsx.utils.book_append_sheet(wb,xlsx.utils.json_to_sheet(data.snapshots),'Snapshots');
+            xlsx.utils.book_append_sheet(wb,xlsx.utils.json_to_sheet(data.activityLog),'ActivityLog');
+            const wbout=xlsx.write(wb,{bookType:'xlsx',type:'array'});
             blob=new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
             filename=`${date}.xlsx`;
             message='Exported Excel';
