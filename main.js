@@ -1,6 +1,7 @@
 // Consolidated application initialization script extracted from index.html
 // Ensures bundler processes the entire dashboard logic.
 
+import Alpine from 'alpinejs';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import Chart from 'chart.js/auto';
@@ -12,6 +13,8 @@ import './styles.css';
 import './import-employees.js';
 import './onboarding.js';
 import { createDatabase, generateId } from './db.js';
+
+window.Alpine = Alpine;
 
 const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev';
     function activityTimeline(){
@@ -71,9 +74,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
       };
     }
 
-    document.addEventListener('alpine:init', () => {
-      Alpine.data('activityTimeline', activityTimeline);
-      Alpine.data('app', () => ({
+    const app = () => ({
         loadError:'',
         darkMode:false, showImportModal:false, showExportDropdown:false,
         showSettingsModal:false, settingsSortable:null,
@@ -2180,8 +2181,11 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.showBulkActionsModal = false;
           await this.loadData();
         }
-      }));
-    });
+      });
+
+    Alpine.data('activityTimeline', activityTimeline);
+    Alpine.data('app', app);
+
     function showFallback() {
       document.body?.removeAttribute('x-cloak');
 
@@ -2234,3 +2238,5 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
   window.addEventListener('DOMContentLoaded', ()=> {
     if (window.__initImportUI) window.__initImportUI();
   });
+
+  Alpine.start();
