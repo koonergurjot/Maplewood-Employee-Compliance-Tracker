@@ -1,5 +1,7 @@
 import feather from 'feather-icons';
 
+const FEATHER_INIT_ATTR = 'data-feather-initialized';
+
 function getElementAttributes(element) {
   return Array.from(element.attributes ?? []).reduce((attrs, attr) => {
     attrs[attr.name] = attr.value;
@@ -28,9 +30,18 @@ export function safeFeatherReplace(root) {
   }
 
   const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
-  const elements = scope.querySelectorAll('[data-feather]');
+  const selector = `[data-feather]:not([${FEATHER_INIT_ATTR}])`;
+  const elements = Array.from(scope.querySelectorAll(selector));
+
+  if (scope !== document && typeof scope.matches === 'function' && scope.matches(selector)) {
+    elements.unshift(scope);
+  }
 
   elements.forEach(element => {
+    if (element?.dataset?.featherInitialized === 'true') {
+      return;
+    }
+
     const parent = element?.parentNode;
     if (!parent) return;
 
@@ -65,6 +76,11 @@ export function safeFeatherReplace(root) {
     }
 
     svgElement.setAttribute('data-feather', iconName);
+    svgElement.setAttribute(FEATHER_INIT_ATTR, 'true');
+
+    if (svgElement.dataset) {
+      svgElement.dataset.featherInitialized = 'true';
+    }
 
     parent.replaceChild(svgElement, element);
   });
