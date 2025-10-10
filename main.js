@@ -3153,6 +3153,33 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
     document.addEventListener('DOMContentLoaded', replaceFeatherIcons);
     document.addEventListener('alpine:init', replaceFeatherIcons);
 
+    document.addEventListener('employee:added', event => {
+      const root = document.querySelector('[x-data="app"]');
+      if (!root) {
+        return;
+      }
+
+      const target = event?.target ?? null;
+      if (target && target !== document && target !== window && root.contains(target)) {
+        return;
+      }
+
+      const component = root.__x?.$data;
+      if (!component || typeof component.loadData !== 'function') {
+        return;
+      }
+
+      Promise.resolve(component.loadData())
+        .then(() => {
+          if (typeof component.refreshFeatherIcons === 'function') {
+            component.refreshFeatherIcons();
+          }
+        })
+        .catch(error => {
+          console.error('Failed to refresh employees after external addition', error);
+        });
+    });
+
     window.addEventListener('employee-import:missing-columns', (event) => {
       const detail = event?.detail;
       const columns = Array.isArray(detail?.columns) ? detail.columns : [];
