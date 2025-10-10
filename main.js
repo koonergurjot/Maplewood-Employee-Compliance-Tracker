@@ -317,6 +317,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         positions: [],
         statuses: [],
         ranks: [],
+        lastActiveElement: null,
         db: null,
         dbPromise: null,
         async init(){
@@ -363,12 +364,26 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.rank = '';
         },
         show(){
+          this.lastActiveElement = null;
+          if(typeof document !== 'undefined'){
+            const activeElement = document.activeElement;
+            if(activeElement && activeElement !== document.body && typeof activeElement.focus === 'function'){
+              if(!this.$el || !this.$el.contains(activeElement)){
+                this.lastActiveElement = activeElement;
+              }
+            }
+          }
+
           this.open = true;
           return new Promise(resolve => {
             this.$nextTick(() => {
               const input = this.$refs?.name;
               if(input && typeof input.focus === 'function'){
-                input.focus();
+                try {
+                  input.focus({ preventScroll: true });
+                } catch (error) {
+                  input.focus();
+                }
                 if(typeof input.select === 'function'){
                   input.select();
                 }
@@ -380,7 +395,50 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         hide(){
           this.open = false;
           this.reset();
+          if(typeof window !== 'undefined'){
+            this.$nextTick(() => {
+              const target = this.lastActiveElement;
+              this.lastActiveElement = null;
+              if(!target || typeof target.focus !== 'function'){
+                return;
+              }
+
+              let isInDocument = true;
+              if(typeof document !== 'undefined'){
+                const docContains = typeof document.contains === 'function' ? document.contains(target) : false;
+                const bodyContains = document.body && typeof document.body.contains === 'function' ? document.body.contains(target) : false;
+                const rootContains = document.documentElement && typeof document.documentElement.contains === 'function' ? document.documentElement.contains(target) : false;
+                isInDocument = docContains || bodyContains || rootContains;
+              }
+
+              if(isInDocument){
+                try {
+                  target.focus({ preventScroll: true });
+                } catch (error) {
+                  target.focus();
+                }
+              }
+            });
+          }
           return Promise.resolve();
+        },
+        close(){
+          const result = this.hide();
+          if(this?.$root){
+            this.$root.showAddEmployeeModal = false;
+          }
+          return result;
+        },
+        handleEscape(event){
+          if(event){
+            if(typeof event.preventDefault === 'function'){
+              event.preventDefault();
+            }
+            if(typeof event.stopPropagation === 'function'){
+              event.stopPropagation();
+            }
+          }
+          return this.close();
         },
         valid(){
           const required = [this.name, this.position, this.status, this.rank];

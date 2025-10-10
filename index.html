@@ -480,10 +480,10 @@
     x-show="open"
     x-cloak
     class="fixed inset-0 z-50"
-    @keydown.escape.window.prevent="hide(); $root.showAddEmployeeModal = false"
+    @keydown.escape.window.prevent.stop="handleEscape($event)"
   >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <div class="fixed inset-0 bg-black/40 z-40" @click="hide(); $root.showAddEmployeeModal = false"></div>
+      <div class="fixed inset-0 bg-black/40 z-40" @click="close()"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
       <div
         class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
@@ -575,7 +575,7 @@
             </button>
             <button
               type="button"
-              @click="hide(); $root.showAddEmployeeModal = false"
+              @click="close()"
               class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn"
             >
               Cancel
