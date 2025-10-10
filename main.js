@@ -111,10 +111,35 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
     function activityTimeline(){
       return {
         entries: [],
-        async load(){
-          if(!this?.$root?.db){
-            this.$nextTick(() => this.load());
+        loadAttempts: 0,
+        maxLoadAttempts: 6,
+        retryTimer: null,
+        baseRetryDelay: 150,
+        scheduleRetry(){
+          if(this.retryTimer || this.loadAttempts >= this.maxLoadAttempts){
+            if(this.loadAttempts >= this.maxLoadAttempts){
+              console.warn('Activity timeline load aborted: app not ready after retries.');
+            }
             return;
+          }
+
+          const delay = Math.min(this.baseRetryDelay * Math.pow(2, this.loadAttempts), 2000);
+          this.loadAttempts += 1;
+          this.retryTimer = setTimeout(() => {
+            this.retryTimer = null;
+            this.load();
+          }, delay);
+        },
+        async load(){
+          if(!this?.$root?.appReady || !this?.$root?.db){
+            this.scheduleRetry();
+            return;
+          }
+
+          this.loadAttempts = 0;
+          if(this.retryTimer){
+            clearTimeout(this.retryTimer);
+            this.retryTimer = null;
           }
 
           const { default: ActivityLog } = await import('./activity-log.js');
@@ -137,6 +162,11 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           await this.load();
         },
         async undo(entry){
+          if(!this?.$root?.appReady || !this?.$root?.db){
+            console.warn('Undo requested before app ready.');
+            return;
+          }
+
           const commands = await import('./commands.js');
           const factories = {
             AddEmployee: e => new commands.AddEmployee(this.$root.db, { employee: e.metadata?.employee }),
@@ -170,6 +200,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         darkMode:false, showImportModal:false, showExportDropdown:false,
         showSettingsModal:false, settingsSortable:null,
         showActivityLogModal:false,
+        appReady:false,
+        pendingTimelineRefresh:false,
         db:null, activityLog:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
         templates:[], templateRoleMap:new Map(), showTemplateForm:false,
         templateEditor:{ id:null, name:'', rolesInput:'', excludedRequirementIds:[] },
@@ -402,6 +434,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           await this.initDB();
           if (this.loadError || !this.db) {
             this.$nextTick(() => this.$root?.removeAttribute('x-cloak'));
+            this.setAppReady(false);
             return;
           }
 
@@ -414,6 +447,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           await this.initActivityLog();
           await this.loadData();
           if (this.loadError || !this.db) return;
+          this.setAppReady(true);
           const s = await this.db.settings.get('app');
           if (s?.darkMode) this.darkMode = true;
           document.documentElement.classList.toggle('dark', this.darkMode);
@@ -457,6 +491,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             console.error('Failed to initialize Dexie database', error);
             this.loadError = 'The offline database library (Dexie.js) did not load. Data cannot be displayed without it.';
             this.db = null;
+            this.setAppReady(false);
           }
         },
 
@@ -471,6 +506,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
 
         openActivityLog(){
+          if(!this.appReady){
+            console.warn('Attempted to open activity log before app ready.');
+            return;
+          }
           this.showActivityLogModal = true;
           this.$nextTick(() => {
             this.$refs.activityTimeline?.load();
@@ -488,9 +527,13 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             return;
           }
           await this.db.delete();
+          this.setAppReady(false);
           await this.initDB();
           await this.initActivityLog();
           await this.loadData();
+          if(!this.loadError && this.db){
+            this.setAppReady(true);
+          }
           this.notify('All data cleared');
         },
 
@@ -516,6 +559,16 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.touchGlobalSearchVersion();
           if (!this.loadError) {
             this.filterEmployees();
+          }
+        },
+
+        setAppReady(isReady){
+          this.appReady = Boolean(isReady);
+          if(this.appReady && this.pendingTimelineRefresh){
+            this.pendingTimelineRefresh = false;
+            this.$nextTick(() => {
+              this.$refs.activityTimeline?.load();
+            });
           }
         },
 
@@ -811,6 +864,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
 
         openSettingsModal(){
+          if(!this.appReady){
+            console.warn('Attempted to open settings before app ready.');
+            return;
+          }
           this.cancelTemplateEdit();
           this.showSettingsModal = true;
           this.$nextTick(() => {
@@ -985,7 +1042,11 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               undoPayload,
               supportsUndo: options.supportsUndo !== false
             });
-            this.$refs.activityTimeline?.load();
+            if(this.appReady){
+              this.$refs.activityTimeline?.load();
+            } else {
+              this.pendingTimelineRefresh = true;
+            }
           }catch(error){
             console.error('Failed to record activity', error);
           }
