@@ -197,6 +197,15 @@
       </div>
       <nav class="command-toolbar" aria-label="Dashboard actions">
         <div class="command-toolbar__group command-toolbar__group--primary" role="group" aria-label="Primary actions">
+          <button
+            id="add-employee-btn"
+            @click="document.getElementById('add-emp-modal').__api.show()"
+            class="btn btn-accent"
+            :disabled="!appReady"
+          >
+            <i data-feather="user-plus" class="w-4 h-4"></i>
+            <span>Add Employee</span>
+          </button>
           <button id="import-btn" @click="showImportModal = true" class="btn btn-accent" :disabled="!appReady">
             <i data-feather="upload" class="w-4 h-4"></i>
             <span>Import</span>
