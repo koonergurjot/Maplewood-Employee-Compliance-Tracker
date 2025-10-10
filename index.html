@@ -569,7 +569,7 @@
             </div>
           </div>
           <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button type="submit" class="w-full sm:w-auto px-4 py-2 btn btn-primary" :disabled="saving">
+            <button type="submit" class="w-full sm:w-auto px-4 py-2 btn btn-primary" :disabled="!valid() || saving">
               <span x-show="!saving">Save</span>
               <span x-show="saving">Saving...</span>
             </button>

@@ -383,7 +383,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           return Promise.resolve();
         },
         valid(){
-          return Boolean(this.name && this.name.trim() && this.position && this.position.trim());
+          const required = [this.name, this.position, this.status, this.rank];
+          return required.every(value => typeof value === 'string' && value.trim().length > 0);
         },
         async ensureDb(){
           if(this.db && (typeof this.db.isOpen !== 'function' || this.db.isOpen())){
@@ -472,6 +473,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
 
           if(!this.valid()){
+            if(typeof window !== 'undefined' && typeof window.alert === 'function'){
+              window.alert('Please fill out all required fields before saving.');
+            }
+
             const input = this.$refs?.name;
             if(input && typeof input.focus === 'function'){
               input.focus();
