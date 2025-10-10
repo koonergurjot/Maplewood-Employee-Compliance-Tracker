@@ -189,28 +189,28 @@
       </div>
       <nav class="command-toolbar" aria-label="Dashboard actions">
         <div class="command-toolbar__group command-toolbar__group--primary" role="group" aria-label="Primary actions">
-          <button id="import-btn" @click="showImportModal = true" class="btn btn-accent">
+          <button id="import-btn" @click="showImportModal = true" class="btn btn-accent" :disabled="!appReady">
             <i data-feather="upload" class="w-4 h-4"></i>
             <span>Import</span>
           </button>
           <div class="relative">
-            <button id="export-btn" @click="showExportDropdown = !showExportDropdown" class="btn btn-accent">
+            <button id="export-btn" @click="showExportDropdown = !showExportDropdown" class="btn btn-accent" :disabled="!appReady">
               <i data-feather="download" class="w-4 h-4"></i>
               <span>Export</span>
             </button>
             <div x-show="showExportDropdown" @click.away="showExportDropdown = false" class="absolute right-0 mt-2 w-32 border rounded shadow bg-white dark:bg-gray-800 z-10">
-              <button @click="exportData('json'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">JSON</button>
-              <button @click="exportData('csv'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">CSV</button>
-              <button @click="exportData('xlsx'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">Excel</button>
+              <button @click="exportData('json'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700" :disabled="!appReady">JSON</button>
+              <button @click="exportData('csv'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700" :disabled="!appReady">CSV</button>
+              <button @click="exportData('xlsx'); showExportDropdown=false" class="block w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700" :disabled="!appReady">Excel</button>
             </div>
           </div>
-          <button @click="clearAllData" class="btn btn-danger">
+          <button @click="clearAllData" class="btn btn-danger" :disabled="!appReady">
             <i data-feather="trash-2" class="w-4 h-4"></i>
             <span>Clear</span>
           </button>
         </div>
         <div class="command-toolbar__group command-toolbar__group--secondary" role="group" aria-label="Secondary actions">
-          <button id="activity-log-btn" @click="openActivityLog()" class="btn btn-ghost">
+          <button id="activity-log-btn" @click="openActivityLog()" class="btn btn-ghost" :disabled="!appReady">
             <i data-feather="list" class="w-4 h-4"></i>
             <span>Activity Log</span>
           </button>
@@ -218,7 +218,7 @@
             <i data-feather="calendar" class="w-4 h-4"></i>
             <span>Calendar</span>
           </button>
-          <button id="settings-btn" @click="openSettingsModal()" class="btn btn-ghost">
+          <button id="settings-btn" @click="openSettingsModal()" class="btn btn-ghost" :disabled="!appReady">
             <i data-feather="settings" class="w-4 h-4"></i>
             <span>Settings</span>
           </button>
@@ -347,15 +347,15 @@
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold">Admin Panel</h2>
         <div class="flex gap-2">
-          <button @click="showAddEmployeeModal = true" class="btn btn-primary">
+          <button @click="showAddEmployeeModal = true" class="btn btn-primary" :disabled="!appReady">
             <i data-feather="user-plus" class="w-4 h-4"></i>
             <span>Add Employee</span>
           </button>
-          <button @click="showAddRequirementModal = true" class="btn">
+          <button @click="showAddRequirementModal = true" class="btn" :disabled="!appReady">
             <i data-feather="plus" class="w-4 h-4"></i>
             <span>Add Requirement</span>
           </button>
-          <button @click="showBulkActionsModal = true" class="btn">
+          <button @click="showBulkActionsModal = true" class="btn" :disabled="!appReady">
             <i data-feather="layers" class="w-4 h-4"></i>
             <span>Bulk Actions</span>
           </button>
@@ -1036,7 +1036,7 @@
                   <div class="text-sm" x-text="new Date(entry.timestamp).toLocaleString()"></div>
                   <div class="text-xs" style="color:var(--muted)" x-text="entry.actionType"></div>
                 </div>
-                <button x-show="entry.status === 'completed' && entry.supportsUndo !== false" @click="undo(entry)" class="btn btn-primary text-xs">Undo</button>
+                <button x-show="entry.status === 'completed' && entry.supportsUndo !== false" @click="undo(entry)" class="btn btn-primary text-xs" :disabled="!$root.appReady">Undo</button>
               </div>
             </template>
             <div x-show="!entries.length" class="text-sm" style="color:var(--muted)">No activity yet</div>
