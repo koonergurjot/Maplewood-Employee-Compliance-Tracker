@@ -447,7 +447,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           };
 
           const label = labels[type] || 'value';
-          const value = typeof window !== 'undefined' ? window.prompt(`Enter new ${label}`) : null;
+          const rawValue = typeof window !== 'undefined' ? window.prompt(`Enter new ${label}`) : null;
+          const value = typeof rawValue === 'string' ? rawValue.trim() : '';
           if(!value){
             return;
           }
