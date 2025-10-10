@@ -283,6 +283,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         importSheets:[], importSheetName:'', importWarning:'', importError:'', importLoading:false,
         importProgress:0, importErrors:[],
         missingRequiredColumns:[], missingColumnsBannerDismissed:false,
+        duplicateHeaderGroups:[], duplicateHeaderNames:[], duplicateHeaderWarningDismissed:false, duplicateHeaderSignature:'',
         mappingHighlightTimer:null, lastMissingColumnsSignature:'',
         nameFormat:'auto', previewEligible:0, dryRunDetails:[], dryRunSummary:{added:0,updated:0,skipped:0},
         fieldLabels:{ firstName:'First Name', lastName:'Last Name', payrollName:'Payroll/Employee Name', role:'Role / Job Title', employmentType:'Employment Type / Class', employeeId:'Employee ID / Position ID', status:'Position Status', seniorityHours:'Seniority Hours' },
@@ -1249,6 +1250,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.backupPayload = null;
           this.backupSummary = null;
           this.backupValidationErrors = [];
+          this.duplicateHeaderGroups = [];
+          this.duplicateHeaderNames = [];
+          this.duplicateHeaderWarningDismissed = false;
+          this.duplicateHeaderSignature = '';
           this.importLoading=true;
           const file = event.target.files?.[0];
           if(!file) { this.importLoading=false; return; }
@@ -1317,6 +1322,11 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               return obj;
             });
             this.importHeaders = trimmed;
+            await this.handleDuplicateHeaders({
+              rawHeaders: res.meta?.fields || [],
+              displayHeaders: trimmed,
+              renamedHeaders: res.meta?.renamedHeaders || {}
+            });
             this.autoMapColumns(this.importHeaders);
             this.updateEligibilityPreview();
             await this.validateImportData();
@@ -1359,6 +1369,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
                 this.importSheetName = best.name;
                 this.importHeaders = best.headers;
                 this.importData = best.rows;
+                await this.handleDuplicateHeaders({ rawHeaders: best.headers, displayHeaders: best.headers });
                 this.autoMapColumns(this.importHeaders);
                 this.updateEligibilityPreview();
                 await this.validateImportData();
@@ -1417,6 +1428,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               const { headers, rows } = this.extractFromSheet(wb.Sheets[name], xlsx);
               this.importHeaders = headers;
               this.importData = rows;
+              this.duplicateHeaderSignature = '';
+              await this.handleDuplicateHeaders({ rawHeaders: headers, displayHeaders: headers });
               this.autoMapColumns(this.importHeaders);
               this.updateEligibilityPreview();
               await this.validateImportData();
@@ -1507,6 +1520,98 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           } catch (err) {
             console.error('Error extracting from sheet:', err);
             return { headers: [], rows: [], score: -1 };
+          }
+        },
+        computeDuplicateHeaderGroups(rawHeaders = [], displayHeaders = [], renamedHeaders = {}){
+          const raw = Array.isArray(rawHeaders) && rawHeaders.length ? rawHeaders : displayHeaders;
+          if (!Array.isArray(raw) || !raw.length) return [];
+
+          const display = Array.isArray(displayHeaders) && displayHeaders.length === raw.length
+            ? displayHeaders
+            : raw.map((value) => (value == null ? '' : String(value).trim()));
+
+          const renameMap = new Map();
+          if (renamedHeaders && typeof renamedHeaders === 'object') {
+            for (const [key, value] of Object.entries(renamedHeaders)) {
+              const normalizedKey = key == null ? '' : String(key).trim();
+              if (!normalizedKey) continue;
+              const normalizedValue = value == null ? '' : String(value).trim();
+              if (!normalizedValue) continue;
+              renameMap.set(normalizedKey, normalizedValue);
+            }
+          }
+
+          const groups = new Map();
+          raw.forEach((rawHeader, index) => {
+            const displayName = display[index] == null ? '' : String(display[index]).trim();
+            if (!displayName) return;
+
+            const trimmedRaw = rawHeader == null ? '' : String(rawHeader).trim();
+            const baseCandidate = renameMap.get(rawHeader)
+              ?? renameMap.get(trimmedRaw)
+              ?? renameMap.get(displayName)
+              ?? displayName;
+            const base = baseCandidate == null ? '' : String(baseCandidate).trim();
+            const key = base || displayName;
+
+            const entry = { label: displayName, raw: trimmedRaw || displayName, index };
+            const existing = groups.get(key) || [];
+            existing.push(entry);
+            groups.set(key, existing);
+          });
+
+          return Array.from(groups.entries())
+            .filter(([, entries]) => entries.length > 1)
+            .map(([base, entries]) => ({
+              base,
+              entries: entries.map((entry, idx) => ({
+                ...entry,
+                status: idx === 0 ? 'primary' : 'duplicate'
+              }))
+            }));
+        },
+        async handleDuplicateHeaders({ rawHeaders = [], displayHeaders = [], renamedHeaders = {} } = {}){
+          const groups = this.computeDuplicateHeaderGroups(rawHeaders, displayHeaders, renamedHeaders);
+
+          if (!groups.length){
+            this.duplicateHeaderGroups = [];
+            this.duplicateHeaderNames = [];
+            this.duplicateHeaderWarningDismissed = false;
+            this.duplicateHeaderSignature = '';
+            return;
+          }
+
+          this.duplicateHeaderGroups = groups;
+          this.duplicateHeaderNames = Array.from(new Set(groups.map(group => group.base).filter(Boolean)));
+          this.duplicateHeaderWarningDismissed = false;
+          this.highlightMappingSection();
+
+          const signature = groups
+            .map(group => `${group.base}::${group.entries.map(entry => entry.label).join('|')}`)
+            .sort()
+            .join('||');
+
+          if (signature !== this.duplicateHeaderSignature){
+            try {
+              if (!this.activityLog && typeof this.initActivityLog === 'function'){
+                await this.initActivityLog();
+              }
+              await this.recordActivity('ImportDuplicateHeadersDetected', [], {
+                importMode: this.importMode,
+                headerCount: Array.isArray(displayHeaders) && displayHeaders.length
+                  ? displayHeaders.length
+                  : (Array.isArray(rawHeaders) ? rawHeaders.length : 0),
+                duplicates: groups.map(group => ({
+                  header: group.base,
+                  columns: group.entries.map(entry => entry.label),
+                  primary: group.entries.find(entry => entry.status === 'primary')?.label || null
+                }))
+              }, null, { supportsUndo: false });
+            } catch (error) {
+              console.error('Failed to log duplicate header detection', error);
+            } finally {
+              this.duplicateHeaderSignature = signature;
+            }
           }
         },
         scoreHeaderRow(cols){
