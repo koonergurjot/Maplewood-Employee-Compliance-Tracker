@@ -105,7 +105,14 @@
     @keyframes search-focus-pulse{0%{box-shadow:0 0 0 0 rgba(37,99,235,0.55);}50%{box-shadow:0 0 0 6px rgba(37,99,235,0.25);}100%{box-shadow:0 0 0 0 rgba(37,99,235,0);}}
   </style>
 </head>
-<body x-data="app" x-init="init()" x-cloak :class="{'dark': darkMode}">
+<body
+  x-data="app"
+  x-init="init()"
+  x-cloak
+  :class="{'dark': darkMode}"
+  @employee:added.window="handleEmployeeAdded($event.detail?.employee)"
+  @employee:add-failed.window="handleEmployeeAddFailed($event.detail?.error)"
+>
   <template x-if="loadError">
     <div class="container mx-auto px-4 py-12">
       <div class="card rounded-lg shadow p-6 max-w-2xl mx-auto text-center">
@@ -444,58 +451,128 @@
   </div>
 
   <!-- Add Employee Modal -->
-  <div x-show="showAddEmployeeModal" x-cloak class="fixed inset-0 z-50">
+  <div
+    id="add-emp-modal"
+    x-data="addEmployeeModal()"
+    x-init="
+      $watch(() => $root.showAddEmployeeModal, value => {
+        if(value){
+          show();
+        } else if(open) {
+          hide();
+        }
+      });
+      $watch('open', value => {
+        if(!value){
+          $root.showAddEmployeeModal = false;
+        }
+      });
+    "
+    x-show="open"
+    x-cloak
+    class="fixed inset-0 z-50"
+    @keydown.escape.window.prevent="hide(); $root.showAddEmployeeModal = false"
+  >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <div @click="showAddEmployeeModal=false" class="fixed inset-0 bg-black/40 z-40"></div>
+      <div class="fixed inset-0 bg-black/40 z-40" @click="hide(); $root.showAddEmployeeModal = false"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-      <div class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <h3 class="text-lg font-semibold mb-4">Add New Employee</h3>
-          <div class="space-y-4">
-            <div class="grid grid-cols-2 gap-4">
+      <div
+        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-emp-modal-title"
+      >
+        <form @submit.prevent="save">
+          <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <h3 id="add-emp-modal-title" class="text-lg font-semibold mb-4">Add Employee</h3>
+            <div class="space-y-4">
               <div>
-                <label class="block text-sm font-medium mb-1">First Name</label>
-                <input x-model="newEmployee.firstName" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <label for="add-emp-name" class="block text-sm font-medium mb-1">Name</label>
+                <input
+                  id="add-emp-name"
+                  type="text"
+                  x-model="name"
+                  x-ref="name"
+                  class="form-field w-full"
+                  placeholder="Enter full name"
+                />
               </div>
               <div>
-                <label class="block text-sm font-medium mb-1">Last Name</label>
-                <input x-model="newEmployee.lastName" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <label for="add-emp-position" class="block text-sm font-medium mb-1">Position</label>
+                <div class="flex items-center gap-2">
+                  <select id="add-emp-position" x-model="position" class="form-field w-full">
+                    <option value="">Select position</option>
+                    <template x-for="item in positions" :key="item">
+                      <option :value="item" x-text="item"></option>
+                    </template>
+                  </select>
+                  <button
+                    type="button"
+                    @click="addNew('position')"
+                    class="px-2 py-1 rounded"
+                    style="border:1px solid var(--line); background:var(--card); color:var(--text);"
+                    aria-label="Add new position"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Role</label>
-              <select x-model="newEmployee.role" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
-                <option value="">Select Role</option>
-                <option value="LPN">LPN</option>
-                <option value="RCA">RCA</option>
-                <option value="Recreation">Recreation</option>
-                <option value="Reception">Reception</option>
-                <option value="RehabAssistant">Rehab Assistant</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Employment Type</label>
-              <select x-model="newEmployee.employmentType" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
-                <option value="FT">Full Time</option>
-                <option value="PT">Part Time</option>
-                <option value="Casual">Casual</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Employee ID</label>
-              <input x-model="newEmployee.employeeId" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Seniority Hours</label>
-              <input x-model="newEmployee.seniorityHours" type="number" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <div>
+                <label for="add-emp-status" class="block text-sm font-medium mb-1">Status</label>
+                <div class="flex items-center gap-2">
+                  <select id="add-emp-status" x-model="status" class="form-field w-full">
+                    <option value="">Select status</option>
+                    <template x-for="item in statuses" :key="item">
+                      <option :value="item" x-text="item"></option>
+                    </template>
+                  </select>
+                  <button
+                    type="button"
+                    @click="addNew('status')"
+                    class="px-2 py-1 rounded"
+                    style="border:1px solid var(--line); background:var(--card); color:var(--text);"
+                    aria-label="Add new status"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label for="add-emp-rank" class="block text-sm font-medium mb-1">Rank</label>
+                <div class="flex items-center gap-2">
+                  <select id="add-emp-rank" x-model="rank" class="form-field w-full">
+                    <option value="">Select rank</option>
+                    <template x-for="item in ranks" :key="item">
+                      <option :value="item" x-text="item"></option>
+                    </template>
+                  </select>
+                  <button
+                    type="button"
+                    @click="addNew('rank')"
+                    class="px-2 py-1 rounded"
+                    style="border:1px solid var(--line); background:var(--card); color:var(--text);"
+                    aria-label="Add new rank"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-          <button @click="addEmployee()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Add Employee</button>
-          <button @click="showAddEmployeeModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
-        </div>
+          <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+            <button type="submit" class="w-full sm:w-auto px-4 py-2 btn btn-primary" :disabled="saving">
+              <span x-show="!saving">Save</span>
+              <span x-show="saving">Saving...</span>
+            </button>
+            <button
+              type="button"
+              @click="hide(); $root.showAddEmployeeModal = false"
+              class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

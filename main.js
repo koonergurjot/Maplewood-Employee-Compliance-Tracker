@@ -2845,6 +2845,32 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.notify('Failed to add employee', 'var(--danger)');
           }
         },
+        async handleEmployeeAdded(employee){
+          this.showAddEmployeeModal = false;
+
+          if(employee && employee.id){
+            try {
+              await this.recordActivity('AddEmployee', [employee.id], { employee }, null, { supportsUndo: false });
+            } catch (error) {
+              console.warn('Failed to record employee addition activity', error);
+            }
+          }
+
+          await this.loadData();
+          this.refreshFeatherIcons();
+
+          const label = employee?.name && typeof employee.name === 'string' && employee.name.trim()
+            ? employee.name.trim()
+            : 'Employee';
+          this.notify(`${label} added successfully`);
+        },
+        handleEmployeeAddFailed(error){
+          this.showAddEmployeeModal = false;
+          if(error){
+            console.error('Employee add failed', error);
+          }
+          this.notify('Failed to add employee', 'var(--danger)');
+        },
         async addRequirement(){
           if (!this.newRequirement.name) {
             this.notify('Requirement name is required', 'var(--danger)');
