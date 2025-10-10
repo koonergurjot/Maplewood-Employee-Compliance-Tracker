@@ -839,6 +839,30 @@
               </div>
             </div>
           </div>
+          <template x-if="duplicateHeaderGroups.length && !duplicateHeaderWarningDismissed">
+            <div class="mt-3 p-3 rounded border" style="border-color:var(--danger); background-color:rgba(248,113,113,0.12); color:var(--danger)" data-import-duplicate-headers>
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <div class="font-semibold">Duplicate headers detected</div>
+                  <p class="text-sm mt-1">We found duplicate headers: <span class="font-semibold" x-text="duplicateHeaderNames.join(', ')"></span>. Please select which column maps to which field.</p>
+                  <p class="text-xs mt-2">✅ The first column is used automatically. ⚠️ Additional duplicates are ignored until you map them manually.</p>
+                  <div class="mt-2 space-y-1 text-xs">
+                    <template x-for="group in duplicateHeaderGroups" :key="group.base">
+                      <div class="flex flex-wrap items-center gap-1">
+                        <span class="font-semibold" x-text="group.base + ':'"></span>
+                        <template x-for="(entry, idx) in group.entries" :key="group.base + '-' + idx">
+                          <span class="inline-flex items-center px-2 py-0.5 rounded-full font-medium"
+                                :style="idx === 0 ? 'background-color:rgba(16,185,129,0.15);color:var(--success)' : 'background-color:rgba(248,113,113,0.15);color:var(--danger)'"
+                                x-text="(idx === 0 ? '✅ ' : '⚠️ ') + entry.label"></span>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+                <button class="text-xs uppercase tracking-wide" @click="duplicateHeaderWarningDismissed = true" style="color:inherit">Dismiss</button>
+              </div>
+            </div>
+          </template>
           <template x-if="missingRequiredColumns.length && !missingColumnsBannerDismissed">
             <div class="mt-3 p-3 rounded border" style="border-color:var(--danger); background-color:rgba(248,113,113,0.12); color:var(--danger)" data-import-missing-columns data-managed-by="alpine">
               <div class="flex items-start justify-between gap-3">
