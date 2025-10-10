@@ -11,7 +11,7 @@ import { safeFeatherReplace } from './feather-utils.js';
 import './styles.css';
 import './import-employees.js';
 import './onboarding.js';
-import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
+import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup } from './db.js';
 
 let cachedXlsx = (typeof window !== 'undefined' && (window.__xlsxModule || window.XLSX)) || null;
 let xlsxLoadPromise = null;
@@ -300,6 +300,224 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           await this.$root.activityLog.undo(entry.id, factory);
           await this.load();
           await this.$root.loadData();
+        }
+      };
+    }
+
+    function addEmployeeModal(){
+      return {
+        open: false,
+        saving: false,
+        name: '',
+        position: '',
+        status: '',
+        rank: '',
+        positions: [],
+        statuses: [],
+        ranks: [],
+        db: null,
+        dbPromise: null,
+        async init(){
+          if(this?.$el){
+            Object.defineProperty(this.$el, '__api', {
+              configurable: true,
+              enumerable: false,
+              value: Object.freeze({
+                show: () => this.show(),
+                hide: () => this.hide()
+              })
+            });
+          }
+
+          this.$watch('open', value => {
+            if(!value){
+              this.reset();
+            }
+          });
+
+          await this.loadLookups();
+        },
+        async loadLookups(){
+          try {
+            const [positions, statuses, ranks] = await Promise.all([
+              listLookups('position'),
+              listLookups('status'),
+              listLookups('rank')
+            ]);
+            this.positions = Array.isArray(positions) ? positions : [];
+            this.statuses = Array.isArray(statuses) ? statuses : [];
+            this.ranks = Array.isArray(ranks) ? ranks : [];
+          } catch (error) {
+            console.warn('addEmployeeModal: failed to preload lookup values.', error);
+            this.positions = [];
+            this.statuses = [];
+            this.ranks = [];
+          }
+        },
+        reset(){
+          this.name = '';
+          this.position = '';
+          this.status = '';
+          this.rank = '';
+        },
+        show(){
+          this.open = true;
+          return new Promise(resolve => {
+            this.$nextTick(() => {
+              const input = this.$refs?.name;
+              if(input && typeof input.focus === 'function'){
+                input.focus();
+                if(typeof input.select === 'function'){
+                  input.select();
+                }
+              }
+              resolve();
+            });
+          });
+        },
+        hide(){
+          this.open = false;
+          this.reset();
+          return Promise.resolve();
+        },
+        valid(){
+          return Boolean(this.name && this.name.trim() && this.position && this.position.trim());
+        },
+        async ensureDb(){
+          if(this.db && (typeof this.db.isOpen !== 'function' || this.db.isOpen())){
+            return this.db;
+          }
+
+          if(!this.dbPromise){
+            this.dbPromise = (async () => {
+              await ensureDexieLoaded();
+              const instance = await createDatabase();
+              if(typeof instance.open === 'function' && (!instance.isOpen || !instance.isOpen())){
+                try {
+                  await instance.open();
+                } catch (error) {
+                  console.warn('addEmployeeModal: failed to explicitly open database, continuing with lazy open.', error);
+                }
+              }
+              this.db = instance;
+              return instance;
+            })();
+          }
+
+          try {
+            this.db = await this.dbPromise;
+          } catch (error) {
+            this.dbPromise = null;
+            throw error;
+          }
+
+          return this.db;
+        },
+        async ensureLookupValue(type, value){
+          if(!value){
+            return null;
+          }
+
+          const trimmed = value.trim();
+          if(!trimmed){
+            return null;
+          }
+
+          try {
+            const record = await addLookup(type, trimmed);
+            const resolvedValue = record?.value || trimmed;
+            const key = type === 'status' ? 'statuses' : type === 'rank' ? 'ranks' : 'positions';
+            const current = Array.isArray(this[key]) ? this[key] : [];
+            if(!current.some(entry => entry.toLocaleLowerCase() === resolvedValue.toLocaleLowerCase())){
+              this[key] = [...current, resolvedValue].sort((a, b) => a.localeCompare(b));
+            }
+            return resolvedValue;
+          } catch (error) {
+            console.warn(`addEmployeeModal: failed to add lookup for ${type}`, error);
+            return trimmed;
+          }
+        },
+        async addNew(type){
+          const labels = {
+            position: 'position title',
+            status: 'status',
+            rank: 'rank'
+          };
+
+          const label = labels[type] || 'value';
+          const value = typeof window !== 'undefined' ? window.prompt(`Enter new ${label}`) : null;
+          if(!value){
+            return;
+          }
+
+          const resolved = await this.ensureLookupValue(type, value);
+          if(!resolved){
+            return;
+          }
+
+          if(type === 'position'){
+            this.position = resolved;
+          } else if(type === 'status'){
+            this.status = resolved;
+          } else if(type === 'rank'){
+            this.rank = resolved;
+          }
+        },
+        async save(){
+          if(this.saving){
+            return;
+          }
+
+          if(!this.valid()){
+            const input = this.$refs?.name;
+            if(input && typeof input.focus === 'function'){
+              input.focus();
+            }
+            return;
+          }
+
+          this.saving = true;
+
+          try {
+            const db = await this.ensureDb();
+            const timestamp = new Date().toISOString();
+            const baseEmployee = {
+              id: generateId(),
+              name: this.name.trim(),
+              position: this.position.trim(),
+              status: this.status ? this.status.trim() : '',
+              rank: this.rank ? this.rank.trim() : '',
+              createdAt: timestamp,
+              updatedAt: timestamp
+            };
+
+            const [positionValue, statusValue, rankValue] = await Promise.all([
+              this.ensureLookupValue('position', baseEmployee.position),
+              this.ensureLookupValue('status', baseEmployee.status),
+              this.ensureLookupValue('rank', baseEmployee.rank)
+            ]);
+
+            if(positionValue){
+              baseEmployee.position = positionValue;
+            }
+            if(statusValue){
+              baseEmployee.status = statusValue;
+            }
+            if(rankValue){
+              baseEmployee.rank = rankValue;
+            }
+
+            await db.employees.add(baseEmployee);
+
+            this.$dispatch('employee:added', { employee: baseEmployee });
+
+            await this.hide();
+          } catch (error) {
+            console.error('addEmployeeModal: failed to save employee', error);
+            this.$dispatch('employee:add-failed', { error });
+          } finally {
+            this.saving = false;
+          }
         }
       };
     }
@@ -2858,6 +3076,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
       });
 
     Alpine.data('activityTimeline', activityTimeline);
+    Alpine.data('addEmployeeModal', addEmployeeModal);
     Alpine.data('app', app);
 
     function showFallback() {
