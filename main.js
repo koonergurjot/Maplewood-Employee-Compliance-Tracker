@@ -57,6 +57,84 @@ function rememberXlsxModule(mod){
   return resolved;
 }
 
+function createAppReadyState(){
+  let resolveReady;
+  let rejectReady;
+  let pending = false;
+  let lastError = null;
+
+  const state = {
+    readyPromise: null,
+    markLoading(){
+      lastError = null;
+      if(pending){
+        return;
+      }
+      state.readyPromise = new Promise((resolve, reject) => {
+        pending = true;
+        resolveReady = () => {
+          pending = false;
+          resolve();
+        };
+        rejectReady = (error) => {
+          pending = false;
+          reject(error);
+        };
+      });
+    },
+    markReady(){
+      if(!pending){
+        state.markLoading();
+      }
+      lastError = null;
+      resolveReady();
+    },
+    fail(error){
+      const reason = error instanceof Error ? error : new Error(String(error || 'App failed to initialize.'));
+      lastError = reason;
+      if(!pending){
+        state.markLoading();
+      }
+      rejectReady(reason);
+    }
+  };
+
+  Object.defineProperty(state, 'error', {
+    get(){
+      return lastError;
+    }
+  });
+
+  state.markLoading();
+
+  return state;
+}
+
+const appState = createAppReadyState();
+
+export async function waitForReady(ms = 10000) {
+  if(appState.error){
+    throw appState.error;
+  }
+
+  let timeoutId;
+  const timeout = new Promise((_, rej) => {
+    timeoutId = setTimeout(() => rej(new Error('app init timeout')), ms);
+  });
+
+  try {
+    await Promise.race([appState.readyPromise, timeout]);
+  } finally {
+    if(timeoutId){
+      clearTimeout(timeoutId);
+    }
+  }
+
+  if(appState.error){
+    throw appState.error;
+  }
+}
+
 function injectXlsxFromCdn(){
   const existingGlobal = resolveXlsxFromGlobals();
   if(existingGlobal) return Promise.resolve(existingGlobal);
@@ -155,55 +233,22 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
     function activityTimeline(){
       return {
         entries: [],
-        loadAttempts: 0,
-        maxLoadAttempts: 6,
-        retryTimer: null,
-        baseRetryDelay: 150,
-        scheduleRetry(){
-          if(this.retryTimer || this.loadAttempts >= this.maxLoadAttempts){
-            if(this.loadAttempts >= this.maxLoadAttempts){
-              console.warn('Activity timeline load aborted: app not ready after retries.');
-            }
-            return;
-          }
-
-          const delay = Math.min(this.baseRetryDelay * Math.pow(2, this.loadAttempts), 2000);
-          this.loadAttempts += 1;
-          this.retryTimer = setTimeout(() => {
-            this.retryTimer = null;
-            this.load();
-          }, delay);
-        },
         async load(){
           if(!this?.$root){
             console.warn('Activity timeline missing root context.');
             return;
           }
 
-          if(!this.$root.appReady || !this.$root.db){
-            if(typeof this.$root.waitForAppReady === 'function'){
-              try{
-                await this.$root.waitForAppReady({ timeoutMs: 8000 });
-              }catch(error){
-                console.warn('Activity timeline wait for app readiness failed.', error);
-                this.scheduleRetry();
-                return;
-              }
-            } else {
-              this.scheduleRetry();
-              return;
-            }
-          }
-
-          if(!this.$root.appReady || !this.$root.db){
-            this.scheduleRetry();
+          try {
+            await waitForReady();
+          } catch (error) {
+            console.warn('Activity timeline wait for app readiness failed.', error);
             return;
           }
 
-          this.loadAttempts = 0;
-          if(this.retryTimer){
-            clearTimeout(this.retryTimer);
-            this.retryTimer = null;
+          if(!this.$root.appReady || !this.$root.db){
+            console.warn('Activity timeline load aborted: app not ready after wait.');
+            return;
           }
 
           const { default: ActivityLog } = await import('./activity-log.js');
@@ -266,7 +311,6 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         showActivityLogModal:false,
         appReady:false,
         pendingTimelineRefresh:false,
-        appReadyWaiters:[],
         db:null, activityLog:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
         templates:[], templateRoleMap:new Map(), showTemplateForm:false,
         templateEditor:{ id:null, name:'', rolesInput:'', excludedRequirementIds:[] },
@@ -654,90 +698,14 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
         },
 
-        removeAppReadyWaiter(waiter){
-          if(!waiter) return;
-          const index = this.appReadyWaiters.indexOf(waiter);
-          if(index !== -1){
-            this.appReadyWaiters.splice(index, 1);
-          }
-          if(waiter.timer){
-            clearTimeout(waiter.timer);
-            waiter.timer = null;
-          }
-        },
-        resolveAppReadyWaiters(){
-          if(!this.appReadyWaiters.length) return;
-          const waiters = this.appReadyWaiters.splice(0);
-          for(const waiter of waiters){
-            try{
-              waiter.resolve?.();
-            }catch(error){
-              console.error('Failed to resolve app readiness waiter', error);
-            }
-            if(waiter.timer){
-              clearTimeout(waiter.timer);
-              waiter.timer = null;
-            }
-          }
-        },
-        rejectAppReadyWaiters(error){
-          if(!this.appReadyWaiters.length) return;
-          const waiters = this.appReadyWaiters.splice(0);
-          for(const waiter of waiters){
-            try{
-              waiter.reject?.(error);
-            }catch(rejectError){
-              console.error('Failed to reject app readiness waiter', rejectError);
-            }
-            if(waiter.timer){
-              clearTimeout(waiter.timer);
-              waiter.timer = null;
-            }
-          }
-        },
-        waitForAppReady({ timeoutMs = 6000 } = {}){
-          if(this.loadError){
-            return Promise.reject(new Error(this.loadError));
-          }
-          if(this.appReady && this.db){
-            return Promise.resolve();
-          }
-
-          return new Promise((resolve, reject) => {
-            const waiter = {
-              resolve: () => {
-                if(waiter.timer){
-                  clearTimeout(waiter.timer);
-                  waiter.timer = null;
-                }
-                resolve();
-              },
-              reject: error => {
-                if(waiter.timer){
-                  clearTimeout(waiter.timer);
-                  waiter.timer = null;
-                }
-                reject(error);
-              },
-              timer: null
-            };
-
-            if(timeoutMs > 0){
-              waiter.timer = setTimeout(() => {
-                this.removeAppReadyWaiter(waiter);
-                reject(new Error('Timed out waiting for the app to become ready.'));
-              }, timeoutMs);
-            }
-
-            this.appReadyWaiters.push(waiter);
-          });
-        },
         setAppReady(isReady){
           this.appReady = Boolean(isReady);
           if(this.appReady && this.db){
-            this.resolveAppReadyWaiters();
+            appState.markReady();
           } else if(!this.appReady && this.loadError){
-            this.rejectAppReadyWaiters(new Error(this.loadError));
+            appState.fail(new Error(this.loadError));
+          } else if(!this.appReady){
+            appState.markLoading();
           }
           if(this.appReady && this.pendingTimelineRefresh){
             this.pendingTimelineRefresh = false;
