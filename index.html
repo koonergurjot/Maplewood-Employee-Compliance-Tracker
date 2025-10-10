@@ -838,6 +838,17 @@
               </div>
             </div>
           </div>
+          <template x-if="missingRequiredColumns.length && !missingColumnsBannerDismissed">
+            <div class="mt-3 p-3 rounded border" style="border-color:var(--danger); background-color:rgba(248,113,113,0.12); color:var(--danger)" data-import-missing-columns data-managed-by="alpine">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <div class="font-semibold">Column mapping needed</div>
+                  <p class="text-sm mt-1">We couldn't automatically detect <span class="font-semibold" x-text="missingRequiredColumns.join(', ')"></span>. Review the Field Mapping section below and assign the correct columns.</p>
+                </div>
+                <button class="text-xs uppercase tracking-wide" @click="missingColumnsBannerDismissed = true" style="color:inherit">Dismiss</button>
+              </div>
+            </div>
+          </template>
           <div x-show="importMode !== 'backup' && importData.length" class="mt-3">
             <div class="w-full bg-gray-200 rounded-full h-2">
               <div class="bg-blue-600 h-2 rounded-full" :style="{width: importProgress + '%'}"></div>
@@ -919,7 +930,7 @@
           </div>
 
           <!-- Mapping -->
-          <div x-show="importMode !== 'backup' && importHeaders.length" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div x-show="importMode !== 'backup' && importHeaders.length" class="grid grid-cols-1 md:grid-cols-2 gap-6" x-ref="employeeMappingPanel">
             <div>
               <h4 class="font-semibold mb-2">Field Mapping — Employees</h4>
               <template x-for="(label, key) in fieldLabels" :key="key">
