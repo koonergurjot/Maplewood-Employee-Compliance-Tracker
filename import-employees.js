@@ -80,21 +80,39 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
     return await createDatabase();
   }
 
-  function parseSeniority(val){
-    if (val == null) return null;
-    const s = String(val).trim();
-    // HH:MM
-    const m = s.match(/^\s*(\d+)\s*:\s*([0-5]?\d)\s*$/);
-    if (m) return Number(m[1]) + Number(m[2])/60;
-    const s2 = s.replace(/,/g,'');
-    const num = parseFloat(s2);
-    if (!isNaN(num)) return num;
-    const m2 = s2.match(/^\s*([\d\.]+)/);
-    if (m2) {
-      const n = parseFloat(m2[1]);
-      return isNaN(n) ? null : n;
+  function normalizeSeniorityHours(val){
+    if (typeof val === 'number' && Number.isFinite(val)) {
+      return val;
     }
-    return null;
+    if (val == null) return 0;
+    const s = String(val).trim();
+    if (!s) return 0;
+
+    // HH:MM format
+    const hhmmMatch = s.match(/^(\d+)\s*:\s*([0-5]?\d)$/);
+    if (hhmmMatch) {
+      const hours = Number(hhmmMatch[1]);
+      const minutes = Number(hhmmMatch[2]);
+      if (!Number.isNaN(hours) && !Number.isNaN(minutes)) {
+        return hours + minutes / 60;
+      }
+    }
+
+    const stripped = s.replace(/,/g, '').replace(/\s+/g, '');
+    let numericCandidate = Number(stripped);
+    if (!Number.isNaN(numericCandidate)) {
+      return numericCandidate;
+    }
+
+    const leadingNumeric = stripped.match(/^-?\d+(?:\.\d+)?/);
+    if (leadingNumeric) {
+      numericCandidate = Number(leadingNumeric[0]);
+      if (!Number.isNaN(numericCandidate)) {
+        return numericCandidate;
+      }
+    }
+
+    return 0;
   }
 
   function splitName(n){
@@ -171,7 +189,8 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
     for (const r of rows){
       const nameVal = nameCol ? r[nameCol] : (r['Name'] ?? r['Employee'] ?? '');
       const { firstName, lastName } = splitName(nameVal);
-      const sh = seniorityCol ? parseSeniority(r[seniorityCol]) : null;
+      const shSource = seniorityCol ? r[seniorityCol] : existingMatch?.seniorityHours;
+      const sh = normalizeSeniorityHours(shSource);
 
       const idVal = empidCol ? r[empidCol] : null;
       const employeeIdValue = normalizeEmployeeId(idVal);
@@ -234,10 +253,8 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
 
     // Sort by seniority desc
     employees.sort((a,b)=>{
-      const aa = a.seniorityHours; const bb = b.seniorityHours;
-      if (aa == null && bb == null) return (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||'');
-      if (aa == null) return 1;
-      if (bb == null) return -1;
+      const aa = normalizeSeniorityHours(a.seniorityHours);
+      const bb = normalizeSeniorityHours(b.seniorityHours);
       if (bb !== aa) return bb - aa;
       return (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||'');
     });
