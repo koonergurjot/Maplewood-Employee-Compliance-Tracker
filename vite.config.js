@@ -12,6 +12,7 @@ export default defineConfig({
     })
   ],
   define: {
+    __SW_BUILD_HASH__: JSON.stringify(buildHash),
     __BUILD_HASH__: JSON.stringify(buildHash)
   },
   build: {
