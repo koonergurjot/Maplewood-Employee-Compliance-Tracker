@@ -15,6 +15,30 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
 
 let cachedXlsx = (typeof window !== 'undefined' && (window.__xlsxModule || window.XLSX)) || null;
 let xlsxLoadPromise = null;
+let xlsxCdnPromise = null;
+
+const XLSX_CDN_TIMEOUT_MS = 15000;
+const XLSX_TIMEOUT_MESSAGE = 'We couldn\'t load Excel support from the CDN in time. Please try again later or use the CSV import option instead.';
+
+function withTimeout(promise, timeoutMs, timeoutMessage){
+  if(typeof timeoutMs !== 'number' || timeoutMs <= 0) return promise;
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const error = new Error(timeoutMessage || 'Operation timed out.');
+      error.name = 'TimeoutError';
+      reject(error);
+    }, timeoutMs);
+
+    promise.then(value => {
+      clearTimeout(timer);
+      resolve(value);
+    }, error => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
 
 function resolveXlsxFromGlobals(){
   if(typeof window === 'undefined') return null;
@@ -34,7 +58,12 @@ function rememberXlsxModule(mod){
 }
 
 function injectXlsxFromCdn(){
-  return new Promise((resolve, reject) => {
+  const existingGlobal = resolveXlsxFromGlobals();
+  if(existingGlobal) return Promise.resolve(existingGlobal);
+
+  if(xlsxCdnPromise) return xlsxCdnPromise;
+
+  xlsxCdnPromise = new Promise((resolve, reject) => {
     if(typeof document === 'undefined'){
       reject(new Error('No document available to load XLSX script.'));
       return;
@@ -68,7 +97,13 @@ function injectXlsxFromCdn(){
     script.addEventListener('load', finalize, { once: true });
     script.addEventListener('error', () => reject(new Error('Failed to load XLSX from CDN.')), { once: true });
     document.head.appendChild(script);
+  }).finally(() => {
+    if(!resolveXlsxFromGlobals()){
+      xlsxCdnPromise = null;
+    }
   });
+
+  return xlsxCdnPromise;
 }
 
 export async function loadXlsx(){
@@ -85,10 +120,19 @@ export async function loadXlsx(){
         if(resolved) return resolved;
       } catch (importError) {
         console.warn('Dynamic XLSX import failed, attempting CDN fallback.', importError);
-        await injectXlsxFromCdn();
-        const resolvedAfterCdn = rememberXlsxModule(resolveXlsxFromGlobals());
-        if(resolvedAfterCdn) return resolvedAfterCdn;
-        throw new Error('XLSX still unavailable');
+        try {
+          const cdnModule = await withTimeout(injectXlsxFromCdn(), XLSX_CDN_TIMEOUT_MS, XLSX_TIMEOUT_MESSAGE);
+          const raceResolved = resolveXlsxFromGlobals();
+          if(raceResolved) return rememberXlsxModule(raceResolved);
+          const resolvedAfterCdn = rememberXlsxModule(cdnModule || resolveXlsxFromGlobals());
+          if(resolvedAfterCdn) return resolvedAfterCdn;
+          throw new Error('XLSX still unavailable');
+        } catch (cdnError) {
+          if(cdnError?.name === 'TimeoutError'){
+            xlsxCdnPromise = null;
+          }
+          throw cdnError;
+        }
       }
 
       const finalModule = rememberXlsxModule(resolveXlsxFromGlobals());
