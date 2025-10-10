@@ -410,7 +410,8 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
       const isExisting = Boolean(existingMatch);
       const id = isExisting ? existingMatch.id : (employeeIdValue || localGenerateId());
       const roleValue = roleCol ? (r[roleCol] ?? null) : null;
-      const employmentTypeValue = etypeCol ? String(r[etypeCol] ?? '').toUpperCase() || null : null;
+      const rawEmploymentType = etypeCol ? r[etypeCol] : undefined;
+      const employmentTypeValue = rawEmploymentType == null ? null : String(rawEmploymentType).trim().toUpperCase();
       const statusValue = String(statusCol ? (r[statusCol] ?? 'ACTIVE') : 'ACTIVE').toUpperCase();
 
       const meta = { ...(existingMatch?.meta || {}) };
