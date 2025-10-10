@@ -175,7 +175,27 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }, delay);
         },
         async load(){
-          if(!this?.$root?.appReady || !this?.$root?.db){
+          if(!this?.$root){
+            console.warn('Activity timeline missing root context.');
+            return;
+          }
+
+          if(!this.$root.appReady || !this.$root.db){
+            if(typeof this.$root.waitForAppReady === 'function'){
+              try{
+                await this.$root.waitForAppReady({ timeoutMs: 8000 });
+              }catch(error){
+                console.warn('Activity timeline wait for app readiness failed.', error);
+                this.scheduleRetry();
+                return;
+              }
+            } else {
+              this.scheduleRetry();
+              return;
+            }
+          }
+
+          if(!this.$root.appReady || !this.$root.db){
             this.scheduleRetry();
             return;
           }
@@ -246,6 +266,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         showActivityLogModal:false,
         appReady:false,
         pendingTimelineRefresh:false,
+        appReadyWaiters:[],
         db:null, activityLog:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
         templates:[], templateRoleMap:new Map(), showTemplateForm:false,
         templateEditor:{ id:null, name:'', rolesInput:'', excludedRequirementIds:[] },
@@ -608,8 +629,91 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
         },
 
+        removeAppReadyWaiter(waiter){
+          if(!waiter) return;
+          const index = this.appReadyWaiters.indexOf(waiter);
+          if(index !== -1){
+            this.appReadyWaiters.splice(index, 1);
+          }
+          if(waiter.timer){
+            clearTimeout(waiter.timer);
+            waiter.timer = null;
+          }
+        },
+        resolveAppReadyWaiters(){
+          if(!this.appReadyWaiters.length) return;
+          const waiters = this.appReadyWaiters.splice(0);
+          for(const waiter of waiters){
+            try{
+              waiter.resolve?.();
+            }catch(error){
+              console.error('Failed to resolve app readiness waiter', error);
+            }
+            if(waiter.timer){
+              clearTimeout(waiter.timer);
+              waiter.timer = null;
+            }
+          }
+        },
+        rejectAppReadyWaiters(error){
+          if(!this.appReadyWaiters.length) return;
+          const waiters = this.appReadyWaiters.splice(0);
+          for(const waiter of waiters){
+            try{
+              waiter.reject?.(error);
+            }catch(rejectError){
+              console.error('Failed to reject app readiness waiter', rejectError);
+            }
+            if(waiter.timer){
+              clearTimeout(waiter.timer);
+              waiter.timer = null;
+            }
+          }
+        },
+        waitForAppReady({ timeoutMs = 6000 } = {}){
+          if(this.loadError){
+            return Promise.reject(new Error(this.loadError));
+          }
+          if(this.appReady && this.db){
+            return Promise.resolve();
+          }
+
+          return new Promise((resolve, reject) => {
+            const waiter = {
+              resolve: () => {
+                if(waiter.timer){
+                  clearTimeout(waiter.timer);
+                  waiter.timer = null;
+                }
+                resolve();
+              },
+              reject: error => {
+                if(waiter.timer){
+                  clearTimeout(waiter.timer);
+                  waiter.timer = null;
+                }
+                reject(error);
+              },
+              timer: null
+            };
+
+            if(timeoutMs > 0){
+              waiter.timer = setTimeout(() => {
+                this.removeAppReadyWaiter(waiter);
+                reject(new Error('Timed out waiting for the app to become ready.'));
+              }, timeoutMs);
+            }
+
+            this.appReadyWaiters.push(waiter);
+          });
+        },
         setAppReady(isReady){
           this.appReady = Boolean(isReady);
+          if(this.appReady && this.db){
+            this.resolveAppReadyWaiters();
+          } else if(!this.appReady && this.loadError){
+            this.rejectAppReadyWaiters(new Error(this.loadError));
+          }
           if(this.appReady && this.pendingTimelineRefresh){
             this.pendingTimelineRefresh = false;
             this.$nextTick(() => {
