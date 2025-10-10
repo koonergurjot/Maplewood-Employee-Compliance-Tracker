@@ -380,10 +380,11 @@ export async function addLookup(type, value) {
 
   const db = await openDatabase();
   const table = db.table('lookups');
+  const compositeKey = [normalizedType, normalizedValue.lower];
 
   const existing = await table
     .where('[type+valueLower]')
-    .equals([normalizedType, normalizedValue.lower])
+    .equals(compositeKey)
     .first();
 
   if (existing) {
@@ -391,13 +392,25 @@ export async function addLookup(type, value) {
   }
 
   const createdAt = new Date().toISOString();
-  const id = await table.add({
-    type: normalizedType,
-    value: normalizedValue.value,
-    valueLower: normalizedValue.lower,
-    createdAt
-  });
 
-  return table.get(id);
+  try {
+    const id = await table.add({
+      type: normalizedType,
+      value: normalizedValue.value,
+      valueLower: normalizedValue.lower,
+      createdAt
+    });
+
+    return table.get(id);
+  } catch (error) {
+    if (error?.name === 'ConstraintError') {
+      return table
+        .where('[type+valueLower]')
+        .equals(compositeKey)
+        .first();
+    }
+
+    throw error;
+  }
 }
 
