@@ -6,7 +6,7 @@ import Papa from 'papaparse';
 import Chart from 'chart.js/auto';
 import Sortable from 'sortablejs';
 import Fuse from 'fuse.js';
-import feather from 'feather-icons';
+import { safeFeatherReplace } from './feather-utils.js';
 
 import './styles.css';
 import './import-employees.js';
@@ -1107,17 +1107,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
         initializeFeatherIcons() {
           try {
-            if (typeof feather === 'undefined') {
-              console.warn('Feather icons library not loaded');
-              return;
-            }
-
-            feather.replace();
+            safeFeatherReplace();
           } catch (error) {
             console.warn('Feather icons initialization error:', error);
           }
         },
-        refreshFeatherIcons(){ 
+        refreshFeatherIcons(){
           this.$nextTick(() => {
             this.initializeFeatherIcons();
           });
@@ -2706,9 +2701,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
       }, 1200);
     });
     const replaceFeatherIcons = () => {
-      if (typeof feather !== 'undefined' && typeof feather.replace === 'function') {
-        feather.replace();
-      }
+      safeFeatherReplace();
     };
 
     document.addEventListener('DOMContentLoaded', replaceFeatherIcons);
