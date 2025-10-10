@@ -512,10 +512,28 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
           if ('serviceWorker' in navigator) {
             const swUrl = `/sw.js?build=${encodeURIComponent(BUILD_HASH)}`;
+
+            const needsClassicFallback = (error) => {
+              if (!error) return false;
+              if (error.name === 'TypeError') return true;
+              const message = String(error.message || '').toLowerCase();
+              if (!message) return false;
+              return message.includes('module') || message.includes('mime');
+            };
+
             try {
-              await navigator.serviceWorker.register(swUrl);
-            } catch (error) {
-              console.warn('Service worker registration failed', error);
+              await navigator.serviceWorker.register(swUrl, { type: 'module' });
+            } catch (moduleError) {
+              if (needsClassicFallback(moduleError)) {
+                console.warn('Module service worker registration failed, retrying without module type', moduleError);
+                try {
+                  await navigator.serviceWorker.register(swUrl);
+                } catch (classicError) {
+                  console.warn('Service worker registration failed after module fallback', classicError);
+                }
+              } else {
+                console.warn('Service worker registration failed', moduleError);
+              }
             }
           }
 
