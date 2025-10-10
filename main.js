@@ -261,6 +261,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         importType:'excel', importMode:'employees', importData:[],
         importSheets:[], importSheetName:'', importWarning:'', importError:'', importLoading:false,
         importProgress:0, importErrors:[],
+        missingRequiredColumns:[], missingColumnsBannerDismissed:false,
+        mappingHighlightTimer:null, lastMissingColumnsSignature:'',
         nameFormat:'auto', previewEligible:0, dryRunDetails:[], dryRunSummary:{added:0,updated:0,skipped:0},
         fieldLabels:{ firstName:'First Name', lastName:'Last Name', payrollName:'Payroll/Employee Name', role:'Role / Job Title', employmentType:'Employment Type / Class', employeeId:'Employee ID / Position ID', status:'Position Status', seniorityHours:'Seniority Hours' },
         columnMap:{ firstName:'', lastName:'', payrollName:'', role:'', employmentType:'', employeeId:'', status:'', seniorityHours:'' },
@@ -1392,15 +1394,246 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
         scoreHeaderRow(cols){
           const patterns=[/first/i,/last/i,/employee\\s*name/i,/payroll\\s*name/i,/job\\s*title|role/i,/employment\\s*type|class/i,/position\\s*id|employee\\s*id/i,/status/i,/seniority|total.*hours/i];
-          let score=0; for(const c of cols){ const s=String(c||''); for(const p of patterns) if(p.test(s)) score++; } return score;
+          let score=0;
+          for(const c of cols){
+            const s=String(c||'');
+            for(const p of patterns) if(p.test(s)) score++;
+          }
+          return score;
+        },
+        normalizeHeaderValue(value){
+          if (value == null) return '';
+          let normalized = String(value).toLowerCase();
+          normalized = normalized.replace(/[#]+/g, ' number ');
+          normalized = normalized.replace(/&/g, ' and ');
+          normalized = normalized.replace(/hrs?\\b/g, 'hours');
+          normalized = normalized.replace(/senor/gi, 'senior');
+          normalized = normalized.replace(/senority/gi, 'seniority');
+          normalized = normalized.replace(/emp\\b/g, 'employee');
+          normalized = normalized.replace(/[^a-z0-9\\s]+/g, ' ');
+          normalized = normalized.replace(/\\s+/g, ' ').trim();
+          return normalized;
+        },
+        tokenizeHeaderValue(normalized){
+          if (!normalized) return [];
+          return normalized.split(' ').filter(Boolean);
+        },
+        levenshteinDistance(a, b){
+          if (a === b) return 0;
+          const aLen = a.length;
+          const bLen = b.length;
+          if (!aLen) return bLen;
+          if (!bLen) return aLen;
+          const matrix = new Array(aLen + 1);
+          for (let i = 0; i <= aLen; i++){
+            matrix[i] = new Array(bLen + 1);
+            matrix[i][0] = i;
+          }
+          for (let j = 0; j <= bLen; j++){
+            matrix[0][j] = j;
+          }
+          for (let i = 1; i <= aLen; i++){
+            const aCode = a.charCodeAt(i - 1);
+            for (let j = 1; j <= bLen; j++){
+              const cost = aCode === b.charCodeAt(j - 1) ? 0 : 1;
+              matrix[i][j] = Math.min(
+                matrix[i - 1][j] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j - 1] + cost
+              );
+            }
+          }
+          return matrix[aLen][bLen];
+        },
+        detectHeaderColumn(headers, { variants = [], preferredTokens = [], minScore = 80 } = {}){
+          if (!Array.isArray(headers) || !headers.length) return null;
+
+          const processed = headers.map((orig) => {
+            const normalized = this.normalizeHeaderValue(orig);
+            return {
+              orig,
+              normalized,
+              tokens: this.tokenizeHeaderValue(normalized)
+            };
+          });
+
+          const normalizedVariants = variants.map((value) => {
+            const normalized = this.normalizeHeaderValue(value);
+            return {
+              normalized,
+              tokens: this.tokenizeHeaderValue(normalized)
+            };
+          });
+
+          let bestMatch = null;
+          let bestScore = -Infinity;
+
+          for (const col of processed){
+            if (!col.normalized) continue;
+            let score = 0;
+
+            for (const variant of normalizedVariants){
+              if (!variant.normalized) continue;
+
+              if (col.normalized === variant.normalized){
+                score = Math.max(score, 100);
+                continue;
+              }
+
+              if (
+                variant.tokens.length > 1 &&
+                variant.tokens.every((token) => col.tokens.includes(token))
+              ){
+                score = Math.max(score, 92);
+                continue;
+              }
+
+              if (
+                variant.normalized.length >= 4 &&
+                col.normalized.includes(variant.normalized)
+              ){
+                score = Math.max(score, 88);
+                continue;
+              }
+
+              if (
+                variant.tokens.length &&
+                variant.tokens.every((token) => col.tokens.some((ct) => ct.startsWith(token) || ct.endsWith(token)))
+              ){
+                score = Math.max(score, 85);
+                continue;
+              }
+
+              const threshold = Math.min(2, Math.ceil(Math.max(col.normalized.length, variant.normalized.length) * 0.25));
+              const distance = this.levenshteinDistance(col.normalized, variant.normalized);
+              if (distance && distance <= threshold){
+                score = Math.max(score, 75 - distance);
+              }
+            }
+
+            if (score > 0 && preferredTokens.length){
+              const bonus = preferredTokens.reduce((acc, token) => (
+                col.tokens.some((ct) => ct === token || ct.startsWith(token)) ? acc + 3 : acc
+              ), 0);
+              score += bonus;
+            }
+
+            if (score > bestScore){
+              bestScore = score;
+              bestMatch = col.orig;
+            }
+          }
+
+          if (bestScore >= minScore){
+            return bestMatch;
+          }
+          return null;
+        },
+        highlightMappingSection(){
+          this.$nextTick(() => {
+            const panel = this.$refs.employeeMappingPanel;
+            if (!panel) return;
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            panel.classList.add('ring-2', 'ring-red-400');
+            if (this.mappingHighlightTimer){
+              clearTimeout(this.mappingHighlightTimer);
+            }
+            this.mappingHighlightTimer = setTimeout(() => {
+              panel.classList.remove('ring-2', 'ring-red-400');
+              this.mappingHighlightTimer = null;
+            }, 1600);
+          });
+        },
+        updateMissingRequiredColumns(){
+          const missing = [];
+          const hasName = Boolean((this.columnMap.firstName && this.columnMap.lastName) || this.columnMap.payrollName);
+          if (!hasName) missing.push('Name');
+          if (!this.columnMap.employeeId) missing.push('Employee ID');
+          if (!this.columnMap.seniorityHours) missing.push('Seniority Hours');
+          const signature = missing.slice().sort().join('|');
+          const changed = signature !== this.lastMissingColumnsSignature;
+          this.lastMissingColumnsSignature = signature;
+          this.missingRequiredColumns = missing;
+          if (!missing.length){
+            this.missingColumnsBannerDismissed = false;
+            return;
+          }
+          if (changed){
+            this.missingColumnsBannerDismissed = false;
+            this.highlightMappingSection();
+          }
+        },
+        handleExternalMissingColumns(columns){
+          if (!Array.isArray(columns)) return;
+          const normalized = columns.filter(Boolean);
+          const signature = normalized.slice().sort().join('|');
+          const changed = signature !== this.lastMissingColumnsSignature;
+          this.lastMissingColumnsSignature = signature;
+          this.missingRequiredColumns = normalized;
+          if (!normalized.length){
+            this.missingColumnsBannerDismissed = false;
+            return;
+          }
+          this.missingColumnsBannerDismissed = false;
+          if (changed){
+            this.highlightMappingSection();
+          }
+        },
+        getEmployeeImportMappingSnapshot(){
+          const snapshot = {};
+          for (const key of Object.keys(this.fieldLabels)){
+            if (this.columnMap[key]){
+              snapshot[key] = this.columnMap[key];
+            }
+          }
+          return snapshot;
         },
         autoMapColumns(headers){
           const normalized = (headers||[]).map(h=>({orig:h, norm:String(h).toLowerCase().trim()}));
           for(const [key,label] of Object.entries(this.fieldLabels)){
             if(this.columnMap[key]) continue;
             const match = normalized.find(h=>h.norm === label.toLowerCase());
-            if(match) this.columnMap[key]=match.orig;
+            if(match){
+              this.columnMap[key]=match.orig;
+              continue;
+            }
+
+            const configMap = {
+              payrollName: {
+                variants: ['employee name','payroll name','full name','name','staff name','team member name','associate name'],
+                preferredTokens: ['employee','name'],
+                minScore: 82
+              },
+              firstName: {
+                variants: ['first name','first','given name','fname'],
+                preferredTokens: ['first','given'],
+                minScore: 84
+              },
+              lastName: {
+                variants: ['last name','surname','family name','lname'],
+                preferredTokens: ['last','surname','family'],
+                minScore: 84
+              },
+              employeeId: {
+                variants: ['employee id','employee number','employee #','employee code','position id','position number','personnel id','emp id','id number','id'],
+                preferredTokens: ['employee','id','number'],
+                minScore: 82
+              },
+              seniorityHours: {
+                variants: ['seniority hours','total seniority hours','seniority hrs','seniority hour','sen hours','seniority total','seniority time','seniority','hours'],
+                preferredTokens: ['seniority','senior','hours'],
+                minScore: 82
+              }
+            };
+
+            if (configMap[key]){
+              const detected = this.detectHeaderColumn(headers, configMap[key]);
+              if (detected){
+                this.columnMap[key] = detected;
+              }
+            }
           }
+          this.updateMissingRequiredColumns();
         },
 
         // Presets
@@ -1448,6 +1681,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           return { first, last, role: g('role'), type: g('employmentType'), empId: g('employeeId'), status: g('status'), hours: g('seniorityHours') };
         },
         updateEligibilityPreview(){
+          this.updateMissingRequiredColumns();
           let eligible=0, missing=0;
           for (const row of this.importData){
             const a = this.analyzeRow(row);
@@ -1554,7 +1788,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               await this.recordActivity('ImportEmployees', Array.from(targets), {
                 added,
                 updated,
-                skipped: skipped.length
+                skipped: skipped.length,
+                mapping: this.getEmployeeImportMappingSnapshot(),
+                missingColumns: [...this.missingRequiredColumns],
+                sourceHeaders: [...this.importHeaders]
               }, undoPayload);
             }
             return { added, updated, skipped: skipped.length };
@@ -2476,6 +2713,16 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
     document.addEventListener('DOMContentLoaded', replaceFeatherIcons);
     document.addEventListener('alpine:init', replaceFeatherIcons);
+
+    window.addEventListener('employee-import:missing-columns', (event) => {
+      const detail = event?.detail;
+      const columns = Array.isArray(detail?.columns) ? detail.columns : [];
+      const root = document.querySelector('[x-data="app"]');
+      const component = root && root.__x ? root.__x.$data : null;
+      if (component && typeof component.handleExternalMissingColumns === 'function'){
+        component.handleExternalMissingColumns(columns);
+      }
+    });
   window.addEventListener('DOMContentLoaded', ()=> {
     if (window.__initImportUI) window.__initImportUI();
   });
