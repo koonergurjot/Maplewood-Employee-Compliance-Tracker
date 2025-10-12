@@ -12,6 +12,21 @@
     Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), speaker=(), vibrate=(), fullscreen=(self), sync-xhr=()"
 
 [[redirects]]
+  from = "/calendar.html"
+  to = "/calendar.html"
+  status = 200
+
+[[redirects]]
+  from = "/clear-cache.html"
+  to = "/clear-cache.html"
+  status = 200
+
+[[redirects]]
+  from = "/sw.js"
+  to = "/sw.js"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
