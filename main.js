@@ -1948,10 +1948,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
         updateMissingRequiredColumns(){
           const missing = [];
-          const hasName = Boolean((this.columnMap.firstName && this.columnMap.lastName) || this.columnMap.payrollName);
-          if (!hasName) missing.push('Name');
-          if (!this.columnMap.employeeId) missing.push('Employee ID');
-          if (!this.columnMap.seniorityHours) missing.push('Seniority Hours');
+          const hasNamePair = Boolean(this.columnMap.firstName && this.columnMap.lastName);
+          const hasEmployeeId = Boolean(this.columnMap.employeeId);
+          if (!hasEmployeeId && !hasNamePair) missing.push('Employee ID or First & Last Name');
+          if (!this.columnMap.status) missing.push('Status');
           const signature = missing.slice().sort().join('|');
           const changed = signature !== this.lastMissingColumnsSignature;
           this.lastMissingColumnsSignature = signature;
@@ -2025,6 +2025,11 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
                 variants: ['seniority hours','total seniority hours','seniority hrs','seniority hour','sen hours','seniority total','seniority time','seniority','hours'],
                 preferredTokens: ['seniority','senior','hours'],
                 minScore: 82
+              },
+              status: {
+                variants: ['status','position status','employment status','employee status','active status','active?'],
+                preferredTokens: ['status'],
+                minScore: 80
               }
             };
 
