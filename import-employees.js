@@ -26,6 +26,20 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     return Boolean(getAppStore());
   }
 
+  function showToastMessage(message, type = 'info', options = {}){
+    const payload = typeof options === 'object' && options !== null ? { ...options } : {};
+    payload.message = typeof message === 'string' ? message : String(message ?? '');
+    payload.type = type;
+    const store = getAppStore();
+    if(store && typeof store.showToast === 'function'){
+      store.showToast(payload);
+      return;
+    }
+    if(typeof window !== 'undefined' && typeof window.alert === 'function'){
+      window.alert(payload.message);
+    }
+  }
+
   function toggleImportModal(open){
     const store = getAppStore();
     if (store){
@@ -453,11 +467,68 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     return { valid: errors.length === 0, errors };
   }
 
-  function renderMappingModal(headers, defaultMapping){
+  function validateRowsForImport(rows, mapping){
+    const issues = [];
+    if (!Array.isArray(rows) || !rows.length) {
+      return { errors: issues, totalRows: Array.isArray(rows) ? rows.length : 0 };
+    }
+
+    const getValue = (row, column) => {
+      if (!row || !column) return '';
+      return row[column];
+    };
+
+    for (let index = 0; index < rows.length; index++){
+      const row = rows[index] || {};
+      const rowNumber = index + 2;
+
+      let firstName = String(getValue(row, mapping.firstName) ?? '').trim();
+      let lastName = String(getValue(row, mapping.lastName) ?? '').trim();
+      const fullName = String(getValue(row, mapping.fullName) ?? '').trim();
+
+      if ((!firstName || !lastName) && fullName){
+        const split = splitName(fullName);
+        if (!firstName){
+          firstName = split.firstName;
+        }
+        if (!lastName){
+          lastName = split.lastName;
+        }
+      }
+
+      const statusRaw = mapping.status ? String(getValue(row, mapping.status) ?? '').trim() : '';
+      const employeeIdValue = normalizeEmployeeId(getValue(row, mapping.employeeId));
+
+      const rowIssues = [];
+
+      if (!statusRaw){
+        rowIssues.push('Missing status');
+      }
+
+      if (!employeeIdValue && (!firstName || !lastName)){
+        rowIssues.push('Missing employee ID and name');
+      }
+
+      if (rowIssues.length){
+        issues.push({ row: rowNumber, reasons: rowIssues });
+      }
+    }
+
+    return { errors: issues, totalRows: rows.length };
+  }
+
+  function renderMappingModal(rows, headers, defaultMapping){
     return new Promise((resolve) => {
       const previouslyFocused = typeof document !== 'undefined' ? document.activeElement : null;
       let releaseFocusTrap = null;
       let cleaned = false;
+      let hasResolved = false;
+
+      const safeResolve = (value) => {
+        if (hasResolved) return;
+        hasResolved = true;
+        resolve(value);
+      };
 
       const overlay = document.createElement('div');
       overlay.className = 'import-mapping-overlay';
@@ -517,16 +588,19 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
       description.style.color = 'var(--muted, #6b7280)';
       description.id = 'import-mapping-description';
 
+      const mappingStep = document.createElement('div');
+
       const table = document.createElement('div');
       table.style.display = 'grid';
       table.style.gridTemplateColumns = '1fr 1fr';
       table.style.gap = '0.75rem 1rem';
-      table.style.marginBottom = '1.5rem';
+      table.style.marginBottom = '1.25rem';
 
       for (const field of fields){
         const label = document.createElement('div');
         label.style.display = 'flex';
         label.style.flexDirection = 'column';
+        label.style.gap = '0.25rem';
 
         const nameEl = document.createElement('span');
         nameEl.textContent = field.label;
@@ -574,6 +648,9 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
         select.addEventListener('change', (event) => {
           const key = event.target.getAttribute('data-field-key');
           mapping[key] = event.target.value || '';
+          errorsPanel.style.display = 'none';
+          errorsList.innerHTML = '';
+          successPanel.style.display = 'none';
         });
 
         table.appendChild(label);
@@ -581,88 +658,221 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
         selectWrapper.appendChild(select);
       }
 
+      mappingStep.appendChild(table);
+
       const errorsPanel = document.createElement('div');
       errorsPanel.style.marginBottom = '1rem';
-      errorsPanel.style.padding = '0.75rem';
-      errorsPanel.style.borderRadius = '0.5rem';
+      errorsPanel.style.padding = '0.75rem 1rem';
+      errorsPanel.style.borderRadius = '0.75rem';
       errorsPanel.style.display = 'none';
-      errorsPanel.style.border = '1px solid var(--danger, #f87171)';
+      errorsPanel.style.border = '1px solid rgba(248,113,113,0.35)';
       errorsPanel.style.background = 'rgba(248,113,113,0.12)';
       errorsPanel.style.color = 'var(--danger, #b91c1c)';
+      errorsPanel.setAttribute('role', 'alert');
 
       const errorsList = document.createElement('ul');
-      errorsList.style.listStyle = 'disc';
-      errorsList.style.marginLeft = '1.5rem';
-      errorsList.style.fontSize = '0.85rem';
+      errorsList.style.margin = '0';
+      errorsList.style.paddingLeft = '1.25rem';
       errorsPanel.appendChild(errorsList);
 
       const successPanel = document.createElement('div');
       successPanel.style.marginBottom = '1rem';
-      successPanel.style.padding = '0.75rem';
-      successPanel.style.borderRadius = '0.5rem';
+      successPanel.style.padding = '0.75rem 1rem';
+      successPanel.style.borderRadius = '0.75rem';
       successPanel.style.display = 'none';
-      successPanel.style.border = '1px solid var(--success, #34d399)';
+      successPanel.style.border = '1px solid rgba(16,185,129,0.35)';
       successPanel.style.background = 'rgba(16,185,129,0.12)';
       successPanel.style.color = 'var(--success, #047857)';
-      successPanel.textContent = 'All required fields are mapped. You can continue.';
+      successPanel.textContent = 'Great! Your mapping looks good. Continue to validate your data.';
 
-      const actions = document.createElement('div');
-      actions.style.display = 'flex';
-      actions.style.justifyContent = 'flex-end';
-      actions.style.gap = '0.75rem';
+      mappingStep.appendChild(errorsPanel);
+      mappingStep.appendChild(successPanel);
+
+      const validationStep = document.createElement('div');
+      validationStep.style.display = 'none';
+
+      const validationIntro = document.createElement('p');
+      validationIntro.textContent = 'Step 2 checks your data for missing details before importing.';
+      validationIntro.style.fontSize = '0.95rem';
+      validationIntro.style.marginBottom = '1rem';
+      validationIntro.style.color = 'var(--muted, #6b7280)';
+      validationStep.appendChild(validationIntro);
+
+      const validationErrorsPanel = document.createElement('div');
+      validationErrorsPanel.style.display = 'none';
+      validationErrorsPanel.style.marginBottom = '1rem';
+      validationErrorsPanel.style.padding = '0.75rem 1rem';
+      validationErrorsPanel.style.borderRadius = '0.75rem';
+      validationErrorsPanel.style.border = '1px solid rgba(248,113,113,0.35)';
+      validationErrorsPanel.style.background = 'rgba(248,113,113,0.12)';
+      validationErrorsPanel.style.color = 'var(--danger, #b91c1c)';
+      validationErrorsPanel.setAttribute('role', 'alert');
+
+      const validationErrorsHeader = document.createElement('p');
+      validationErrorsHeader.style.margin = '0 0 0.5rem';
+      validationErrorsPanel.appendChild(validationErrorsHeader);
+
+      const validationErrorsList = document.createElement('ul');
+      validationErrorsList.style.margin = '0';
+      validationErrorsList.style.paddingLeft = '1.25rem';
+      validationErrorsList.style.listStyle = 'disc';
+      validationErrorsPanel.appendChild(validationErrorsList);
+
+      const validationSuccessPanel = document.createElement('div');
+      validationSuccessPanel.style.display = 'none';
+      validationSuccessPanel.style.marginBottom = '1rem';
+      validationSuccessPanel.style.padding = '0.75rem 1rem';
+      validationSuccessPanel.style.borderRadius = '0.75rem';
+      validationSuccessPanel.style.border = '1px solid rgba(16,185,129,0.35)';
+      validationSuccessPanel.style.background = 'rgba(16,185,129,0.12)';
+      validationSuccessPanel.style.color = 'var(--success, #047857)';
+      validationSuccessPanel.textContent = 'All rows look good. You can proceed with the import.';
+
+      validationStep.appendChild(validationErrorsPanel);
+      validationStep.appendChild(validationSuccessPanel);
+
+      const actionsStepOne = document.createElement('div');
+      actionsStepOne.style.display = 'flex';
+      actionsStepOne.style.justifyContent = 'flex-end';
+      actionsStepOne.style.gap = '0.75rem';
+      actionsStepOne.style.marginTop = '1.5rem';
+      actionsStepOne.style.flexWrap = 'wrap';
+
+      const actionsStepTwo = document.createElement('div');
+      actionsStepTwo.style.display = 'none';
+      actionsStepTwo.style.justifyContent = 'flex-end';
+      actionsStepTwo.style.gap = '0.75rem';
+      actionsStepTwo.style.marginTop = '1.5rem';
+      actionsStepTwo.style.flexWrap = 'wrap';
 
       const cancelBtn = document.createElement('button');
       cancelBtn.type = 'button';
+      cancelBtn.className = 'btn-outline';
       cancelBtn.textContent = 'Cancel';
-      cancelBtn.className = 'btn';
       cancelBtn.addEventListener('click', () => {
         cleanup();
-        resolve(null);
+        safeResolve(null);
       });
 
       const validateBtn = document.createElement('button');
       validateBtn.type = 'button';
-      validateBtn.textContent = 'Validate';
-      validateBtn.className = 'btn';
+      validateBtn.className = 'btn-outline';
+      validateBtn.textContent = 'Check Mapping';
 
       const continueBtn = document.createElement('button');
       continueBtn.type = 'button';
-      continueBtn.textContent = 'Continue';
-      continueBtn.className = 'btn btn-accent';
-      continueBtn.disabled = true;
+      continueBtn.className = 'btn';
+      continueBtn.textContent = 'Next: Validate';
 
-      function updatePanels(result){
-        if (!result){
+      const backBtn = document.createElement('button');
+      backBtn.type = 'button';
+      backBtn.className = 'btn-outline';
+      backBtn.textContent = 'Back to Mapping';
+
+      const importBtn = document.createElement('button');
+      importBtn.type = 'button';
+      importBtn.className = 'btn';
+      importBtn.textContent = 'Import Employees';
+      importBtn.disabled = true;
+
+      actionsStepOne.appendChild(cancelBtn);
+      actionsStepOne.appendChild(validateBtn);
+      actionsStepOne.appendChild(continueBtn);
+
+      actionsStepTwo.appendChild(backBtn);
+      actionsStepTwo.appendChild(importBtn);
+
+      const updatePanels = ({ valid, errors }) => {
+        if (valid){
           errorsPanel.style.display = 'none';
+          errorsList.innerHTML = '';
+          successPanel.style.display = 'block';
+        } else {
+          errorsPanel.style.display = 'block';
+          errorsList.innerHTML = '';
+          errors.forEach((err) => {
+            const item = document.createElement('li');
+            item.textContent = err;
+            errorsList.appendChild(item);
+          });
           successPanel.style.display = 'none';
-          continueBtn.disabled = true;
+        }
+      };
+
+      const updateValidationDisplay = (result) => {
+        const errorCount = Array.isArray(result?.errors) ? result.errors.length : 0;
+        if (!errorCount){
+          validationErrorsPanel.style.display = 'none';
+          validationSuccessPanel.style.display = 'block';
+          importBtn.disabled = false;
+          importBtn.classList.remove('btn-disabled');
           return;
         }
 
-        if (result.valid){
-          errorsPanel.style.display = 'none';
-          successPanel.style.display = 'block';
-          continueBtn.disabled = false;
-        } else {
-          successPanel.style.display = 'none';
-          errorsPanel.style.display = 'block';
-          continueBtn.disabled = true;
-          errorsList.innerHTML = '';
-          for (const err of result.errors){
-            const li = document.createElement('li');
-            li.textContent = err;
-            errorsList.appendChild(li);
-          }
-        }
-      }
+        validationSuccessPanel.style.display = 'none';
+        validationErrorsPanel.style.display = 'block';
+        importBtn.disabled = true;
+        importBtn.classList.add('btn-disabled');
 
-      const handleKeydown = (event) => {
-        if(event.key === 'Escape'){
-          event.preventDefault();
-          cleanup();
-          resolve(null);
+        validationErrorsHeader.textContent = errorCount === 1
+          ? 'Fix the following issue before importing:'
+          : `Fix the following ${errorCount} issues before importing:`;
+
+        validationErrorsList.innerHTML = '';
+        const preview = result.errors.slice(0, 5);
+        preview.forEach((issue) => {
+          const item = document.createElement('li');
+          const reasonText = issue.reasons.join(', ');
+          item.textContent = `Row ${issue.row}: ${reasonText}`;
+          validationErrorsList.appendChild(item);
+        });
+
+        if (errorCount > 5){
+          const summaryItem = document.createElement('li');
+          summaryItem.textContent = `…and ${errorCount - 5} more.`;
+          validationErrorsList.appendChild(summaryItem);
         }
       };
+
+      const runRowValidation = () => {
+        const result = validateRowsForImport(rows, mapping);
+        updateValidationDisplay(result);
+        return result;
+      };
+
+      let currentStep = 1;
+
+      const goToStep = (step) => {
+        currentStep = step;
+        if (step === 1){
+          title.textContent = 'Step 1: Map Columns';
+          description.textContent = 'Review detected fields and adjust the mapping before importing.';
+          mappingStep.style.display = 'block';
+          validationStep.style.display = 'none';
+          actionsStepOne.style.display = 'flex';
+          actionsStepTwo.style.display = 'none';
+        } else {
+          title.textContent = 'Step 2: Validate & Import';
+          description.textContent = 'Confirm that each row has an Employee ID or both First & Last Name.';
+          mappingStep.style.display = 'none';
+          validationStep.style.display = 'block';
+          actionsStepOne.style.display = 'none';
+          actionsStepTwo.style.display = 'flex';
+        }
+      };
+
+      goToStep(1);
+
+      function handleKeydown(event){
+        if (event.key === 'Escape'){
+          event.preventDefault();
+          cleanup();
+          safeResolve(null);
+        }
+        if (event.key === 'Enter' && currentStep === 2 && document.activeElement === importBtn && importBtn.disabled){
+          event.preventDefault();
+        }
+      }
 
       function restoreFocus(){
         if(!previouslyFocused || typeof previouslyFocused.focus !== 'function'){
@@ -703,22 +913,44 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
         const result = validateMappingSelection(mapping, headers);
         if (!result.valid){
           updatePanels(result);
+          updateMissingColumnsBanner(result.errors);
           return;
         }
-        cleanup();
-        resolve({ ...mapping });
+        updatePanels(result);
+        updateMissingColumnsBanner([]);
+        goToStep(2);
+        runRowValidation();
       });
 
-      actions.appendChild(cancelBtn);
-      actions.appendChild(validateBtn);
-      actions.appendChild(continueBtn);
+      backBtn.addEventListener('click', () => {
+        goToStep(1);
+      });
+
+      importBtn.addEventListener('click', () => {
+        const mappingResult = validateMappingSelection(mapping, headers);
+        if (!mappingResult.valid){
+          goToStep(1);
+          updatePanels(mappingResult);
+          updateMissingColumnsBanner(mappingResult.errors);
+          return;
+        }
+
+        const rowResult = runRowValidation();
+        if (rowResult.errors.length){
+          goToStep(2);
+          return;
+        }
+
+        cleanup();
+        safeResolve({ ...mapping });
+      });
 
       modal.appendChild(title);
       modal.appendChild(description);
-      modal.appendChild(table);
-      modal.appendChild(errorsPanel);
-      modal.appendChild(successPanel);
-      modal.appendChild(actions);
+      modal.appendChild(mappingStep);
+      modal.appendChild(validationStep);
+      modal.appendChild(actionsStepOne);
+      modal.appendChild(actionsStepTwo);
 
       overlay.appendChild(modal);
       document.body.appendChild(overlay);
@@ -737,7 +969,7 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     });
   }
 
-  async function importFromRows(rows, mapping, headers){
+  async function importFromRows(rows, mapping, headers, options = {}){
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('No rows detected.');
 
     const validation = validateMappingSelection(mapping, headers);
@@ -890,7 +1122,7 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     // Write to DB
     const newlyCreatedEmployees = employees.filter(emp => newEmployeeIds.has(emp.id));
 
-    const progressCallback = typeof onProgress === 'function' ? onProgress : null;
+    const progressCallback = typeof options.onProgress === 'function' ? options.onProgress : null;
     const progressState = {
       processed: 0,
       total: Math.max(employees.length, 1)
@@ -1015,20 +1247,39 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
   async function handleImport(input){
     const file = input.files && input.files[0];
     if (!file) return;
-    const progressReporter = !isAlpineReady() ? createLegacyProgressReporter() : null;
+    const store = getAppStore();
+    const usingStoreProgress = Boolean(store && typeof store.setProgress === 'function' && typeof store.showToast === 'function');
+    const progressReporter = usingStoreProgress ? null : (!isAlpineReady() ? createLegacyProgressReporter() : null);
     let progressFinished = false;
     try {
       const { rows, headers } = await parseFile(file);
       const defaultMapping = buildDefaultMapping(headers);
-      const mapping = await renderMappingModal(headers, defaultMapping);
+      const mapping = await renderMappingModal(rows, headers, defaultMapping);
       if (!mapping){
         return;
       }
 
       updateMissingColumnsBanner([]);
 
-      const result = await importFromRows(rows, mapping, headers);
-      const store = getAppStore();
+      const handleProgress = (percent) => {
+        if(usingStoreProgress){
+          store.setProgress(percent);
+        } else if(progressReporter && typeof progressReporter.update === 'function'){
+          progressReporter.update(percent);
+        }
+      };
+
+      if(usingStoreProgress){
+        store.setProgress(0);
+      } else if(progressReporter && typeof progressReporter.start === 'function'){
+        progressReporter.start();
+      }
+
+      const result = await importFromRows(rows, mapping, headers, { onProgress: handleProgress });
+      progressFinished = true;
+      if(progressReporter && typeof progressReporter.finish === 'function'){
+        progressReporter.finish();
+      }
       const baseMessage = `Imported ${result.importedCount} employee${result.importedCount === 1 ? '' : 's'}.`;
       const skippedCount = result.skippedRows.length;
       let message = baseMessage;
@@ -1039,15 +1290,16 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
         message += ` Skipped ${skippedCount} row${skippedCount === 1 ? '' : 's'} (${details}).`;
       }
 
-      if (store && typeof store.notify === 'function'){
-        store.notify(message, skippedCount ? 'var(--warning, #f59e0b)' : 'var(--success)');
-      } else {
-        alert(message);
-      }
+      showToastMessage(message, skippedCount ? 'info' : 'success');
       toggleImportModal(false);
     } catch (e) {
       console.error('Import failed:', e);
-      alert(`Import failed: ${e.message || e}`);
+      progressFinished = true;
+      if(progressReporter && typeof progressReporter.finish === 'function'){
+        progressReporter.finish();
+      }
+      const failureMessage = `Import failed: ${e.message || e}`;
+      showToastMessage(failureMessage, 'error');
     } finally {
       if (progressReporter && !progressFinished){
         progressReporter.finish();

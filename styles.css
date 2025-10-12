@@ -7,6 +7,10 @@
   border-color: #e5e7eb;
 }
 
+[x-cloak] {
+  display: none !important;
+}
+
 html {
   line-height: 1.5;
   -webkit-text-size-adjust: 100%;
@@ -15,6 +19,14 @@ html {
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   font-feature-settings: normal;
   font-variation-settings: normal;
+}
+
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
 }
 
 body {
@@ -29,6 +41,44 @@ body {
 
 .dark .focus-ring:focus-visible {
   outline-color: rgba(96, 165, 250, 0.6);
+}
+
+/* Skeleton loader utilities */
+.skeleton {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(100deg, rgba(148, 163, 184, 0.28) 20%, rgba(148, 163, 184, 0.45) 40%, rgba(148, 163, 184, 0.28) 60%);
+  background-size: 200% 100%;
+  border-radius: 0.75rem;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.dark .skeleton {
+  background: linear-gradient(100deg, rgba(148, 163, 184, 0.18) 20%, rgba(148, 163, 184, 0.28) 40%, rgba(148, 163, 184, 0.18) 60%);
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: -100% 50%;
+  }
+}
+
+#calendar:empty::before {
+  content: "";
+  display: block;
+  height: 18rem;
+  border-radius: 1rem;
+  background: linear-gradient(100deg, rgba(148, 163, 184, 0.22) 20%, rgba(148, 163, 184, 0.38) 40%, rgba(148, 163, 184, 0.22) 60%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.dark #calendar:empty::before {
+  background: linear-gradient(100deg, rgba(148, 163, 184, 0.12) 20%, rgba(148, 163, 184, 0.24) 40%, rgba(148, 163, 184, 0.12) 60%);
 }
 
 /* Container */
@@ -289,6 +339,10 @@ body {
   padding: 0.5rem;
 }
 
+.p-3 {
+  padding: 0.75rem;
+}
+
 .p-4 {
   padding: 1rem;
 }
@@ -320,6 +374,10 @@ body {
 
 .w-full {
   width: 100%;
+}
+
+.w-\[min\(92vw\,480px\)\] {
+  width: min(92vw, 480px);
 }
 
 .w-auto {
@@ -387,6 +445,10 @@ body {
 .text-sm {
   font-size: 0.875rem;
   line-height: 1.25rem;
+}
+
+.text-white {
+  color: #ffffff;
 }
 
 .text-lg {
@@ -482,6 +544,18 @@ body {
   background-color: rgba(0, 0, 0, 0.4);
 }
 
+.bg-neutral-900\/90 {
+  background-color: rgba(23, 23, 23, 0.9);
+}
+
+.bg-white\/10 {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.bg-white\/70 {
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
 .hover\:bg-gray-50:hover {
   background-color: #f9fafb;
 }
@@ -525,6 +599,10 @@ body {
 
 .rounded-lg {
   border-radius: 0.5rem;
+}
+
+.rounded-xl {
+  border-radius: 0.75rem;
 }
 
 .rounded-full {
@@ -595,6 +673,10 @@ body {
 
 .left-0 {
   left: 0;
+}
+
+.left-1\/2 {
+  left: 50%;
 }
 
 .top-0 {
@@ -700,6 +782,17 @@ body {
 
 /* Transforms */
 .transform {
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+.-translate-x-1\/2 {
+  --tw-translate-x: -50%;
+  --tw-translate-y: var(--tw-translate-y, 0);
+  --tw-rotate: var(--tw-rotate, 0);
+  --tw-skew-x: var(--tw-skew-x, 0);
+  --tw-skew-y: var(--tw-skew-y, 0);
+  --tw-scale-x: var(--tw-scale-x, 1);
+  --tw-scale-y: var(--tw-scale-y, 1);
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
 }
 
@@ -844,3 +937,136 @@ body {
   width: 0.25rem;
   height: 0.25rem;
 }
+
+/* Requirement status cells */
+.requirement-status-cell {
+  position: relative;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.requirement-status-cell--compliant {
+  background-color: var(--status-complete-bg);
+  color: var(--status-complete-text);
+}
+
+.requirement-status-cell--expiring {
+  background-color: var(--status-due-bg);
+  color: var(--status-due-text);
+}
+
+.requirement-status-cell--overdue {
+  background-color: var(--status-overdue-bg);
+  color: var(--status-overdue-text);
+  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.35);
+}
+
+.requirement-status-cell--not-required {
+  background-color: var(--status-optional-bg);
+  color: var(--status-optional-text);
+}
+
+.requirement-status-cell--incomplete {
+  background-color: var(--status-incomplete-bg);
+  color: var(--status-incomplete-text);
+}
+
+.requirement-status-cell .status-chip {
+  color: inherit;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.status-chip:hover {
+  transform: translateY(-1px);
+}
+
+.status-chip:disabled {
+  cursor: not-allowed;
+}
+
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.dark .status-legend {
+  background: rgba(17, 24, 39, 0.78);
+}
+
+.status-legend__title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.status-legend__list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.status-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text);
+}
+
+.status-legend__swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.06);
+}
+
+.dark .status-legend__swatch {
+  box-shadow: none;
+}
+
+.status-legend__swatch--complete {
+  background-color: var(--status-complete-bg);
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+.status-legend__swatch--due {
+  background-color: var(--status-due-bg);
+  border-color: rgba(217, 119, 6, 0.45);
+}
+
+.status-legend__swatch--overdue {
+  background-color: var(--status-overdue-bg);
+  border-color: rgba(220, 38, 38, 0.5);
+}
+
+.status-legend__swatch--not-required {
+  background-color: var(--status-optional-bg);
+  border-color: rgba(107, 114, 128, 0.45);
+}
+

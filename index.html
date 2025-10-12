@@ -6,13 +6,77 @@
   <title>Compliance Matrix</title>
   <meta name="theme-color" content="#111827"/>
   <link rel="manifest" href="/manifest.webmanifest?v=1"/>
+  <script nonce="bWFwbGV3b29k">
+    (function(){
+      const storageKey = 'maplewood:theme';
+      const prefersDark = () => window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const applyTheme = (isDark) => {
+        document.documentElement.classList.toggle('dark', isDark);
+        document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+      };
+      try{
+        const stored = window.localStorage.getItem(storageKey);
+        if(stored === 'dark' || stored === 'light'){
+          applyTheme(stored === 'dark');
+        }else{
+          applyTheme(prefersDark());
+        }
+      }catch(error){
+        applyTheme(prefersDark());
+      }
+    })();
+  </script>
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+    content="default-src 'self'; script-src 'self' 'nonce-bWFwbGV3b29k'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
   />
   <style>
-    :root{ --bg:#f3f4f6; --card:#ffffff; --line:#e5e7eb; --text:#111827; --muted:#6b7280; --accent:#2563eb; --success:#10b981; --expiring:#f97316; --warn:#f59e0b; --danger:#ef4444; --badge-text:#111827; }
-    .dark:root, .dark{ --bg:#0b1220; --card:#111827; --line:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --accent:#60a5fa; --success:#34d399; --expiring:#fb923c; --warn:#fbbf24; --danger:#f87171; --badge-text:#111827; }
+    :root{
+      --bg:#f3f4f6;
+      --card:#ffffff;
+      --line:#e5e7eb;
+      --text:#111827;
+      --muted:#6b7280;
+      --accent:#2563eb;
+      --success:#10b981;
+      --expiring:#f97316;
+      --warn:#f59e0b;
+      --danger:#ef4444;
+      --badge-text:#111827;
+      --status-complete-bg:rgba(148,163,184,0.18);
+      --status-complete-text:#111827;
+      --status-due-bg:rgba(251,191,36,0.22);
+      --status-due-text:#92400e;
+      --status-overdue-bg:rgba(248,113,113,0.24);
+      --status-overdue-text:#7f1d1d;
+      --status-optional-bg:rgba(107,114,128,0.16);
+      --status-optional-text:#374151;
+      --status-incomplete-bg:transparent;
+      --status-incomplete-text:#111827;
+    }
+    .dark:root, .dark{
+      --bg:#0b1220;
+      --card:#111827;
+      --line:#1f2937;
+      --text:#f3f4f6;
+      --muted:#9ca3af;
+      --accent:#60a5fa;
+      --success:#34d399;
+      --expiring:#fb923c;
+      --warn:#fbbf24;
+      --danger:#f87171;
+      --badge-text:#111827;
+      --status-complete-bg:rgba(148,163,184,0.22);
+      --status-complete-text:#e5e7eb;
+      --status-due-bg:rgba(217,119,6,0.28);
+      --status-due-text:#fcd34d;
+      --status-overdue-bg:rgba(248,113,113,0.32);
+      --status-overdue-text:#fecaca;
+      --status-optional-bg:rgba(107,114,128,0.26);
+      --status-optional-text:#d1d5db;
+      --status-incomplete-bg:transparent;
+      --status-incomplete-text:#f3f4f6;
+    }
     body{ background:var(--bg); color:var(--text); }
     [x-cloak]{display:none!important}
     .card{background:var(--card);border:1px solid var(--line)}
@@ -69,6 +133,8 @@
     .checkbox.expired{background-color:var(--warn);border-color:var(--warn)}
     .checkbox.completed::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-60%) rotate(-45deg);width:.75rem;height:.4rem;border-left:2px solid #fff;border-bottom:2px solid #fff}
     .virtual-scroll{overflow-y:auto;max-height:calc(100vh - 260px)}
+    .virtual-scroll tbody tr[data-employee-row]{height:48px}
+    .virtual-scroll tbody tr[data-employee-row] > td{vertical-align:middle}
     .virtual-spacer td{padding:0!important;border:none!important;height:0}
     .status-badge{transition:all 0.2s ease}
     .badge{display:inline-flex;align-items:center;padding:.125rem .5rem;border-radius:.25rem;font-size:.75rem;font-weight:600;color:var(--badge-text);border:none;cursor:pointer;transition:box-shadow .2s ease,transform .2s ease}
@@ -76,10 +142,6 @@
     .dark .badge:hover,.dark .badge:focus-visible{box-shadow:0 0 0 3px rgba(96,165,250,0.25)}
     .btn:focus-visible,.btn-primary:focus-visible,.btn-accent:focus-visible,.btn-ghost:focus-visible,.btn-danger:focus-visible,.btn-icon:focus-visible,.search-result-item:focus-visible,.badge:focus-visible,.form-field:focus-visible,.input:focus-visible,.select:focus-visible,a:focus-visible,.focus-ring:focus-visible{outline:3px solid rgba(37,99,235,0.45);outline-offset:2px}
     .dark .btn:focus-visible,.dark .btn-primary:focus-visible,.dark .btn-accent:focus-visible,.dark .btn-ghost:focus-visible,.dark .btn-danger:focus-visible,.dark .btn-icon:focus-visible,.dark .search-result-item:focus-visible,.dark .badge:focus-visible,.dark .form-field:focus-visible,.dark .input:focus-visible,.dark .select:focus-visible,.dark a:focus-visible,.dark .focus-ring:focus-visible{outline-color:rgba(96,165,250,0.6)}
-    .badge--compliant{background:var(--success)}
-    .badge--expiring{background:var(--warn)}
-    .badge--overdue{background:var(--danger)}
-    .badge--incomplete{background:var(--muted);color:var(--card)}
     .requirement-header{transition:all 0.2s ease;position:relative}
     .requirement-header:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,0.1)}
     .admin-card{transition:all 0.2s ease}
@@ -151,7 +213,7 @@
           <img src="icon-192.svg" alt="Maplewood icon" class="w-10 h-10 rounded-lg shadow-sm">
           <h1 class="text-2xl font-bold">Maplewood Compliance Matrix</h1>
         </div>
-        <div class="flex flex-col md:flex-row md:items-center gap-2 w-full md:w-auto">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-end gap-3 w-full md:w-auto">
           <div class="search-float w-full md:w-auto">
             <div class="relative w-full md:w-72 md:max-w-md" @keydown.escape.window="dismissSearchResults()">
               <input
@@ -249,6 +311,27 @@
                   <span x-text="option.label"></span>
                 </label>
               </template>
+            </div>
+          </div>
+          <div class="status-legend" aria-label="Requirement status legend">
+            <span class="status-legend__title">Legend</span>
+            <div class="status-legend__list" role="list">
+              <span class="status-legend__item" role="listitem">
+                <span class="status-legend__swatch status-legend__swatch--complete" aria-hidden="true"></span>
+                <span>Complete</span>
+              </span>
+              <span class="status-legend__item" role="listitem">
+                <span class="status-legend__swatch status-legend__swatch--due" aria-hidden="true"></span>
+                <span>Due soon</span>
+              </span>
+              <span class="status-legend__item" role="listitem">
+                <span class="status-legend__swatch status-legend__swatch--overdue" aria-hidden="true"></span>
+                <span>Overdue</span>
+              </span>
+              <span class="status-legend__item" role="listitem">
+                <span class="status-legend__swatch status-legend__swatch--not-required" aria-hidden="true"></span>
+                <span>Not required</span>
+              </span>
             </div>
           </div>
         </div>
@@ -436,13 +519,62 @@
             </tr>
           </thead>
           <tbody class="divide-y">
-            <tr class="virtual-spacer" x-show="virtualPaddingTop > 0" aria-hidden="true">
-              <td :colspan="visibleColumnCount()">
-                <div :style="`height:${virtualPaddingTop}px`"></div>
-              </td>
-            </tr>
-            <template x-for="emp in visibleEmployees()" :key="emp.id">
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800" :class="{'bg-blue-50 dark:bg-blue-900/30': isEmployeeSelected(emp.id)}" :data-employee-row="emp.id">
+            <template x-if="!appReady && !loadError">
+              <template x-for="index in 6" :key="`loading-${index}`">
+                <tr>
+                  <td :colspan="visibleColumnCount()" class="px-6 py-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                      <span class="skeleton" style="width:40px;height:40px;border-radius:9999px;"></span>
+                      <div class="flex-1" style="flex:1 1 200px;">
+                        <div class="skeleton" style="height:14px;max-width:220px;border-radius:9999px;"></div>
+                        <div class="skeleton" style="height:12px;max-width:160px;border-radius:9999px;margin-top:0.5rem;"></div>
+                      </div>
+                      <div class="flex gap-2 flex-wrap" style="flex:1 1 180px;justify-content:flex-end;">
+                        <span class="skeleton" style="height:12px;width:88px;border-radius:9999px;"></span>
+                        <span class="skeleton" style="height:12px;width:88px;border-radius:9999px;"></span>
+                        <span class="skeleton" style="height:12px;width:88px;border-radius:9999px;"></span>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </template>
+
+            <template x-if="appReady && employees.length === 0">
+              <tr>
+                <td :colspan="visibleColumnCount()" class="px-6 py-12">
+                  <div class="flex flex-col items-center gap-4 text-center">
+                    <svg width="120" height="88" viewBox="0 0 120 88" fill="none" aria-hidden="true">
+                      <rect x="8" y="50" width="104" height="30" rx="12" fill="rgba(37,99,235,0.08)"></rect>
+                      <rect x="16" y="34" width="88" height="14" rx="7" fill="rgba(37,99,235,0.12)"></rect>
+                      <circle cx="60" cy="28" r="18" fill="rgba(37,99,235,0.15)"></circle>
+                      <path d="M60 18a10 10 0 1 1-0.01 20A10 10 0 0 1 60 18Z" fill="rgba(37,99,235,0.25)"></path>
+                    </svg>
+                    <div style="max-width:22rem;">
+                      <h2 class="text-lg font-semibold mb-2">Bring your roster aboard</h2>
+                      <p class="text-sm" style="color:var(--muted)">Import employees to get started.</p>
+                    </div>
+                    <button
+                      type="button"
+                      class="btn btn-primary"
+                      @click="$store.app.showImportModal = true"
+                    >
+                      <i data-feather="upload" class="w-4 h-4"></i>
+                      <span>Import employees</span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+
+            <template x-if="appReady && employees.length > 0">
+              <tr class="virtual-spacer" x-show="virtualPaddingTop > 0" aria-hidden="true">
+                <td :colspan="visibleColumnCount()">
+                  <div :style="`height:${virtualPaddingTop}px`"></div>
+                </td>
+              </tr>
+              <template x-for="emp in visibleEmployees()" :key="emp.id">
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800" :data-employee-row="emp.id">
                 <td class="sticky-col px-6 py-4">
                   <div class="flex items-start justify-between gap-3">
                     <div class="flex items-start gap-3">
@@ -525,40 +657,37 @@
                   <span x-html="emp.seniorityHours != null && emp.seniorityHours !== '' ? highlightText(emp.seniorityHours) : '-'"></span>
                 </td>
                   <template x-for="req in orderedVisibleRequirements()" :key="req.id">
-                    <td class="px-4 py-3">
-                      <div class="flex items-center justify-center">
-                        <button
-                          class="badge"
-                          :class="{
-                            'badge--compliant': calcStatus(emp.id, req.id) === 'compliant',
-                            'badge--expiring': calcStatus(emp.id, req.id) === 'expiring',
-                            'badge--overdue': calcStatus(emp.id, req.id) === 'overdue',
-                            'badge--incomplete': ['incomplete','not-required'].includes(calcStatus(emp.id, req.id))
-                          }"
-                          @click="toggleStatus(emp, req)"
-                          :title="getStatusTooltip(emp.id, req.id)"
-                          :aria-label="`${req.name} requirement for ${emp.firstName} ${emp.lastName}: ${getStatusTooltip(emp.id, req.id)}`"
-                          x-text="{
-                            compliant: '✔ Compliant',
-                            expiring: '⚠ Expiring',
-                            overdue: '✖ Overdue',
-                            incomplete: '○ Incomplete',
-                            'not-required': '◎ Not Required'
-                          }[calcStatus(emp.id, req.id)]">
-                        </button>
-                      </div>
+                    <td
+                      class="px-4 py-3"
+                      :class="['requirement-status-cell', statusCellClass(calcStatus(emp.id, req.id))]"
+                    >
+                      <button
+                        class="status-chip focus-ring"
+                        @click="toggleStatus(emp, req)"
+                        :title="getStatusTooltip(emp.id, req.id)"
+                        :aria-label="`${req.name} requirement for ${emp.firstName} ${emp.lastName}: ${getStatusTooltip(emp.id, req.id)}`"
+                        x-text="{
+                          compliant: '✔ Complete',
+                          expiring: '⚠ Due Soon',
+                          overdue: '✖ Overdue',
+                          incomplete: '○ Incomplete',
+                          'not-required': '◎ Not Required'
+                        }[calcStatus(emp.id, req.id)]"
+                      >
+                      </button>
                     </td>
                   </template>
               </tr>
+              </template>
+              <tr x-show="sortedEmployees().length === 0 && employees.length > 0">
+                <td class="px-6 py-4 text-center text-sm" :colspan="visibleColumnCount()" style="color:var(--muted)">No matches found</td>
+              </tr>
+              <tr class="virtual-spacer" x-show="virtualPaddingBottom > 0" aria-hidden="true">
+                <td :colspan="visibleColumnCount()">
+                  <div :style="`height:${virtualPaddingBottom}px`"></div>
+                </td>
+              </tr>
             </template>
-            <tr x-show="sortedEmployees().length === 0">
-              <td class="px-6 py-4 text-center text-sm" :colspan="visibleColumnCount()" style="color:var(--muted)">No matches found</td>
-            </tr>
-            <tr class="virtual-spacer" x-show="virtualPaddingBottom > 0" aria-hidden="true">
-              <td :colspan="visibleColumnCount()">
-                <div :style="`height:${virtualPaddingBottom}px`"></div>
-              </td>
-            </tr>
           </tbody>
         </table>
     </div>
@@ -841,8 +970,6 @@
           </div>
         </div>
       </div>
-    </div>
-  </div>
 
   <!-- Add Employee Modal -->
   <div
@@ -1452,6 +1579,8 @@
             </div>
           </div>
 
+          <p class="text-sm mb-4" style="color:var(--muted)">Use the two-step wizard to map your columns and validate employee data before importing.</p>
+
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div x-show="importMode !== 'backup'">
               <label class="block text-sm">File Type</label>
@@ -1826,9 +1955,56 @@
     </div>
   </div>
 
-  <div x-show="showToast" class="fixed bottom-4 right-4 px-4 py-2 rounded shadow-lg" :style="'background:'+toastColor+';color:white'" role="status" aria-live="polite" aria-atomic="true"><!-- Provide polite live toast announcements for assistive technology -->
-    <span x-text="toastMessage"></span>
-    <button x-show="toastUndo" @click="toastUndo()" class="ml-3 underline font-semibold focus-ring">Undo</button>
+  <div
+    x-data="{
+      async runToastAction(){
+        const action = this.$store.app.toast?.action;
+        if(!action || typeof action.handler !== 'function') return;
+        try {
+          await action.handler();
+        } catch (error) {
+          console.error('Toast action failed', error);
+        } finally {
+          if(action.dismiss !== false){
+            if(typeof this.$store.app.hideToast === 'function'){
+              this.$store.app.hideToast();
+            } else {
+              this.$store.app.toast = null;
+            }
+          }
+        }
+      }
+    }"
+    x-show="$store.app.toast"
+    x-cloak
+    class="fixed bottom-4 left-1/2 -translate-x-1/2 w-[min(92vw,480px)]"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+  >
+    <div class="rounded-xl shadow-lg bg-neutral-900/90 text-white p-3 flex items-center gap-3">
+      <template x-if="$store.app.toast?.type==='progress'">
+        <div class="w-full">
+          <div class="text-sm mb-1" x-text="$store.app.toast.message"></div>
+          <div class="h-2 bg-white/10 rounded">
+            <div class="h-2 rounded bg-white/70" :style="`width:${$store.app.toast.percent||0}%`"></div>
+          </div>
+        </div>
+      </template>
+      <template x-if="$store.app.toast?.type!=='progress'">
+        <div class="flex w-full items-center justify-between gap-3">
+          <div class="text-sm flex-1" x-text="$store.app.toast.message"></div>
+          <template x-if="$store.app.toast?.action">
+            <button
+              type="button"
+              class="text-xs font-semibold underline focus-ring shrink-0"
+              @click="runToastAction()"
+              x-text="$store.app.toast.action.label || 'Undo'"
+            ></button>
+          </template>
+        </div>
+      </template>
+    </div>
   </div>
 
   <script type="module" src="/main.js"></script>

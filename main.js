@@ -17,6 +17,7 @@ import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup, 
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Recreation', 'Reception', 'Rehab Assistant', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
+const THEME_STORAGE_KEY = 'maplewood:theme';
 const COLUMN_VISIBILITY_STORAGE_KEY = 'maplewood:employeeTable:visibleColumns';
 const DEFAULT_VISIBLE_COLUMNS = Object.freeze({
   role: true,
@@ -94,6 +95,102 @@ function resolveXlsxFromGlobals(){
   if(typeof window === 'undefined') return null;
   return window.__xlsxModule || window.XLSX || null;
 }
+
+function getThemeStorage(){
+  if(typeof window === 'undefined') return null;
+  try {
+    return window.localStorage || null;
+  } catch (error) {
+    console.warn('Theme preference: localStorage unavailable', error);
+    return null;
+  }
+}
+
+function readStoredThemePreference(){
+  const storage = getThemeStorage();
+  if(!storage) return null;
+  try {
+    return storage.getItem(THEME_STORAGE_KEY);
+  } catch (error) {
+    console.warn('Theme preference: failed to read preference', error);
+    return null;
+  }
+}
+
+function hasStoredThemePreference(){
+  const value = readStoredThemePreference();
+  return value === 'dark' || value === 'light';
+}
+
+function persistThemePreference(value){
+  const storage = getThemeStorage();
+  if(!storage) return;
+  try {
+    if(value === null){
+      storage.removeItem(THEME_STORAGE_KEY);
+    } else {
+      storage.setItem(THEME_STORAGE_KEY, value);
+    }
+  } catch (error) {
+    console.warn('Theme preference: failed to persist preference', error);
+  }
+}
+
+function systemPrefersDark(){
+  if(typeof window === 'undefined' || typeof window.matchMedia !== 'function'){
+    return false;
+  }
+  try {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  } catch (error) {
+    return false;
+  }
+}
+
+function applyDocumentDarkMode(isDark){
+  if(typeof document === 'undefined') return;
+  document.documentElement.classList.toggle('dark', Boolean(isDark));
+  document.documentElement.style.colorScheme = Boolean(isDark) ? 'dark' : 'light';
+}
+
+function resolveInitialDarkMode(){
+  const stored = readStoredThemePreference();
+  if(stored === 'dark') return true;
+  if(stored === 'light') return false;
+  return systemPrefersDark();
+}
+
+function watchSystemThemeChange(callback){
+  if(typeof window === 'undefined' || typeof window.matchMedia !== 'function'){
+    return () => {};
+  }
+  let mediaQuery;
+  try {
+    mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  } catch (error) {
+    return () => {};
+  }
+  if(!mediaQuery) return () => {};
+  const handler = (event) => {
+    try {
+      callback(Boolean(event.matches));
+    } catch (error) {
+      console.warn('Theme preference: system preference handler failed', error);
+    }
+  };
+  if(typeof mediaQuery.addEventListener === 'function'){
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }
+  if(typeof mediaQuery.addListener === 'function'){
+    mediaQuery.addListener(handler);
+    return () => mediaQuery.removeListener(handler);
+  }
+  return () => {};
+}
+
+const initialDarkMode = resolveInitialDarkMode();
+applyDocumentDarkMode(initialDarkMode);
 
 function rememberXlsxModule(mod){
   if(!mod) return null;
@@ -328,90 +425,47 @@ window.Alpine = Alpine;
 // Global store for shared UI state
 Alpine.store('app', {
   showImportModal: false,
-  showLookupModal: '',
+  showLookupModal: null,
   toast: null,
-  selectedEmployeeIds: [],
-  normalizeId(value){
-    if(value == null){
-      return '';
+  _toastTimer: null,
+  showToast(msg){
+    if(this._toastTimer){
+      clearTimeout(this._toastTimer);
+      this._toastTimer = null;
     }
-    try{
-      return String(value);
-    }catch(error){
-      return '';
+    const payload = typeof msg === 'object' && msg !== null ? { ...msg } : { message: String(msg ?? '') };
+    if(!payload.type){
+      payload.type = 'info';
     }
-  },
-  setSelectedEmployeeIds(ids){
-    if(!Array.isArray(ids)){
-      this.selectedEmployeeIds = [];
-      return;
-    }
-    const unique = [];
-    const seen = new Set();
-    for(const id of ids){
-      const key = this.normalizeId(id);
-      if(!key || seen.has(key)){
-        continue;
+    this.toast = payload;
+    if(payload.type !== 'progress'){
+      const duration = typeof payload.duration === 'number' && Number.isFinite(payload.duration)
+        ? Math.max(0, payload.duration)
+        : 3500;
+      if(duration > 0){
+        this._toastTimer = setTimeout(() => {
+          if(this.toast?.type !== 'progress'){
+            this.toast = null;
+          }
+          this._toastTimer = null;
+        }, duration);
       }
-      seen.add(key);
-      unique.push(id);
-    }
-    this.selectedEmployeeIds = unique;
-  },
-  isEmployeeSelected(id){
-    const key = this.normalizeId(id);
-    if(!key){
-      return false;
-    }
-    return (this.selectedEmployeeIds || []).some(existing => this.normalizeId(existing) === key);
-  },
-  toggleEmployeeSelection(id, force){
-    const key = this.normalizeId(id);
-    if(!key){
-      return;
-    }
-    const current = Array.isArray(this.selectedEmployeeIds) ? [...this.selectedEmployeeIds] : [];
-    const exists = current.some(existing => this.normalizeId(existing) === key);
-    let next = current;
-    if(force === true || (force == null && !exists)){
-      if(!exists){
-        next = [...current, id];
-      }
-    } else if(force === false || exists){
-      next = current.filter(existing => this.normalizeId(existing) !== key);
-    }
-    this.selectedEmployeeIds = next;
-  },
-  selectEmployees(ids = [], { merge = false } = {}){
-    const base = merge ? Array.isArray(this.selectedEmployeeIds) ? [...this.selectedEmployeeIds] : [] : [];
-    const seen = new Set(base.map(id => this.normalizeId(id)).filter(Boolean));
-    for(const id of Array.isArray(ids) ? ids : []){
-      const key = this.normalizeId(id);
-      if(!key || seen.has(key)){
-        continue;
-      }
-      seen.add(key);
-      base.push(id);
-    }
-    this.selectedEmployeeIds = base;
-  },
-  clearSelectedEmployees(){
-    if(this.selectedEmployeeIds.length){
-      this.selectedEmployeeIds = [];
     }
   },
-  pruneSelectedEmployees(validIds = []){
-    if(!Array.isArray(validIds) || !validIds.length){
-      if(this.selectedEmployeeIds.length){
-        this.selectedEmployeeIds = [];
-      }
-      return;
+  hideToast(){
+    if(this._toastTimer){
+      clearTimeout(this._toastTimer);
+      this._toastTimer = null;
     }
-    const valid = new Set(validIds.map(id => this.normalizeId(id)).filter(Boolean));
-    const filtered = (this.selectedEmployeeIds || []).filter(id => valid.has(this.normalizeId(id)));
-    if(filtered.length !== this.selectedEmployeeIds.length){
-      this.selectedEmployeeIds = filtered;
+    this.toast = null;
+  },
+  setProgress(p){
+    if(this._toastTimer){
+      clearTimeout(this._toastTimer);
+      this._toastTimer = null;
     }
+    const percent = typeof p === 'number' && Number.isFinite(p) ? Math.max(0, Math.min(100, Math.round(p))) : 0;
+    this.toast = { type: 'progress', message: 'Importing...', percent };
   },
   lookupDialog: {
     open: false,
@@ -974,7 +1028,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
 
           if(!this.valid()){
-            if(typeof window !== 'undefined' && typeof window.alert === 'function'){
+            if(typeof Alpine !== 'undefined' && typeof Alpine.store === 'function'){
+              const store = Alpine.store('app');
+              if(store && typeof store.showToast === 'function'){
+                store.showToast({ type: 'error', message: 'Please fill out all required fields before saving.' });
+              }
+            } else if(typeof window !== 'undefined' && typeof window.alert === 'function'){
               window.alert('Please fill out all required fields before saving.');
             }
 
@@ -1037,7 +1096,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
     const app = () => ({
         loadError:'',
-        darkMode:false, showImportModal:false, showExportDropdown:false,
+        darkMode:initialDarkMode, showImportModal:false, showExportDropdown:false,
         showSettingsModal:false, settingsSortable:null,
         showActivityLogModal:false,
         appReady:false,
@@ -1047,9 +1106,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         templateEditor:{ id:null, name:'', rolesInput:'', excludedRequirementIds:[] },
         templateApplyLoading:false,
         importHeaders: [], // ensure array exists before templates iterate over it
-        // Toast notification variables
-        showToast: false, toastMessage: '', toastColor: 'var(--success)', toastUndo:null, toastTimeout:null,
         highlightHelpButton:false,
+        themeMediaCleanup:null,
         tourMarkedSeen:false,
         tourPromptActive:false,
         // Import UI state
@@ -1080,7 +1138,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           savedViews:[], selectedViewName:'',
           globalSearch:'', searchResults:[],
           globalSearchIndex:null, globalSearchIndexVersion:-1, globalSearchDataVersion:0, globalSearchData:[],
-          virtualWindowSize:40, virtualStartIndex:0, virtualPaddingTop:0, virtualPaddingBottom:0, virtualRowHeight:68, virtualScrollInitialized:false,
+          virtualWindowSize:60, virtualStartIndex:0, virtualPaddingTop:0, virtualPaddingBottom:0, virtualRowHeight:48, virtualScrollInitialized:false, virtualOverscan:6,
         roleOptions:[...DEFAULT_ROLE_LOOKUPS],
         statusOptions:[...DEFAULT_STATUS_LOOKUPS],
         employmentTypeOptions:[...DEFAULT_EMPLOYMENT_TYPE_LOOKUPS],
@@ -1194,6 +1252,22 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
           }
           return '';
+        },
+
+        statusCellClass(status){
+          const value = typeof status === 'string' ? status.toLowerCase() : '';
+          switch(value){
+            case 'compliant':
+              return 'requirement-status-cell--compliant';
+            case 'expiring':
+              return 'requirement-status-cell--expiring';
+            case 'overdue':
+              return 'requirement-status-cell--overdue';
+            case 'not-required':
+              return 'requirement-status-cell--not-required';
+            default:
+              return 'requirement-status-cell--incomplete';
+          }
         },
 
         trackInlineEdit(emp, field){
@@ -1585,9 +1659,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.loadSavedViewsFromStorage();
           if (this.loadError || !this.db) return;
           this.setAppReady(true);
-          const s = await this.db.settings.get('app');
-          if (s?.darkMode) this.darkMode = true;
-          document.documentElement.classList.toggle('dark', this.darkMode);
+          this.applyDarkMode(this.darkMode);
+          this.setupThemeWatcher();
 
           // Ensure our custom chart plugin exists before charts initialize
           this.chartBgPlugin.fullSize = true;
@@ -2164,18 +2237,34 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
         // UI helpers
         notify(msg,color='var(--success)',undoHandler=null,duration=3000){
-          this.toastMessage=msg;
-          this.toastColor=color;
-          this.toastUndo=undoHandler;
-          this.showToast=true;
-          if(this.toastTimeout){
-            clearTimeout(this.toastTimeout);
+          const hasAlpineStore = typeof Alpine !== 'undefined' && typeof Alpine.store === 'function';
+          if(hasAlpineStore){
+            let type = 'success';
+            const normalized = typeof color === 'string' ? color.toLowerCase() : '';
+            if(normalized.includes('danger') || normalized.includes('error')){
+              type = 'error';
+            } else if(normalized.includes('warn') || normalized.includes('warning') || normalized.includes('accent')){
+              type = 'info';
+            }
+            const store = Alpine.store('app');
+            if(store && typeof store.showToast === 'function'){
+              const payload = {
+                type,
+                message: typeof msg === 'string' ? msg : String(msg ?? '')
+              };
+              if(typeof duration === 'number' && Number.isFinite(duration)){
+                payload.duration = duration;
+              }
+              if(typeof undoHandler === 'function'){
+                payload.action = { label: 'Undo', handler: undoHandler };
+              }
+              store.showToast(payload);
+              return;
+            }
           }
-          this.toastTimeout=setTimeout(()=>{
-            this.showToast=false;
-            this.toastUndo=null;
-            this.toastTimeout=null;
-          },duration);
+          if(typeof window !== 'undefined' && typeof window.alert === 'function'){
+            window.alert(typeof msg === 'string' ? msg : String(msg ?? ''));
+          }
         },
         async runCommand({
           command,
@@ -2252,12 +2341,16 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.highlightHelpButton=false;
           if(this.tourPromptActive){
             this.tourPromptActive=false;
-            if(this.toastTimeout){
-              clearTimeout(this.toastTimeout);
-              this.toastTimeout=null;
+            if(typeof Alpine !== 'undefined' && typeof Alpine.store === 'function'){
+              const store = Alpine.store('app');
+              if(store){
+                if(typeof store.hideToast === 'function'){
+                  store.hideToast();
+                } else {
+                  store.toast = null;
+                }
+              }
             }
-            this.showToast=false;
-            this.toastUndo=null;
           }
           if(this.tourMarkedSeen){
             return;
@@ -2301,13 +2394,43 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             return null;
           }
         },
+        applyDarkMode(isDark){
+          const next = Boolean(isDark);
+          this.darkMode = next;
+          applyDocumentDarkMode(next);
+        },
+        setupThemeWatcher(){
+          if(this.themeMediaCleanup){
+            this.themeMediaCleanup();
+            this.themeMediaCleanup = null;
+          }
+          if(hasStoredThemePreference()){
+            return;
+          }
+          this.themeMediaCleanup = watchSystemThemeChange((matches) => {
+            if(hasStoredThemePreference()){
+              this.teardownThemeWatcher();
+              return;
+            }
+            this.applyDarkMode(matches);
+            this.renderComplianceChart();
+          });
+        },
+        teardownThemeWatcher(){
+          if(this.themeMediaCleanup){
+            this.themeMediaCleanup();
+            this.themeMediaCleanup = null;
+          }
+        },
         async toggleDarkMode(){
-          this.darkMode=!this.darkMode;
-          document.documentElement.classList.toggle('dark', this.darkMode);
+          const next=!this.darkMode;
+          this.applyDarkMode(next);
+          this.teardownThemeWatcher();
           this.renderComplianceChart();
-          if (this.loadError || !this.db) return;
-          const prev=await this.db.settings.get('app')||{id:'app'};
-          await this.db.settings.put({...prev, darkMode:this.darkMode});
+          persistThemePreference(next ? 'dark' : 'light');
+          if(!hasStoredThemePreference()){
+            this.setupThemeWatcher();
+          }
         },
         initializeFeatherIcons() {
           try {
@@ -4204,8 +4327,37 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           const probe = container.querySelector('tbody tr[data-employee-row]');
           if(!probe) return;
           const height = probe.getBoundingClientRect().height;
-          if(height > 0 && Math.abs(height - this.virtualRowHeight) > 0.5){
-            this.virtualRowHeight = height;
+          if(height > 0){
+            const normalized = Math.max(1, Math.round(height));
+            if(Math.abs(normalized - this.virtualRowHeight) > 0.5){
+              this.virtualRowHeight = normalized;
+            }
+          }
+          this.updateVirtualWindowSize();
+        },
+        updateVirtualWindowSize(){
+          const container = this.$refs.virtualScroll;
+          const rowHeight = this.virtualRowHeight || 48;
+          if(!container || !rowHeight){
+            const minimum = Math.max(50, this.virtualWindowSize || 0);
+            if(this.virtualWindowSize !== minimum){
+              this.virtualWindowSize = minimum;
+              this.scheduleVirtualUpdate(() => {
+                const sorted = this.sortedEmployees();
+                this.syncVirtualPadding(sorted.length);
+              });
+            }
+            return;
+          }
+          const visibleCount = Math.max(1, Math.ceil(container.clientHeight / rowHeight));
+          const overscan = Math.max(0, this.virtualOverscan || 0);
+          const desired = Math.max(visibleCount + overscan * 2, 50);
+          if(this.virtualWindowSize !== desired){
+            this.virtualWindowSize = desired;
+            this.scheduleVirtualUpdate(() => {
+              const sorted = this.sortedEmployees();
+              this.syncVirtualPadding(sorted.length);
+            });
           }
         },
         resetVirtualWindow({ scrollToTop = true } = {}){
@@ -4235,6 +4387,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.virtualScrollInitialized = true;
             this.measureVirtualRowHeight();
           }
+          this.updateVirtualWindowSize();
           const rowHeight = this.virtualRowHeight || 1;
           const sorted = this.sortedEmployees();
           const total = sorted.length;
@@ -4242,7 +4395,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.syncVirtualPadding(0);
             return;
           }
-          const rawStart = Math.floor(container.scrollTop / rowHeight);
+          const overscan = Math.max(0, this.virtualOverscan || 0);
+          const rawStart = Math.floor(container.scrollTop / rowHeight) - overscan;
           const maxStart = Math.max(0, total - this.virtualWindowSize);
           const startIndex = Math.min(Math.max(0, rawStart), maxStart);
           if(startIndex !== this.virtualStartIndex){
