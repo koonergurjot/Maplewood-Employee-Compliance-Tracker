@@ -1091,27 +1091,53 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
         async loadData(){
           if (this.loadError || !this.db) return;
-          const [employees, requirements, employeeRequirements] = await Promise.all([
-            this.db.employees.toArray(),
-            this.db.requirements.toArray(),
-            this.db.employeeRequirements.toArray()
-          ]);
-          this.employees = employees;
-          this.requirements = requirements;
-          this.employeeRequirements = employeeRequirements;
-          await this.loadEmployeeLookups();
-          this.erMap = new Map();
-          for (const er of this.employeeRequirements){
-            if(!this.erMap.has(er.employeeId)) this.erMap.set(er.employeeId,new Map());
-            this.erMap.get(er.employeeId).set(er.requirementId, er);
-          }
-          await this.loadVisibleRequirements();
-          await this.loadTemplates();
-          await this.collectComplianceSnapshot();
-          this.renderComplianceChart();
-          this.touchGlobalSearchVersion();
-          if (!this.loadError) {
-            this.filterEmployees();
+
+          try {
+            const [employees, requirements, employeeRequirements] = await Promise.all([
+              this.db.employees.toArray(),
+              this.db.requirements.toArray(),
+              this.db.employeeRequirements.toArray()
+            ]);
+
+            this.employees = employees;
+            this.requirements = requirements;
+            this.employeeRequirements = employeeRequirements;
+
+            await this.loadEmployeeLookups();
+
+            this.erMap = new Map();
+            for (const er of this.employeeRequirements){
+              if(!this.erMap.has(er.employeeId)) this.erMap.set(er.employeeId,new Map());
+              this.erMap.get(er.employeeId).set(er.requirementId, er);
+            }
+
+            await this.loadVisibleRequirements();
+            await this.loadTemplates();
+            await this.collectComplianceSnapshot();
+            this.renderComplianceChart();
+            this.touchGlobalSearchVersion();
+
+            if (!this.loadError) {
+              hideFallback();
+              this.filterEmployees();
+            }
+          } catch (error) {
+            console.error('Failed to load dashboard data from IndexedDB', error);
+
+            this.employees = [];
+            this.requirements = [];
+            this.employeeRequirements = [];
+            this.erMap = new Map();
+
+            const friendlyMessage = 'We couldn\'t access the local dashboard database. Private browsing or low device storage can block offline data. Reload in a standard window or free up space, then try again.';
+            this.loadError = friendlyMessage;
+
+            showFallback();
+            this.setAppReady(false);
+
+            if (typeof this.$nextTick === 'function') {
+              this.$nextTick(() => this.$root?.removeAttribute('x-cloak'));
+            }
           }
         },
 
