@@ -463,6 +463,22 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.rank = resolved;
           }
         },
+        splitName(fullName){
+          const trimmed = typeof fullName === 'string' ? fullName.trim() : '';
+          if(!trimmed){
+            return { firstName: '', lastName: '' };
+          }
+
+          const parts = trimmed.split(/\s+/).filter(Boolean);
+          if(parts.length === 1){
+            return { firstName: parts[0], lastName: '' };
+          }
+
+          return {
+            firstName: parts.slice(0, -1).join(' '),
+            lastName: parts.slice(-1)[0] || ''
+          };
+        },
         async save(){
           if(this.saving){
             return;
@@ -481,40 +497,88 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           try {
             const db = await this.ensureDb();
             const timestamp = new Date().toISOString();
-            const baseEmployee = {
+            const { firstName, lastName } = this.splitName(this.name);
+            const initialPosition = this.position ? this.position.trim() : '';
+            const initialStatus = this.status ? this.status.trim() : '';
+            const initialRank = this.rank ? this.rank.trim() : '';
+
+            const [positionValue, statusValue, rankValue] = await Promise.all([
+              this.ensureLookupValue('position', initialPosition),
+              this.ensureLookupValue('status', initialStatus),
+              this.ensureLookupValue('rank', initialRank)
+            ]);
+
+            const normalizedPosition = positionValue || initialPosition;
+            const normalizedStatus = statusValue || initialStatus || 'Active';
+            const normalizedRank = rankValue || initialRank;
+
+            const employee = {
               id: generateId(),
-              name: this.name.trim(),
-              position: this.position.trim(),
-              status: this.status ? this.status.trim() : '',
-              rank: this.rank ? this.rank.trim() : '',
+              firstName,
+              lastName,
+              role: normalizedPosition || 'Other',
+              employmentType: 'FT',
+              employeeId: '',
+              seniorityHours: '',
+              status: normalizedStatus,
+              position: normalizedPosition,
+              rank: normalizedRank,
+              payrollName: `${firstName} ${lastName}`.trim(),
               createdAt: timestamp,
               updatedAt: timestamp
             };
 
-            const [positionValue, statusValue, rankValue] = await Promise.all([
-              this.ensureLookupValue('position', baseEmployee.position),
-              this.ensureLookupValue('status', baseEmployee.status),
-              this.ensureLookupValue('rank', baseEmployee.rank)
-            ]);
-
-            if(positionValue){
-              baseEmployee.position = positionValue;
-            }
-            if(statusValue){
-              baseEmployee.status = statusValue;
-            }
-            if(rankValue){
-              baseEmployee.rank = rankValue;
-            }
-
-            await db.employees.add(baseEmployee);
-
-            this.$dispatch('employee:added', { employee: baseEmployee });
+            const { AddEmployee } = await import('./commands.js');
+            const command = new AddEmployee(db, { employee });
+            const undoPayload = await command.execute();
 
             await this.hide();
+
+            const root = this.$root;
+            if(root && typeof root.recordActivity === 'function'){
+              try {
+                await root.recordActivity('AddEmployee', [employee.id], { employee }, undoPayload);
+              } catch (activityError) {
+                console.error('addEmployeeModal: failed to record activity', activityError);
+              }
+            }
+
+            if(root && typeof root.loadData === 'function'){
+              try {
+                await root.loadData();
+              } catch (loadError) {
+                console.error('addEmployeeModal: failed to reload data', loadError);
+              }
+            }
+
+            if(root && typeof root.refreshFeatherIcons === 'function'){
+              try {
+                root.refreshFeatherIcons();
+              } catch (refreshError) {
+                console.error('addEmployeeModal: failed to refresh icons', refreshError);
+              }
+            }
+
+            if(root && typeof root.notify === 'function'){
+              try {
+                root.notify('Employee added successfully');
+              } catch (notifyError) {
+                console.error('addEmployeeModal: failed to show notification', notifyError);
+              }
+            }
+
+            this.$dispatch('employee:added', { employee, undoPayload });
           } catch (error) {
             console.error('addEmployeeModal: failed to save employee', error);
             this.$dispatch('employee:add-failed', { error });
+            const root = this.$root;
+            if(root && typeof root.notify === 'function'){
+              try {
+                root.notify('Failed to add employee', 'var(--danger)');
+              } catch (notifyError) {
+                console.error('addEmployeeModal: failed to show error notification', notifyError);
+              }
+            }
           } finally {
             this.saving = false;
           }
