@@ -881,35 +881,65 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
         async loadData(){
           if (this.loadError || !this.db) return;
-          const [employees, requirements, employeeRequirements] = await Promise.all([
-            this.db.employees.toArray(),
-            this.db.requirements.toArray(),
-            this.db.employeeRequirements.toArray()
-          ]);
-          this.employees = employees;
-          this.requirements = requirements;
-          this.employeeRequirements = employeeRequirements;
-          this.erMap = new Map();
-          for (const er of this.employeeRequirements){
-            if(!this.erMap.has(er.employeeId)) this.erMap.set(er.employeeId,new Map());
-            this.erMap.get(er.employeeId).set(er.requirementId, er);
+
+          try {
+            const [employees, requirements, employeeRequirements] = await Promise.all([
+              this.db.employees.toArray(),
+              this.db.requirements.toArray(),
+              this.db.employeeRequirements.toArray()
+            ]);
+
+            this.employees = employees;
+            this.requirements = requirements;
+            this.employeeRequirements = employeeRequirements;
+            this.erMap = new Map();
+            for (const er of this.employeeRequirements){
+              if(!this.erMap.has(er.employeeId)) this.erMap.set(er.employeeId,new Map());
+              this.erMap.get(er.employeeId).set(er.requirementId, er);
+            }
+
+            await this.loadVisibleRequirements();
+            await this.loadTemplates();
+            await this.collectComplianceSnapshot();
+            this.renderComplianceChart();
+            this.touchGlobalSearchVersion();
+            if (!this.loadError) {
+              this.filterEmployees();
+            }
+          } catch (error) {
+            console.error('Failed to load dashboard data from IndexedDB', error);
+            const message = this.describeDatabaseFailure(error);
+            this.loadError = message;
+            this.employees = [];
+            this.requirements = [];
+            this.employeeRequirements = [];
+            this.erMap = new Map();
+            this.setAppReady(false);
           }
-          await this.loadVisibleRequirements();
-          await this.loadTemplates();
-          await this.collectComplianceSnapshot();
-          this.renderComplianceChart();
-          this.touchGlobalSearchVersion();
-          if (!this.loadError) {
-            this.filterEmployees();
+        },
+
+        describeDatabaseFailure(error){
+          const reason = (error && (error.name || error.message)) ? String(error.name || error.message).toLowerCase() : '';
+          if(reason.includes('quota') || reason.includes('storage')){
+            return 'We could not load your saved data because your browser is out of storage. Free up space and reload the page to continue.';
           }
+          if(reason.includes('version') || reason.includes('upgradeneeded')){
+            return 'We need to update the dashboard\'s local database but the browser blocked the upgrade. Please refresh the page to retry.';
+          }
+          if(reason.includes('blocked') || reason.includes('denied') || reason.includes('private') || reason.includes('security')){
+            return 'Your browser blocked access to the offline database (for example, Private Browsing mode). Please open the dashboard in a standard window and try again.';
+          }
+          return 'We couldn\'t open the browser\'s offline database. Private browsing or strict storage settings can prevent it. Try reloading the page or using a regular browsing window.';
         },
 
         setAppReady(isReady){
           this.appReady = Boolean(isReady);
           if(this.appReady && this.db){
             appState.markReady();
+            hideFallback();
           } else if(!this.appReady && this.loadError){
             appState.fail(new Error(this.loadError));
+            showFallback();
           } else if(!this.appReady){
             appState.markLoading();
           }
