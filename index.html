@@ -431,13 +431,26 @@
       <!-- Search and Filter -->
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
         <div>
-          <label class="block text-sm font-medium mb-1">Search Employees</label>
-          <input x-model="searchQuery" @input="filterEmployees()" type="text" placeholder="Name, role, or ID..."
-                 class="form-field w-full">
+          <label class="block text-sm font-medium mb-1" for="search-employees">Search Employees</label>
+          <input
+            id="search-employees"
+            name="search-employees"
+            x-model="searchQuery"
+            @input="filterEmployees()"
+            type="text"
+            placeholder="Name, role, or ID..."
+            class="form-field w-full"
+          >
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Filter by Role</label>
-          <select x-model="roleFilter" @change="filterEmployees()" class="form-field w-full">
+          <label class="block text-sm font-medium mb-1" for="role-filter">Filter by Role</label>
+          <select
+            id="role-filter"
+            name="role-filter"
+            x-model="roleFilter"
+            @change="filterEmployees()"
+            class="form-field w-full"
+          >
             <option value="">All Roles</option>
             <template x-for="role in getUniqueRoles()" :key="role">
               <option :value="role" x-text="role"></option>
@@ -445,16 +458,28 @@
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Filter by Status</label>
-          <select x-model="statusFilter" @change="filterEmployees()" class="form-field w-full">
+          <label class="block text-sm font-medium mb-1" for="status-filter">Filter by Status</label>
+          <select
+            id="status-filter"
+            name="status-filter"
+            x-model="statusFilter"
+            @change="filterEmployees()"
+            class="form-field w-full"
+          >
             <option value="">All Status</option>
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Requirement Status</label>
-          <select x-model="reqStatusFilter" @change="filterEmployees()" class="form-field w-full">
+          <label class="block text-sm font-medium mb-1" for="requirement-status-filter">Requirement Status</label>
+          <select
+            id="requirement-status-filter"
+            name="requirement-status-filter"
+            x-model="reqStatusFilter"
+            @change="filterEmployees()"
+            class="form-field w-full"
+          >
             <option value="">Any</option>
             <option value="Completed">Completed</option>
             <option value="Expired">Expired</option>
@@ -603,18 +628,48 @@
           <h3 class="text-lg font-semibold mb-4">Add New Requirement</h3>
           <div class="space-y-4">
             <div>
-              <label class="block text-sm font-medium mb-1">Requirement Name</label>
-              <input x-model="newRequirement.name" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <label class="block text-sm font-medium mb-1" for="new-requirement-name">Requirement Name</label>
+              <input
+                id="new-requirement-name"
+                name="new-requirement-name"
+                x-model="newRequirement.name"
+                type="text"
+                class="w-full border rounded px-3 py-2 bg-transparent"
+                style="border-color:var(--line)"
+              >
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Expiry Days (optional)</label>
-              <input x-model="newRequirement.defaultExpiryDays" type="number" placeholder="e.g., 365 for 1 year" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <label class="block text-sm font-medium mb-1" for="new-requirement-expiry">Expiry Days (optional)</label>
+              <input
+                id="new-requirement-expiry"
+                name="new-requirement-expiry"
+                x-model="newRequirement.defaultExpiryDays"
+                type="number"
+                placeholder="e.g., 365 for 1 year"
+                class="w-full border rounded px-3 py-2 bg-transparent"
+                style="border-color:var(--line)"
+              >
             </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Color</label>
+            <fieldset>
+              <legend class="block text-sm font-medium mb-1">Color</legend>
               <div class="flex gap-2">
-                <input x-model="newRequirement.color" type="color" class="w-12 h-10 border rounded" style="border-color:var(--line)">
-                <select x-model="newRequirement.color" class="flex-1 border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <label class="sr-only" for="new-requirement-color-picker">Choose a custom color</label>
+                <input
+                  id="new-requirement-color-picker"
+                  name="new-requirement-color-picker"
+                  x-model="newRequirement.color"
+                  type="color"
+                  class="w-12 h-10 border rounded"
+                  style="border-color:var(--line)"
+                >
+                <label class="sr-only" for="new-requirement-color-select">Select a preset color</label>
+                <select
+                  id="new-requirement-color-select"
+                  name="new-requirement-color-select"
+                  x-model="newRequirement.color"
+                  class="flex-1 border rounded px-3 py-2 bg-transparent"
+                  style="border-color:var(--line)"
+                >
                   <option value="#e0e7ff">Light Blue</option>
                   <option value="#f0f9ff">Light Cyan</option>
                   <option value="#fef3c7">Light Yellow</option>
@@ -627,7 +682,7 @@
                   <option value="#ecfdf5">Light Green</option>
                 </select>
               </div>
-            </div>
+            </fieldset>
           </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
@@ -648,20 +703,49 @@
           <h3 class="text-lg font-semibold mb-4">Edit Requirement</h3>
           <div class="space-y-4">
             <div>
-              <label class="block text-sm font-medium mb-1">Requirement Name</label>
-              <input x-model="editingRequirement.name" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <label class="block text-sm font-medium mb-1" for="edit-requirement-name">Requirement Name</label>
+              <input
+                id="edit-requirement-name"
+                name="edit-requirement-name"
+                x-model="editingRequirement.name"
+                type="text"
+                class="w-full border rounded px-3 py-2 bg-transparent"
+                style="border-color:var(--line)"
+              >
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Expiry Days (optional)</label>
-              <input x-model="editingRequirement.defaultExpiryDays" type="number" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <label class="block text-sm font-medium mb-1" for="edit-requirement-expiry">Expiry Days (optional)</label>
+              <input
+                id="edit-requirement-expiry"
+                name="edit-requirement-expiry"
+                x-model="editingRequirement.defaultExpiryDays"
+                type="number"
+                class="w-full border rounded px-3 py-2 bg-transparent"
+                style="border-color:var(--line)"
+              >
               <p class="text-xs mt-1" x-show="editingRequirement.defaultExpiryDays"
                  x-text="formatYears(editingRequirement.defaultExpiryDays)"></p>
             </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Color</label>
+            <fieldset>
+              <legend class="block text-sm font-medium mb-1">Color</legend>
               <div class="flex gap-2">
-                <input x-model="editingRequirement.color" type="color" class="w-12 h-10 border rounded" style="border-color:var(--line)">
-                <select x-model="editingRequirement.color" class="flex-1 border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <label class="sr-only" for="edit-requirement-color-picker">Choose a custom color</label>
+                <input
+                  id="edit-requirement-color-picker"
+                  name="edit-requirement-color-picker"
+                  x-model="editingRequirement.color"
+                  type="color"
+                  class="w-12 h-10 border rounded"
+                  style="border-color:var(--line)"
+                >
+                <label class="sr-only" for="edit-requirement-color-select">Select a preset color</label>
+                <select
+                  id="edit-requirement-color-select"
+                  name="edit-requirement-color-select"
+                  x-model="editingRequirement.color"
+                  class="flex-1 border rounded px-3 py-2 bg-transparent"
+                  style="border-color:var(--line)"
+                >
                   <option value="#e0e7ff">Light Blue</option>
                   <option value="#f0f9ff">Light Cyan</option>
                   <option value="#fef3c7">Light Yellow</option>
@@ -674,7 +758,7 @@
                   <option value="#ecfdf5">Light Green</option>
                 </select>
               </div>
-            </div>
+            </fieldset>
           </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
@@ -696,17 +780,31 @@
           <div class="space-y-4">
             <div class="grid grid-cols-2 gap-4">
               <div>
-                <label class="block text-sm font-medium mb-1">First Name</label>
-                <input x-model="editingEmployee.firstName" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <label class="block text-sm font-medium mb-1" for="edit-employee-first-name">First Name</label>
+                <input
+                  id="edit-employee-first-name"
+                  name="edit-employee-first-name"
+                  x-model="editingEmployee.firstName"
+                  type="text"
+                  class="w-full border rounded px-3 py-2 bg-transparent"
+                  style="border-color:var(--line)"
+                >
               </div>
               <div>
-                <label class="block text-sm font-medium mb-1">Last Name</label>
-                <input x-model="editingEmployee.lastName" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <label class="block text-sm font-medium mb-1" for="edit-employee-last-name">Last Name</label>
+                <input
+                  id="edit-employee-last-name"
+                  name="edit-employee-last-name"
+                  x-model="editingEmployee.lastName"
+                  type="text"
+                  class="w-full border rounded px-3 py-2 bg-transparent"
+                  style="border-color:var(--line)"
+                >
               </div>
             </div>
             <div>
-              <label class="flex items-center justify-between text-sm font-medium mb-1">
-                <span>Role</span>
+              <div class="flex items-center justify-between text-sm font-medium mb-1">
+                <label for="edit-employee-role">Role</label>
                 <button
                   type="button"
                   class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
@@ -716,8 +814,14 @@
                 >
                   <i data-feather="plus" class="w-3.5 h-3.5"></i>
                 </button>
-              </label>
-              <select x-model="editingEmployee.role" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              </div>
+              <select
+                id="edit-employee-role"
+                name="edit-employee-role"
+                x-model="editingEmployee.role"
+                class="w-full border rounded px-3 py-2 bg-transparent"
+                style="border-color:var(--line)"
+              >
                 <option value="">Select Role</option>
                 <template x-for="role in roleOptions" :key="role">
                   <option :value="role" x-text="role"></option>
@@ -725,8 +829,8 @@
               </select>
             </div>
             <div>
-              <label class="flex items-center justify-between text-sm font-medium mb-1">
-                <span>Employment Type</span>
+              <div class="flex items-center justify-between text-sm font-medium mb-1">
+                <label for="edit-employee-employment-type">Employment Type</label>
                 <button
                   type="button"
                   class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
@@ -736,8 +840,14 @@
                 >
                   <i data-feather="plus" class="w-3.5 h-3.5"></i>
                 </button>
-              </label>
-              <select x-model="editingEmployee.employmentType" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              </div>
+              <select
+                id="edit-employee-employment-type"
+                name="edit-employee-employment-type"
+                x-model="editingEmployee.employmentType"
+                class="w-full border rounded px-3 py-2 bg-transparent"
+                style="border-color:var(--line)"
+              >
                 <option value="">Select Employment Type</option>
                 <template x-for="type in employmentTypeOptions" :key="type">
                   <option :value="type" x-text="formatEmploymentTypeLabel(type)"></option>
@@ -745,8 +855,8 @@
               </select>
             </div>
             <div>
-              <label class="flex items-center justify-between text-sm font-medium mb-1">
-                <span>Status</span>
+              <div class="flex items-center justify-between text-sm font-medium mb-1">
+                <label for="edit-employee-status">Status</label>
                 <button
                   type="button"
                   class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
@@ -756,8 +866,14 @@
                 >
                   <i data-feather="plus" class="w-3.5 h-3.5"></i>
                 </button>
-              </label>
-              <select x-model="editingEmployee.status" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              </div>
+              <select
+                id="edit-employee-status"
+                name="edit-employee-status"
+                x-model="editingEmployee.status"
+                class="w-full border rounded px-3 py-2 bg-transparent"
+                style="border-color:var(--line)"
+              >
                 <option value="">Select Status</option>
                 <template x-for="status in statusOptions" :key="status">
                   <option :value="status" x-text="status"></option>
@@ -765,12 +881,26 @@
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Employee ID</label>
-              <input x-model="editingEmployee.employeeId" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <label class="block text-sm font-medium mb-1" for="edit-employee-id">Employee ID</label>
+              <input
+                id="edit-employee-id"
+                name="edit-employee-id"
+                x-model="editingEmployee.employeeId"
+                type="text"
+                class="w-full border rounded px-3 py-2 bg-transparent"
+                style="border-color:var(--line)"
+              >
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Seniority Hours</label>
-              <input x-model="editingEmployee.seniorityHours" type="number" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <label class="block text-sm font-medium mb-1" for="edit-employee-seniority-hours">Seniority Hours</label>
+              <input
+                id="edit-employee-seniority-hours"
+                name="edit-employee-seniority-hours"
+                x-model="editingEmployee.seniorityHours"
+                type="number"
+                class="w-full border rounded px-3 py-2 bg-transparent"
+                style="border-color:var(--line)"
+              >
             </div>
           </div>
         </div>
@@ -805,8 +935,14 @@
               </div>
             </div>
             <div>
-              <label class="block text-sm font-medium mb-2">Bulk Action</label>
-              <select x-model="bulkAction" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <label class="block text-sm font-medium mb-2" for="bulk-action-select">Bulk Action</label>
+              <select
+                id="bulk-action-select"
+                name="bulk-action-select"
+                x-model="bulkAction"
+                class="w-full border rounded px-3 py-2 bg-transparent"
+                style="border-color:var(--line)"
+              >
                 <option value="">Select Action</option>
                 <option value="complete">Mark Requirements Complete</option>
                 <option value="incomplete">Mark Requirements Incomplete</option>
@@ -890,12 +1026,27 @@
             <div x-show="showTemplateForm" class="border rounded p-3" style="border-color:var(--line)">
               <div class="grid gap-4">
                 <div>
-                  <label class="block text-sm font-medium mb-1">Template Name</label>
-                  <input type="text" x-model="templateEditor.name" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                  <label class="block text-sm font-medium mb-1" for="template-name">Template Name</label>
+                  <input
+                    id="template-name"
+                    name="template-name"
+                    type="text"
+                    x-model="templateEditor.name"
+                    class="w-full border rounded px-3 py-2 bg-transparent"
+                    style="border-color:var(--line)"
+                  >
                 </div>
                 <div>
-                  <label class="block text-sm font-medium mb-1">Roles</label>
-                  <input type="text" x-model="templateEditor.rolesInput" placeholder="Comma separated roles" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                  <label class="block text-sm font-medium mb-1" for="template-roles">Roles</label>
+                  <input
+                    id="template-roles"
+                    name="template-roles"
+                    type="text"
+                    x-model="templateEditor.rolesInput"
+                    placeholder="Comma separated roles"
+                    class="w-full border rounded px-3 py-2 bg-transparent"
+                    style="border-color:var(--line)"
+                  >
                   <p class="text-xs mt-1" style="color:var(--muted)">Roles are matched case-insensitively.</p>
                 </div>
                 <div>
@@ -1267,8 +1418,14 @@
           <h3 class="text-base font-semibold" x-text="'Add ' + ($store.app.lookupDialog.label || 'value')"></h3>
         </div>
         <div class="px-4 py-4 space-y-3">
-          <label class="block text-sm font-medium" x-text="$store.app.lookupDialog.label || 'Value'"></label>
+          <label
+            class="block text-sm font-medium"
+            for="lookup-dialog-input"
+            x-text="$store.app.lookupDialog.label || 'Value'"
+          ></label>
           <input
+            id="lookup-dialog-input"
+            name="lookup-dialog-input"
             type="text"
             x-model="$store.app.lookupDialog.value"
             x-ref="lookupInput"
