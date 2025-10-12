@@ -2,6 +2,8 @@ import Dexie from 'dexie';
 
 const DB_NAME = 'ComplianceMatrixDB';
 
+export const BULK_OPERATION_CHUNK_SIZE = 300;
+
 let DexieRef = Dexie ?? null;
 let dexieLoaderPromise = null;
 let cdnLoaderPromise = null;
@@ -160,6 +162,19 @@ export function generateId() {
     return DexieRef.uuid();
   }
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+export function* chunkArray(items, chunkSize = BULK_OPERATION_CHUNK_SIZE) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return;
+  }
+
+  const size = Number.isFinite(chunkSize) ? Math.floor(chunkSize) : BULK_OPERATION_CHUNK_SIZE;
+  const normalizedSize = Math.min(500, Math.max(200, size || BULK_OPERATION_CHUNK_SIZE));
+
+  for (let i = 0; i < items.length; i += normalizedSize) {
+    yield items.slice(i, i + normalizedSize);
+  }
 }
 
 function defineSchema(db) {

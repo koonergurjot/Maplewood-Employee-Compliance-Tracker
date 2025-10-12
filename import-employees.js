@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 
-import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
+import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZE, chunkArray } from './db.js';
 
 /**
  * Client-side importer for Employees.
@@ -32,6 +32,80 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
       return true;
     }
     return false;
+  }
+
+  let legacySpinnerCache = null;
+  function getLegacySpinnerElements(){
+    if (legacySpinnerCache) return legacySpinnerCache;
+    if (typeof document === 'undefined') {
+      return { container: null, text: null };
+    }
+
+    const input = document.getElementById('file-upload');
+    if (!input) {
+      return { container: null, text: null };
+    }
+
+    const container = input.closest('.space-y-1')?.querySelector('.flex.items-center.justify-center');
+    if (!container) {
+      return { container: null, text: null };
+    }
+
+    const text = container.querySelector('[data-import-spinner-text]') || container.querySelector('span');
+
+    if (container) {
+      container.dataset.importSpinner = 'true';
+    }
+    if (text) {
+      if (!text.dataset.originalText) {
+        const base = text.textContent?.trim() || 'Processing file...';
+        text.dataset.originalText = base;
+      }
+      text.dataset.importSpinnerText = 'true';
+    }
+
+    legacySpinnerCache = { container, text };
+    return legacySpinnerCache;
+  }
+
+  function setLegacySpinnerVisible(visible){
+    const { container } = getLegacySpinnerElements();
+    if (!container) return;
+    container.style.display = visible ? 'flex' : 'none';
+  }
+
+  function updateLegacySpinnerText(percent){
+    const { text } = getLegacySpinnerElements();
+    if (!text) return;
+    const base = text.dataset.originalText || text.textContent?.trim() || 'Processing file...';
+    text.dataset.originalText = base;
+
+    if (typeof percent === 'number' && Number.isFinite(percent)) {
+      const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+      text.textContent = `${base} ${clamped}%`;
+    } else {
+      text.textContent = base;
+    }
+  }
+
+  function createLegacyProgressReporter(){
+    return {
+      idle(){
+        setLegacySpinnerVisible(true);
+        updateLegacySpinnerText(null);
+      },
+      start(){
+        setLegacySpinnerVisible(true);
+        updateLegacySpinnerText(0);
+      },
+      update(percent){
+        updateLegacySpinnerText(percent);
+      },
+      finish(){
+        updateLegacySpinnerText(null);
+        setLegacySpinnerVisible(false);
+      }
+    };
   }
 
   async function ensureDb(){
@@ -760,21 +834,49 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
     // Write to DB
     const newlyCreatedEmployees = employees.filter(emp => newEmployeeIds.has(emp.id));
 
-    await db.transaction('readwrite', db.employees, db.employeeRequirements, db.requirements, db.roleRequirementProfiles, async () => {
-      if (typeof db.employees.bulkPut === 'function') {
-        await db.employees.bulkPut(employees);
-      } else {
-        for (const emp of employees) {
-          await db.employees.put(emp);
+    const progressCallback = typeof onProgress === 'function' ? onProgress : null;
+    const progressState = {
+      processed: 0,
+      total: Math.max(employees.length, 1)
+    };
+    const reportProgress = () => {
+      if (!progressCallback) return;
+      const ratio = progressState.total ? Math.min(1, progressState.processed / progressState.total) : 1;
+      progressCallback(Math.round(ratio * 100));
+    };
+    const addProcessed = amount => {
+      if (!Number.isFinite(amount) || amount <= 0) return;
+      progressState.processed += amount;
+      reportProgress();
+    };
+
+    reportProgress();
+
+    await db.transaction('rw', db.employees, db.employeeRequirements, db.requirements, db.roleRequirementProfiles, async () => {
+      let requirements = [];
+
+      if (newlyCreatedEmployees.length) {
+        requirements = await db.requirements.toArray();
+        if (requirements.length) {
+          progressState.total = Math.max(progressState.total, employees.length + newlyCreatedEmployees.length * requirements.length);
+          reportProgress();
         }
       }
 
-      if (!newlyCreatedEmployees.length) {
-        return;
+      if (typeof db.employees.bulkPut === 'function') {
+        for (const chunk of chunkArray(employees, BULK_OPERATION_CHUNK_SIZE)) {
+          if (!chunk?.length) continue;
+          await db.employees.bulkPut(chunk);
+          addProcessed(chunk.length);
+        }
+      } else {
+        for (const emp of employees) {
+          await db.employees.put(emp);
+          addProcessed(1);
+        }
       }
 
-      const requirements = await db.requirements.toArray();
-      if (!requirements.length) {
+      if (!newlyCreatedEmployees.length || !requirements.length) {
         return;
       }
 
@@ -803,8 +905,21 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
         }
       }
 
-      if (employeeRequirementRows.length) {
-        await db.employeeRequirements.bulkAdd(employeeRequirementRows);
+      if (!employeeRequirementRows.length) {
+        return;
+      }
+
+      if (typeof db.employeeRequirements.bulkAdd === 'function') {
+        for (const chunk of chunkArray(employeeRequirementRows, BULK_OPERATION_CHUNK_SIZE)) {
+          if (!chunk?.length) continue;
+          await db.employeeRequirements.bulkAdd(chunk);
+          addProcessed(chunk.length);
+        }
+      } else {
+        for (const row of employeeRequirementRows) {
+          await db.employeeRequirements.add(row);
+          addProcessed(1);
+        }
       }
     });
     return { importedCount: employees.length, skippedRows };
@@ -844,6 +959,8 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
   async function handleImport(input){
     const file = input.files && input.files[0];
     if (!file) return;
+    const progressReporter = !isAlpineReady() ? createLegacyProgressReporter() : null;
+    let progressFinished = false;
     try {
       const { rows, headers } = await parseFile(file);
       const defaultMapping = buildDefaultMapping(headers);
@@ -876,6 +993,9 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
       console.error('Import failed:', e);
       alert(`Import failed: ${e.message || e}`);
     } finally {
+      if (progressReporter && !progressFinished){
+        progressReporter.finish();
+      }
       input.value = '';
     }
   }
@@ -901,6 +1021,9 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
           handleImport(fileInput);
         }
       });
+      if (!isAlpineReady()){
+        setLegacySpinnerVisible(false);
+      }
     }
   };
 })();
