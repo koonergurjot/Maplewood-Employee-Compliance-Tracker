@@ -56,9 +56,42 @@ export function reloadApp() {
   window.location.href = '/';
 }
 
+export function deleteComplianceIndexedDB() {
+  if (!('indexedDB' in window)) {
+    showStatus('IndexedDB is not supported in this browser.', 'error');
+    return;
+  }
+
+  const confirmed = window.confirm('Are you sure you want to delete the ComplianceMatrixDB IndexedDB database?');
+  if (!confirmed) {
+    showStatus('Deletion cancelled. ComplianceMatrixDB was not removed.');
+    return;
+  }
+
+  try {
+    const request = indexedDB.deleteDatabase('ComplianceMatrixDB');
+
+    request.onsuccess = () => {
+      showStatus('ComplianceMatrixDB IndexedDB deleted successfully.');
+    };
+
+    request.onerror = () => {
+      const message = request.error?.message || 'Unknown error';
+      showStatus(`Error deleting ComplianceMatrixDB IndexedDB: ${message}`, 'error');
+    };
+
+    request.onblocked = () => {
+      showStatus('Deletion blocked. Please close other tabs using the app and try again.', 'error');
+    };
+  } catch (error) {
+    showStatus(`Error deleting ComplianceMatrixDB IndexedDB: ${error.message}`, 'error');
+  }
+}
+
 globalThis.clearServiceWorkerCache = clearServiceWorkerCache;
 globalThis.clearBrowserCache = clearBrowserCache;
 globalThis.reloadApp = reloadApp;
+globalThis.deleteComplianceIndexedDB = deleteComplianceIndexedDB;
 
 window.addEventListener('load', () => {
   setTimeout(() => {
