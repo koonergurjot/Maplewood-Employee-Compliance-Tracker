@@ -1,4 +1,4 @@
-name = "maplewood-employee-compliance-tracker"
+name = "maplewood-employee-compliance-tracker-worker"
 compatibility_date = "2024-05-01"
 
 [build]
