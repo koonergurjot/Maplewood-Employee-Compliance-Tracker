@@ -42,7 +42,6 @@ const STATIC_PATHS = [
   'clear-cache.html',
   'timeline-component.html',
   'manifest.webmanifest',
-  'manifest.json',
   'icon-192.svg',
   'icon-512.svg'
 ];
@@ -51,6 +50,7 @@ const STATIC_URLS = STATIC_PATHS.map(path => new URL(path, scopeUrl).toString())
 const INDEX_URL = new URL('index.html', scopeUrl).toString();
 
 let manifestPromise;
+const VITE_MANIFEST_PATHS = ['/.vite/manifest.json', 'manifest.json'];
 
 function extractHashFromAssets(assets) {
   for (const url of assets) {
@@ -66,12 +66,19 @@ async function loadManifestAssets() {
   if (!manifestPromise) {
     manifestPromise = (async () => {
       const assets = new Set(STATIC_URLS);
-      try {
-        const manifestUrl = new URL('manifest.json', scopeUrl);
-        const response = await fetch(manifestUrl, { cache: 'no-store' });
-        if (response && response.ok) {
-          assets.add(manifestUrl.toString());
+      let manifestUrl;
+
+      for (const path of VITE_MANIFEST_PATHS) {
+        const candidateUrl = new URL(path, scopeUrl);
+        try {
+          const response = await fetch(candidateUrl, { cache: 'no-store' });
+          if (!response || !response.ok) {
+            continue;
+          }
+
           const manifest = await response.json();
+          manifestUrl = candidateUrl;
+          assets.add(manifestUrl.toString());
           const visited = new Set();
 
           const addEntry = (key) => {
@@ -103,13 +110,15 @@ async function loadManifestAssets() {
           if (derivedHash) {
             currentCacheName = `cmatrix-${derivedHash}`;
           }
-        } else {
-          assets.delete(manifestUrl.toString());
+
+          break;
+        } catch (error) {
+          console.warn(`Failed to load Vite manifest for precache from ${candidateUrl}`, error);
         }
-      } catch (error) {
-        const manifestUrl = new URL('manifest.json', scopeUrl);
-        assets.delete(manifestUrl.toString());
-        console.warn('Failed to load Vite manifest for precache', error);
+      }
+
+      if (!manifestUrl) {
+        console.warn('Unable to locate a Vite manifest for precache.');
       }
 
       return { cacheName: currentCacheName, urls: Array.from(assets) };
