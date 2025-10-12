@@ -61,6 +61,7 @@
     .checkbox.expired{background-color:var(--warn);border-color:var(--warn)}
     .checkbox.completed::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-60%) rotate(-45deg);width:.75rem;height:.4rem;border-left:2px solid #fff;border-bottom:2px solid #fff}
     .virtual-scroll{overflow-y:auto;max-height:calc(100vh - 260px)}
+    .virtual-spacer td{padding:0!important;border:none!important;height:0}
     .status-badge{transition:all 0.2s ease}
     .badge{display:inline-flex;align-items:center;padding:.125rem .5rem;border-radius:.25rem;font-size:.75rem;font-weight:600;color:var(--badge-text);border:none;cursor:pointer;transition:box-shadow .2s ease,transform .2s ease}
     .badge:hover,.badge:focus-visible{transform:translateY(-1px);box-shadow:0 0 0 3px rgba(37,99,235,0.18);outline:none}
@@ -261,7 +262,7 @@
     </div>
 
     <div class="card rounded-lg shadow overflow-hidden">
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto virtual-scroll" x-ref="virtualScroll" @scroll.passive="handleVirtualScroll">
         <table id="employee-table" x-ref="employeeTable" class="table-striped min-w-full divide-y" style="border-color:var(--line)">
           <thead class="bg-gray-50 dark:bg-gray-900">
             <tr>
@@ -307,8 +308,13 @@
               </template>
             </tr>
           </thead>
-          <tbody class="divide-y virtual-scroll">
-            <template x-for="emp in sortedEmployees()" :key="emp.id">
+          <tbody class="divide-y">
+            <tr class="virtual-spacer" x-show="virtualPaddingTop > 0" aria-hidden="true">
+              <td :colspan="visibleColumnCount()">
+                <div :style="`height:${virtualPaddingTop}px`"></div>
+              </td>
+            </tr>
+            <template x-for="emp in visibleEmployees()" :key="emp.id">
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-800" :data-employee-row="emp.id">
                 <td class="sticky-col px-6 py-4">
                   <div class="flex items-center justify-between">
@@ -359,7 +365,12 @@
               </tr>
             </template>
             <tr x-show="sortedEmployees().length === 0">
-              <td class="px-6 py-4 text-center text-sm" :colspan="4 + orderedVisibleRequirements().length" style="color:var(--muted)">No matches found</td>
+              <td class="px-6 py-4 text-center text-sm" :colspan="visibleColumnCount()" style="color:var(--muted)">No matches found</td>
+            </tr>
+            <tr class="virtual-spacer" x-show="virtualPaddingBottom > 0" aria-hidden="true">
+              <td :colspan="visibleColumnCount()">
+                <div :style="`height:${virtualPaddingBottom}px`"></div>
+              </td>
             </tr>
           </tbody>
         </table>
