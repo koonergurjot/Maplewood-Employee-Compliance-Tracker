@@ -10,66 +10,25 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
  * - Uses Dexie and PapaParse modules provided via the bundled build.
 */
 (function(){
-  function getAlpineRoot(){
-    const root = document.querySelector('[x-data="app"]');
-    return root && root.__x ? root.__x : null;
+  function getAppStore(){
+    if (!window.Alpine || typeof window.Alpine.store !== 'function'){
+      return null;
+    }
+    try {
+      return Alpine.store('app');
+    } catch (error) {
+      return null;
+    }
   }
 
   function isAlpineReady(){
-    return Boolean(getAlpineRoot());
+    return Boolean(getAppStore());
   }
 
-  let fallbackModalCleanup = null;
-
   function toggleImportModal(open){
-    const alpine = getAlpineRoot();
-    if (alpine){
-      alpine.$data.showImportModal = Boolean(open);
-      return true;
-    }
-
-    const modal = document.querySelector('[x-show="showImportModal"]');
-    if (modal){
-      if (open){
-        if (modal.dataset.fallbackOpen === 'true'){
-          modal.style.display = 'block';
-          return true;
-        }
-        modal.dataset.fallbackOpen = 'true';
-        modal.style.display = 'block';
-
-        const cleanupFns = [];
-        const closeHandler = (event) => {
-          event.preventDefault();
-          toggleImportModal(false);
-        };
-
-        modal.querySelectorAll('[data-close-import-modal], [x-on\\:click="showImportModal=false"]').forEach((el) => {
-          el.addEventListener('click', closeHandler);
-          cleanupFns.push(() => el.removeEventListener('click', closeHandler));
-        });
-
-        const escapeHandler = (event) => {
-          if (event.key === 'Escape' || event.key === 'Esc'){
-            toggleImportModal(false);
-          }
-        };
-        document.addEventListener('keydown', escapeHandler);
-        cleanupFns.push(() => document.removeEventListener('keydown', escapeHandler));
-
-        fallbackModalCleanup = () => {
-          cleanupFns.forEach(fn => fn());
-          fallbackModalCleanup = null;
-        };
-      } else {
-        if (typeof fallbackModalCleanup === 'function'){
-          const cleanup = fallbackModalCleanup;
-          fallbackModalCleanup = null;
-          cleanup();
-        }
-        delete modal.dataset.fallbackOpen;
-        modal.style.display = 'none';
-      }
+    const store = getAppStore();
+    if (store){
+      store.showImportModal = Boolean(open);
       return true;
     }
     return false;
