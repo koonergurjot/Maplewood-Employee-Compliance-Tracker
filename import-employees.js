@@ -392,13 +392,12 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
     for (const r of rows){
       const nameVal = nameCol ? r[nameCol] : (r['Name'] ?? r['Employee'] ?? '');
       const { firstName, lastName } = splitName(nameVal);
-      const shSource = seniorityCol ? r[seniorityCol] : existingMatch?.seniorityHours;
-      const sh = normalizeSeniorityHours(shSource);
 
       const idVal = empidCol ? r[empidCol] : null;
       const employeeIdValue = normalizeEmployeeId(idVal);
       const employeeIdKey = employeeIdValue ? employeeIdValue.toLowerCase() : '';
-      const compositeKey = normalizeComposite(lastName, firstName, roleCol ? (r[roleCol] ?? null) : null);
+      const roleRaw = roleCol ? (r[roleCol] ?? null) : null;
+      const compositeKey = normalizeComposite(lastName, firstName, roleRaw);
 
       let existingMatch = null;
       if (employeeIdKey && existingByEmployeeId.has(employeeIdKey)) {
@@ -407,9 +406,12 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
         existingMatch = existingByComposite.get(compositeKey);
       }
 
+      const shSource = seniorityCol ? r[seniorityCol] : existingMatch?.seniorityHours;
+      const sh = normalizeSeniorityHours(shSource);
+
       const isExisting = Boolean(existingMatch);
       const id = isExisting ? existingMatch.id : (employeeIdValue || localGenerateId());
-      const roleValue = roleCol ? (r[roleCol] ?? null) : null;
+      const roleValue = roleRaw;
       const rawEmploymentType = etypeCol ? r[etypeCol] : undefined;
       const employmentTypeValue = rawEmploymentType == null ? null : String(rawEmploymentType).trim().toUpperCase();
       const statusValue = String(statusCol ? (r[statusCol] ?? 'ACTIVE') : 'ACTIVE').toUpperCase();
