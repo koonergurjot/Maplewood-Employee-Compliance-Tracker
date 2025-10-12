@@ -424,12 +424,61 @@
             </tr>
           </thead>
           <tbody class="divide-y">
-            <tr class="virtual-spacer" x-show="virtualPaddingTop > 0" aria-hidden="true">
-              <td :colspan="visibleColumnCount()">
-                <div :style="`height:${virtualPaddingTop}px`"></div>
-              </td>
-            </tr>
-            <template x-for="emp in visibleEmployees()" :key="emp.id">
+            <template x-if="!appReady && !loadError">
+              <template x-for="index in 6" :key="`loading-${index}`">
+                <tr>
+                  <td :colspan="visibleColumnCount()" class="px-6 py-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                      <span class="skeleton" style="width:40px;height:40px;border-radius:9999px;"></span>
+                      <div class="flex-1" style="flex:1 1 200px;">
+                        <div class="skeleton" style="height:14px;max-width:220px;border-radius:9999px;"></div>
+                        <div class="skeleton" style="height:12px;max-width:160px;border-radius:9999px;margin-top:0.5rem;"></div>
+                      </div>
+                      <div class="flex gap-2 flex-wrap" style="flex:1 1 180px;justify-content:flex-end;">
+                        <span class="skeleton" style="height:12px;width:88px;border-radius:9999px;"></span>
+                        <span class="skeleton" style="height:12px;width:88px;border-radius:9999px;"></span>
+                        <span class="skeleton" style="height:12px;width:88px;border-radius:9999px;"></span>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </template>
+
+            <template x-if="appReady && employees.length === 0">
+              <tr>
+                <td :colspan="visibleColumnCount()" class="px-6 py-12">
+                  <div class="flex flex-col items-center gap-4 text-center">
+                    <svg width="120" height="88" viewBox="0 0 120 88" fill="none" aria-hidden="true">
+                      <rect x="8" y="50" width="104" height="30" rx="12" fill="rgba(37,99,235,0.08)"></rect>
+                      <rect x="16" y="34" width="88" height="14" rx="7" fill="rgba(37,99,235,0.12)"></rect>
+                      <circle cx="60" cy="28" r="18" fill="rgba(37,99,235,0.15)"></circle>
+                      <path d="M60 18a10 10 0 1 1-0.01 20A10 10 0 0 1 60 18Z" fill="rgba(37,99,235,0.25)"></path>
+                    </svg>
+                    <div style="max-width:22rem;">
+                      <h2 class="text-lg font-semibold mb-2">Bring your roster aboard</h2>
+                      <p class="text-sm" style="color:var(--muted)">Import employees to get started.</p>
+                    </div>
+                    <button
+                      type="button"
+                      class="btn btn-primary"
+                      @click="$store.app.showImportModal = true"
+                    >
+                      <i data-feather="upload" class="w-4 h-4"></i>
+                      <span>Import employees</span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+
+            <template x-if="appReady && employees.length > 0">
+              <tr class="virtual-spacer" x-show="virtualPaddingTop > 0" aria-hidden="true">
+                <td :colspan="visibleColumnCount()">
+                  <div :style="`height:${virtualPaddingTop}px`"></div>
+                </td>
+              </tr>
+              <template x-for="emp in visibleEmployees()" :key="emp.id">
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-800" :data-employee-row="emp.id">
                 <td class="sticky-col px-6 py-4">
                   <div class="flex items-center justify-between">
@@ -527,15 +576,16 @@
                     </td>
                   </template>
               </tr>
+              </template>
+              <tr x-show="sortedEmployees().length === 0 && employees.length > 0">
+                <td class="px-6 py-4 text-center text-sm" :colspan="visibleColumnCount()" style="color:var(--muted)">No matches found</td>
+              </tr>
+              <tr class="virtual-spacer" x-show="virtualPaddingBottom > 0" aria-hidden="true">
+                <td :colspan="visibleColumnCount()">
+                  <div :style="`height:${virtualPaddingBottom}px`"></div>
+                </td>
+              </tr>
             </template>
-            <tr x-show="sortedEmployees().length === 0">
-              <td class="px-6 py-4 text-center text-sm" :colspan="visibleColumnCount()" style="color:var(--muted)">No matches found</td>
-            </tr>
-            <tr class="virtual-spacer" x-show="virtualPaddingBottom > 0" aria-hidden="true">
-              <td :colspan="visibleColumnCount()">
-                <div :style="`height:${virtualPaddingBottom}px`"></div>
-              </td>
-            </tr>
           </tbody>
         </table>
       </div>
