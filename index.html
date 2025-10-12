@@ -454,10 +454,49 @@
                     </div>
                   </div>
                 </td>
-                <td class="px-4 py-3 text-sm" x-show="$store.app.isColumnVisible('role')" x-html="highlightText(emp.role)"></td>
-                <td class="px-4 py-3 text-sm" x-show="$store.app.isColumnVisible('employmentType')" x-html="highlightText(emp.employmentType)"></td>
-                <td class="px-4 py-3" x-show="$store.app.isColumnVisible('status')">
-                  <span :class="emp.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'" class="status-badge px-2 py-1 text-xs rounded-full" x-html="highlightText(emp.status)"></span>
+                <td class="px-4 py-3 text-sm">
+                  <select
+                    class="select text-sm"
+                    x-model="emp.role"
+                    @focus="trackInlineEdit(emp, 'role')"
+                    @change="handleInlineEmployeeUpdate(emp, 'role', $event.target.value)"
+                    :aria-label="`Role for ${emp.firstName} ${emp.lastName}`"
+                  >
+                    <option value="">Select Role</option>
+                    <template x-for="role in roleOptions" :key="role">
+                      <option :value="role" x-text="role"></option>
+                    </template>
+                  </select>
+                </td>
+                <td class="px-4 py-3 text-sm">
+                  <select
+                    class="select text-sm"
+                    x-model="emp.employmentType"
+                    @focus="trackInlineEdit(emp, 'employmentType')"
+                    @change="handleInlineEmployeeUpdate(emp, 'employmentType', $event.target.value)"
+                    :aria-label="`Employment type for ${emp.firstName} ${emp.lastName}`"
+                  >
+                    <option value="">Select Employment Type</option>
+                    <template x-for="type in employmentTypeOptions" :key="type">
+                      <option :value="type" x-text="formatEmploymentTypeLabel(type) || type"></option>
+                    </template>
+                  </select>
+                </td>
+                <td class="px-4 py-3">
+                  <select
+                    class="select text-sm font-semibold status-badge"
+                    :class="statusSelectClasses(emp.status)"
+                    style="min-width:8rem;"
+                    x-model="emp.status"
+                    @focus="trackInlineEdit(emp, 'status')"
+                    @change="handleInlineEmployeeUpdate(emp, 'status', $event.target.value)"
+                    :aria-label="`Status for ${emp.firstName} ${emp.lastName}`"
+                  >
+                    <option value="">Select Status</option>
+                    <template x-for="status in statusOptions" :key="status">
+                      <option :value="status" x-text="status"></option>
+                    </template>
+                  </select>
                 </td>
                 <td class="px-4 py-3 text-sm" x-show="$store.app.isColumnVisible('seniorityHours')">
                   <span x-html="emp.seniorityHours != null && emp.seniorityHours !== '' ? highlightText(emp.seniorityHours) : '-'"></span>
@@ -636,6 +675,41 @@
             <option value="NotCompleted">Incomplete</option>
             <option value="NotRequired">Not Required</option>
           </select>
+        </div>
+      </div>
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
+        <div class="flex flex-wrap items-center gap-2" x-show="activeFilterChips.length" x-transition>
+          <template x-for="chip in activeFilterChips" :key="chip.key">
+            <span class="badge" style="gap:0.35rem;">
+              <span x-text="`${chip.label}: ${chip.value}`"></span>
+              <button
+                type="button"
+                class="inline-flex items-center justify-center w-5 h-5 rounded-full focus-ring"
+                style="background:transparent;border:none;color:inherit;font-size:0.75rem;line-height:1;"
+                :aria-label="`Remove ${chip.label} filter`"
+                @click="clearFilterChip(chip.key)"
+              >
+                ×
+              </button>
+            </span>
+          </template>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 md:justify-end">
+          <button type="button" class="btn btn-accent" @click="promptAndSaveView()">Save View</button>
+          <div class="flex items-center gap-2">
+            <label for="saved-views" class="text-sm font-medium" style="color:var(--muted)">Views</label>
+            <select
+              id="saved-views"
+              class="form-field w-full md:w-48"
+              x-model="selectedViewName"
+              @change="applyViewByName(selectedViewName)"
+            >
+              <option value="">Select a view</option>
+              <template x-for="view in savedViews" :key="view.name">
+                <option :value="view.name" x-text="view.name"></option>
+              </template>
+            </select>
+          </div>
         </div>
       </div>
     </div>
