@@ -1,6 +1,7 @@
 import feather from 'feather-icons';
 
 const FEATHER_INIT_ATTR = 'data-feather-initialized';
+const FEATHER_PROCESSED_ATTR = 'data-feather-processed';
 
 function getElementAttributes(element) {
   return Array.from(element.attributes ?? []).reduce((attrs, attr) => {
@@ -157,7 +158,9 @@ export function safeFeatherReplace(root) {
     }
 
     const parent = element?.parentNode;
-    if (!parent) return;
+    if (!parent) {
+      return;
+    }
 
     const processedState = element.getAttribute(FEATHER_PROCESSED_ATTR) || element.dataset?.featherProcessed;
     if (processedState === 'failed') {
@@ -168,11 +171,6 @@ export function safeFeatherReplace(root) {
       } else {
         return;
       }
-    }
-
-    const parent = element.parentNode;
-    if (!parent) {
-      return;
     }
 
     let iconName = '';
@@ -195,20 +193,20 @@ export function safeFeatherReplace(root) {
 
       const svgString = icon.toSvg(sanitizedAttrs);
       const svgElement = createSvgElement(svgString);
-
-    svgElement.setAttribute('data-feather', iconName);
-    svgElement.setAttribute(FEATHER_INIT_ATTR, 'true');
-
-    if (svgElement.dataset) {
-      svgElement.dataset.featherInitialized = 'true';
-    }
-
+      const isSvgElement = typeof SVGElement !== 'undefined' && svgElement instanceof SVGElement;
       if (!isSvgElement) {
         applyFallback(element, iconName);
         return;
       }
 
       svgElement.setAttribute('data-feather', iconName);
+      svgElement.setAttribute(FEATHER_INIT_ATTR, 'true');
+
+      if (svgElement.dataset) {
+        svgElement.dataset.featherInitialized = 'true';
+      }
+
+      markProcessed(svgElement, 'success');
 
       try {
         parent.replaceChild(svgElement, element);
