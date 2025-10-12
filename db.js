@@ -262,9 +262,11 @@ function defineSchema(db) {
 
     const valuesToInsert = [];
     const typeMappings = [
-      { field: 'position', type: 'position' },
+      { field: 'position', type: 'role' },
+      { field: 'role', type: 'role' },
       { field: 'status', type: 'status' },
-      { field: 'rank', type: 'rank' }
+      { field: 'rank', type: 'employmentType' },
+      { field: 'employmentType', type: 'employmentType' }
     ];
 
     await employeesTable.each(employee => {
