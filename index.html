@@ -25,7 +25,7 @@
     .dark .form-field:focus-visible,.dark .input:focus-visible,.dark .select:focus-visible{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,0.25)}
     .form-field--search{padding-right:2.75rem;min-height:2.5rem}
     .btn,.btn-primary,.btn-accent{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;border-radius:.75rem;padding:.5rem .85rem;border:1px solid var(--line);background:var(--card);font-weight:600;transition:background .2s ease,color .2s ease,border-color .2s ease,box-shadow .2s ease;color:var(--text);text-decoration:none;line-height:1.2}
-    .btn:hover,.btn:focus-visible,.btn-primary:hover,.btn-primary:focus-visible,.btn-accent:hover,.btn-accent:focus-visible{box-shadow:0 4px 12px rgba(15,23,42,0.12);outline:none}
+    .btn:hover,.btn-primary:hover,.btn-accent:hover{box-shadow:0 4px 12px rgba(15,23,42,0.12)}
     .btn:focus-visible,.btn-primary:focus-visible,.btn-accent:focus-visible{border-color:var(--accent)}
     .btn-primary,.btn-accent{background:var(--accent);border-color:var(--accent);color:#fff}
     .btn-primary:hover,.btn-primary:focus-visible{background:rgba(37,99,235,0.92);border-color:rgba(37,99,235,0.92)}
@@ -63,8 +63,10 @@
     .virtual-scroll{overflow-y:auto;max-height:calc(100vh - 260px)}
     .status-badge{transition:all 0.2s ease}
     .badge{display:inline-flex;align-items:center;padding:.125rem .5rem;border-radius:.25rem;font-size:.75rem;font-weight:600;color:var(--badge-text);border:none;cursor:pointer;transition:box-shadow .2s ease,transform .2s ease}
-    .badge:hover,.badge:focus-visible{transform:translateY(-1px);box-shadow:0 0 0 3px rgba(37,99,235,0.18);outline:none}
+    .badge:hover,.badge:focus-visible{transform:translateY(-1px);box-shadow:0 0 0 3px rgba(37,99,235,0.18)}
     .dark .badge:hover,.dark .badge:focus-visible{box-shadow:0 0 0 3px rgba(96,165,250,0.25)}
+    .btn:focus-visible,.btn-primary:focus-visible,.btn-accent:focus-visible,.btn-ghost:focus-visible,.btn-danger:focus-visible,.btn-icon:focus-visible,.search-result-item:focus-visible,.badge:focus-visible,.form-field:focus-visible,.input:focus-visible,.select:focus-visible,a:focus-visible,.focus-ring:focus-visible{outline:3px solid rgba(37,99,235,0.45);outline-offset:2px}
+    .dark .btn:focus-visible,.dark .btn-primary:focus-visible,.dark .btn-accent:focus-visible,.dark .btn-ghost:focus-visible,.dark .btn-danger:focus-visible,.dark .btn-icon:focus-visible,.dark .search-result-item:focus-visible,.dark .badge:focus-visible,.dark .form-field:focus-visible,.dark .input:focus-visible,.dark .select:focus-visible,.dark a:focus-visible,.dark .focus-ring:focus-visible{outline-color:rgba(96,165,250,0.6)}
     .badge--compliant{background:var(--success)}
     .badge--expiring{background:var(--warn)}
     .badge--overdue{background:var(--danger)}
@@ -201,14 +203,25 @@
         <div class="command-toolbar__group command-toolbar__group--primary" role="group" aria-label="Primary actions">
           <button
             id="add-employee-btn"
-            @click="document.getElementById('add-emp-modal').__api.show()"
+            @click="showAddEmployeeModal = true"
             class="btn btn-accent"
             :disabled="!appReady"
+            :aria-expanded="showAddEmployeeModal"
+            aria-controls="add-emp-modal"
+            aria-haspopup="dialog"
           >
             <i data-feather="user-plus" class="w-4 h-4"></i>
             <span>Add Employee</span>
           </button>
-          <button id="import-btn" @click="$store.app.showImportModal = true" class="btn btn-accent" :disabled="!appReady">
+          <button
+            id="import-btn"
+            @click="$store.app.showImportModal = true"
+            class="btn btn-accent"
+            :disabled="!appReady"
+            :aria-expanded="$store.app.showImportModal"
+            aria-controls="import-modal"
+            aria-haspopup="dialog"
+          >
             <i data-feather="upload" class="w-4 h-4"></i>
             <span>Import</span>
           </button>
@@ -229,7 +242,15 @@
           </button>
         </div>
         <div class="command-toolbar__group command-toolbar__group--secondary" role="group" aria-label="Secondary actions">
-          <button id="activity-log-btn" @click="openActivityLog()" class="btn btn-ghost" :disabled="!appReady">
+          <button
+            id="activity-log-btn"
+            @click="openActivityLog()"
+            class="btn btn-ghost"
+            :disabled="!appReady"
+            :aria-expanded="showActivityLogModal"
+            aria-controls="activity-log-modal"
+            aria-haspopup="dialog"
+          >
             <i data-feather="list" class="w-4 h-4"></i>
             <span>Activity Log</span>
           </button>
@@ -237,7 +258,15 @@
             <i data-feather="calendar" class="w-4 h-4"></i>
             <span>Calendar</span>
           </button>
-          <button id="settings-btn" @click="openSettingsModal()" class="btn btn-ghost" :disabled="!appReady">
+          <button
+            id="settings-btn"
+            @click="openSettingsModal()"
+            class="btn btn-ghost"
+            :disabled="!appReady"
+            :aria-expanded="showSettingsModal"
+            aria-controls="settings-modal"
+            aria-haspopup="dialog"
+          >
             <i data-feather="settings" class="w-4 h-4"></i>
             <span>Settings</span>
           </button>
@@ -295,7 +324,14 @@
                   <div class="flex items-center justify-between">
                     <span x-html="highlightText(req.name)" class="font-semibold"></span>
                     <div class="flex items-center gap-1">
-                      <button @click="editRequirement(req)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Edit requirement ${req.name}`">
+                      <button
+                        @click="editRequirement(req)"
+                        class="opacity-50 hover:opacity-100 transition-opacity"
+                        :aria-label="`Edit requirement ${req.name}`"
+                        :aria-expanded="showEditRequirementModal"
+                        aria-controls="edit-requirement-modal"
+                        aria-haspopup="dialog"
+                      >
                         <i data-feather="edit-2" class="icon-sm"></i>
                       </button>
                       <button @click="confirmDeleteRequirement(req)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Delete requirement ${req.name}`">
@@ -317,7 +353,14 @@
                       <div x-show="emp.employeeId" class="text-xs" style="color:var(--muted)" x-html="highlightText('ID: ' + emp.employeeId)"></div>
                     </div>
                     <div class="flex items-center gap-2">
-                      <button @click="editEmployee(emp)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Edit employee ${emp.firstName} ${emp.lastName}`">
+                      <button
+                        @click="editEmployee(emp)"
+                        class="opacity-50 hover:opacity-100 transition-opacity"
+                        :aria-label="`Edit employee ${emp.firstName} ${emp.lastName}`"
+                        :aria-expanded="showEditEmployeeModal"
+                        aria-controls="edit-employee-modal"
+                        aria-haspopup="dialog"
+                      >
                         <i data-feather="edit-2" class="icon-sm"></i>
                       </button>
                       <button @click="confirmDeleteEmployee(emp)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Delete employee ${emp.firstName} ${emp.lastName}`" style="color:var(--danger)">
@@ -375,11 +418,25 @@
             <i data-feather="user-plus" class="w-4 h-4"></i>
             <span>Add Employee</span>
           </button>
-          <button @click="showAddRequirementModal = true" class="btn" :disabled="!appReady">
+          <button
+            @click="showAddRequirementModal = true"
+            class="btn"
+            :disabled="!appReady"
+            :aria-expanded="showAddRequirementModal"
+            aria-controls="add-requirement-modal"
+            aria-haspopup="dialog"
+          >
             <i data-feather="plus" class="w-4 h-4"></i>
             <span>Add Requirement</span>
           </button>
-          <button @click="showBulkActionsModal = true" class="btn" :disabled="!appReady">
+          <button
+            @click="showBulkActionsModal = true"
+            class="btn"
+            :disabled="!appReady"
+            :aria-expanded="showBulkActionsModal"
+            aria-controls="bulk-actions-modal"
+            aria-haspopup="dialog"
+          >
             <i data-feather="layers" class="w-4 h-4"></i>
             <span>Bulk Actions</span>
           </button>
@@ -494,6 +551,7 @@
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
       <div
         class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        x-ref="dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-emp-modal-title"
@@ -594,13 +652,26 @@
   </div>
 
   <!-- Add Requirement Modal -->
-  <div x-show="showAddRequirementModal" x-cloak class="fixed inset-0 z-50">
+  <div
+    id="add-requirement-modal"
+    x-show="showAddRequirementModal"
+    x-cloak
+    class="fixed inset-0 z-50"
+    x-data="modalA11y(() => showAddRequirementModal, value => showAddRequirementModal = value)"
+    @keydown.escape.window.prevent.stop="handleEscape($event)"
+  >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <div @click="showAddRequirementModal=false" class="fixed inset-0 bg-black/40 z-40"></div>
+        <div @click="close()" class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-      <div class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+      <div
+        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        x-ref="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-requirement-modal-title"
+      >
         <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <h3 class="text-lg font-semibold mb-4">Add New Requirement</h3>
+          <h3 id="add-requirement-modal-title" class="text-lg font-semibold mb-4" tabindex="-1" data-modal-initial-focus>Add New Requirement</h3>
           <div class="space-y-4">
             <div>
               <label class="block text-sm font-medium mb-1">Requirement Name</label>
@@ -631,21 +702,34 @@
           </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-          <button @click="addRequirement()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Add Requirement</button>
-          <button @click="showAddRequirementModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+            <button @click="addRequirement()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Add Requirement</button>
+            <button @click="close()" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Edit Requirement Modal -->
-  <div x-show="showEditRequirementModal" x-cloak class="fixed inset-0 z-50">
+  <div
+    id="edit-requirement-modal"
+    x-show="showEditRequirementModal"
+    x-cloak
+    class="fixed inset-0 z-50"
+    x-data="modalA11y(() => showEditRequirementModal, value => showEditRequirementModal = value)"
+    @keydown.escape.window.prevent.stop="handleEscape($event)"
+  >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <div @click="showEditRequirementModal=false" class="fixed inset-0 bg-black/40 z-40"></div>
+      <div @click="close()" class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-      <div class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+      <div
+        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        x-ref="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-requirement-modal-title"
+      >
         <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <h3 class="text-lg font-semibold mb-4">Edit Requirement</h3>
+          <h3 id="edit-requirement-modal-title" class="text-lg font-semibold mb-4" tabindex="-1" data-modal-initial-focus>Edit Requirement</h3>
           <div class="space-y-4">
             <div>
               <label class="block text-sm font-medium mb-1">Requirement Name</label>
@@ -679,20 +763,33 @@
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
           <button @click="updateRequirement()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save Changes</button>
-          <button @click="showEditRequirementModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+          <button @click="close()" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Edit Employee Modal -->
-  <div x-show="showEditEmployeeModal" x-cloak class="fixed inset-0 z-50">
+  <div
+    id="edit-employee-modal"
+    x-show="showEditEmployeeModal"
+    x-cloak
+    class="fixed inset-0 z-50"
+    x-data="modalA11y(() => showEditEmployeeModal, value => showEditEmployeeModal = value)"
+    @keydown.escape.window.prevent.stop="handleEscape($event)"
+  >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <div @click="showEditEmployeeModal=false" class="fixed inset-0 bg-black/40 z-40"></div>
+      <div @click="close()" class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-      <div class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+      <div
+        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        x-ref="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-employee-modal-title"
+      >
         <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <h3 class="text-lg font-semibold mb-4">Edit Employee</h3>
+          <h3 id="edit-employee-modal-title" class="text-lg font-semibold mb-4" tabindex="-1" data-modal-initial-focus>Edit Employee</h3>
           <div class="space-y-4">
             <div class="grid grid-cols-2 gap-4">
               <div>
@@ -776,7 +873,7 @@
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
           <button @click="updateEmployee()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save Changes</button>
-          <button @click="showEditEmployeeModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+          <button @click="close()" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
           <button @click="confirmDeleteEmployee(editingEmployee)" class="mt-3 sm:mt-0 sm:mr-auto w-full sm:w-auto px-4 py-2 btn btn-danger">Delete Employee</button>
         </div>
       </div>
@@ -784,13 +881,26 @@
   </div>
 
   <!-- Bulk Actions Modal -->
-  <div x-show="showBulkActionsModal" x-cloak class="fixed inset-0 z-50">
+  <div
+    id="bulk-actions-modal"
+    x-show="showBulkActionsModal"
+    x-cloak
+    class="fixed inset-0 z-50"
+    x-data="modalA11y(() => showBulkActionsModal, value => showBulkActionsModal = value)"
+    @keydown.escape.window.prevent.stop="handleEscape($event)"
+  >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <div @click="showBulkActionsModal=false" class="fixed inset-0 bg-black/40 z-40"></div>
+      <div @click="close()" class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-      <div class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+      <div
+        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full"
+        x-ref="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bulk-actions-modal-title"
+      >
         <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <h3 class="text-lg font-semibold mb-4">Bulk Actions</h3>
+          <h3 id="bulk-actions-modal-title" class="text-lg font-semibold mb-4" tabindex="-1" data-modal-initial-focus>Bulk Actions</h3>
           <div class="space-y-4">
             <div>
               <label class="block text-sm font-medium mb-2">Select Employees</label>
@@ -829,20 +939,33 @@
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
           <button @click="executeBulkAction()" x-show="bulkAction && selectedEmployees.length" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Execute</button>
-          <button @click="showBulkActionsModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+          <button @click="close()" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Settings Modal -->
-  <div x-show="showSettingsModal" x-cloak class="fixed inset-0 z-50">
+  <div
+    id="settings-modal"
+    x-show="showSettingsModal"
+    x-cloak
+    class="fixed inset-0 z-50"
+    x-data="modalA11y(() => showSettingsModal, value => showSettingsModal = value)"
+    @keydown.escape.window.prevent.stop="handleEscape($event)"
+  >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <div @click="showSettingsModal=false" class="fixed inset-0 bg-black/40 z-40"></div>
+      <div @click="close()" class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-      <div class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
+      <div
+        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full"
+        x-ref="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-modal-title"
+      >
         <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <h3 class="text-lg font-semibold mb-4">Column Settings</h3>
+          <h3 id="settings-modal-title" class="text-lg font-semibold mb-4" tabindex="-1" data-modal-initial-focus>Column Settings</h3>
           <ul x-ref="settingsList" class="space-y-2">
             <template x-for="req in visibleRequirements" :key="req.id">
               <li class="flex items-center justify-between p-2 border rounded" style="border-color:var(--line)">
@@ -920,21 +1043,34 @@
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
           <button @click="saveAndCloseSettings" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save</button>
-          <button @click="showSettingsModal=false" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+          <button @click="close()" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Import Modal -->
-  <div x-show="$store.app.showImportModal" x-cloak class="fixed inset-0 z-50">
+  <div
+    id="import-modal"
+    x-show="$store.app.showImportModal"
+    x-cloak
+    class="fixed inset-0 z-50"
+    x-data="modalA11y(() => $store.app.showImportModal, value => { $store.app.showImportModal = value; })"
+    @keydown.escape.window.prevent.stop="handleEscape($event)"
+  >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <div @click="$store.app.showImportModal=false" data-close-import-modal class="fixed inset-0 bg-black/40 z-40"></div>
+      <div @click="close()" data-close-import-modal class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-      <div class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+      <div
+        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
+        x-ref="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="import-modal-title"
+      >
         <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
           <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold mb-3">Import Data</h3>
+            <h3 id="import-modal-title" class="text-lg font-semibold mb-3" tabindex="-1" data-modal-initial-focus>Import Data</h3>
             <div class="text-xs" :style="'color:var(--muted)'">
               <span x-text="'Headers: ' + importHeaders.length + ' • Rows: ' + importData.length + ' • Eligible: ' + previewEligible"></span>
             </div>
@@ -1214,20 +1350,33 @@
           >
             <span x-text="importMode === 'backup' ? 'Restore Backup' : 'Process Import'"></span>
           </button>
-          <button @click="$store.app.showImportModal=false" data-close-import-modal class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+          <button @click="close()" data-close-import-modal class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Activity Log Modal -->
-  <div x-show="showActivityLogModal" x-cloak class="fixed inset-0 z-50">
+  <div
+    id="activity-log-modal"
+    x-show="showActivityLogModal"
+    x-cloak
+    class="fixed inset-0 z-50"
+    x-data="modalA11y(() => showActivityLogModal, value => showActivityLogModal = value)"
+    @keydown.escape.window.prevent.stop="handleEscape($event)"
+  >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <div @click="showActivityLogModal=false" class="fixed inset-0 bg-black/40 z-40"></div>
+      <div @click="close()" class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-      <div class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-xl sm:w-full">
+      <div
+        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-xl sm:w-full"
+        x-ref="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="activity-log-modal-title"
+      >
         <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <h3 class="text-lg font-semibold mb-4">Activity Log</h3>
+          <h3 id="activity-log-modal-title" class="text-lg font-semibold mb-4" tabindex="-1" data-modal-initial-focus>Activity Log</h3>
           <div x-data="activityTimeline" x-ref="activityTimeline" x-init="init()" class="space-y-3 max-h-96 overflow-y-auto">
             <template x-for="entry in entries" :key="entry.id">
               <div class="flex items-center justify-between border-b pb-2" style="border-color:var(--line)">
@@ -1242,7 +1391,7 @@
           </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-          <button @click="showActivityLogModal=false" class="w-full sm:w-auto px-4 py-2 btn">Close</button>
+          <button @click="close()" class="w-full sm:w-auto px-4 py-2 btn">Close</button>
         </div>
       </div>
     </div>
@@ -1250,21 +1399,25 @@
 
   <!-- Lookup Add Dialog -->
   <div
-    x-data="{ focusInput(){ this.$nextTick(() => { const input = this.$refs.lookupInput; if(input){ try{ input.focus({ preventScroll: true }); } catch(e){ input.focus(); } if(typeof input.select === 'function'){ input.select(); } } }); } }"
+    id="lookup-dialog"
+    x-data="modalA11y(() => $store.app.lookupDialog.open, value => { if(!value){ $store.app.closeLookupDialog(); } })"
     x-show="$store.app.lookupDialog.open"
     x-cloak
     class="fixed inset-0 z-50"
-    @keydown.escape.window.prevent.stop="$store.app.closeLookupDialog()"
+    @keydown.escape.window.prevent.stop="handleEscape($event)"
   >
     <div class="flex items-center justify-center min-h-screen px-4 py-6 text-center sm:block sm:p-0">
-      <div class="fixed inset-0 bg-black/40 z-40" @click="$store.app.closeLookupDialog()"></div>
+      <div class="fixed inset-0 bg-black/40 z-40" @click="close()"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
       <div
         class="relative z-50 inline-block align-middle card rounded-lg overflow-hidden shadow-xl transform transition-all sm:my-8 sm:max-w-sm sm:w-full text-left"
-        x-effect="$store.app.lookupDialog.open && focusInput()"
+        x-ref="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lookup-dialog-title"
       >
         <div class="px-4 py-3 border-b" style="border-color:var(--line)">
-          <h3 class="text-base font-semibold" x-text="'Add ' + ($store.app.lookupDialog.label || 'value')"></h3>
+          <h3 id="lookup-dialog-title" class="text-base font-semibold" tabindex="-1" x-text="'Add ' + ($store.app.lookupDialog.label || 'value')"></h3>
         </div>
         <div class="px-4 py-4 space-y-3">
           <label class="block text-sm font-medium" x-text="$store.app.lookupDialog.label || 'Value'"></label>
@@ -1275,12 +1428,13 @@
             class="form-field w-full"
             placeholder="Enter value"
             :disabled="$store.app.lookupDialog.loading"
+            data-modal-initial-focus
           >
           <p class="text-xs" style="color:var(--muted)" x-show="$store.app.lookupDialog.initializing">Loading existing values…</p>
           <p class="text-sm" style="color:var(--danger)" x-show="$store.app.lookupDialog.error" x-text="$store.app.lookupDialog.error"></p>
         </div>
         <div class="px-4 py-3 bg-gray-50 dark:bg-gray-900 flex justify-end gap-2 border-t" style="border-color:var(--line)">
-          <button type="button" class="btn" @click="$store.app.closeLookupDialog()" :disabled="$store.app.lookupDialog.loading">Cancel</button>
+          <button type="button" class="btn" @click="close()" :disabled="$store.app.lookupDialog.loading">Cancel</button>
           <button type="button" class="btn btn-primary" @click="$store.app.submitLookupDialog()" :disabled="$store.app.lookupDialog.loading || $store.app.lookupDialog.initializing">
             <span x-show="!$store.app.lookupDialog.loading">Save</span>
             <span x-show="$store.app.lookupDialog.loading">Saving...</span>
@@ -1292,7 +1446,7 @@
 
   <div x-show="showToast" class="fixed bottom-4 right-4 px-4 py-2 rounded shadow-lg" :style="'background:'+toastColor+';color:white'" role="status" aria-live="polite" aria-atomic="true"><!-- Provide polite live toast announcements for assistive technology -->
     <span x-text="toastMessage"></span>
-    <button x-show="toastUndo" @click="toastUndo()" class="ml-3 underline font-semibold">Undo</button>
+    <button x-show="toastUndo" @click="toastUndo()" class="ml-3 underline font-semibold focus-ring">Undo</button>
   </div>
 
   <script type="module" src="/main.js"></script>

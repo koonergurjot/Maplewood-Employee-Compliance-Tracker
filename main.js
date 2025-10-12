@@ -7,6 +7,7 @@ import Chart from 'chart.js/auto';
 import Sortable from 'sortablejs';
 import Fuse from 'fuse.js';
 import { safeFeatherReplace } from './feather-utils.js';
+import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
 
 import './styles.css';
 import './import-employees.js';
@@ -91,6 +92,113 @@ function createAppReadyState(){
 }
 
 const appState = createAppReadyState();
+
+function createModalA11y(getter, setter){
+  return {
+    focusTrapCleanup: null,
+    lastActiveElement: null,
+    evaluateIsOpen(){
+      try {
+        if(typeof getter === 'function'){
+          return Boolean(getter.call(this));
+        }
+        if(typeof getter === 'string' && this?.$root){
+          return Boolean(this.$root[getter]);
+        }
+      } catch (error) {
+        return false;
+      }
+      return false;
+    },
+    updateState(value){
+      const next = typeof value === 'undefined' ? false : Boolean(value);
+      if(typeof setter === 'function'){
+        setter.call(this, next);
+      } else if(typeof getter === 'string' && this?.$root){
+        this.$root[getter] = next;
+      }
+    },
+    init(){
+      this.$watch(() => this.evaluateIsOpen(), (isOpen) => this.handleToggle(isOpen));
+      if(this.evaluateIsOpen()){
+        this.handleToggle(true);
+      }
+    },
+    handleToggle(isOpen){
+      if(isOpen){
+        this.onOpen();
+      } else {
+        this.onClose();
+      }
+    },
+    onOpen(){
+      if(typeof document !== 'undefined'){
+        const active = document.activeElement;
+        if(active && active !== document.body && !this.$el.contains(active)){
+          this.lastActiveElement = active;
+        }
+      }
+
+      this.$nextTick(() => {
+        const container = this.$refs?.dialog || this.$el;
+        this.deactivateFocusTrap();
+        this.focusTrapCleanup = trapFocusWithin(container);
+        const focusTarget = container.querySelector('[data-modal-initial-focus]')
+          || getFocusableElements(container)[0]
+          || container;
+        if(focusTarget && typeof focusTarget.focus === 'function'){
+          try {
+            focusTarget.focus({ preventScroll: true });
+          } catch (error) {
+            focusTarget.focus();
+          }
+        }
+      });
+    },
+    onClose(){
+      this.deactivateFocusTrap();
+      const target = this.lastActiveElement;
+      this.lastActiveElement = null;
+      if(!target || typeof target.focus !== 'function'){
+        return;
+      }
+      this.$nextTick(() => {
+        if(typeof document !== 'undefined' && typeof document.contains === 'function'){
+          if(!document.contains(target)){
+            return;
+          }
+        }
+        try {
+          target.focus({ preventScroll: true });
+        } catch (error) {
+          target.focus();
+        }
+      });
+    },
+    close(){
+      this.updateState(false);
+    },
+    handleEscape(event){
+      if(event){
+        if(typeof event.preventDefault === 'function') event.preventDefault();
+        if(typeof event.stopPropagation === 'function') event.stopPropagation();
+      }
+      this.close();
+    },
+    deactivateFocusTrap(){
+      if(typeof this.focusTrapCleanup === 'function'){
+        this.focusTrapCleanup();
+      }
+      this.focusTrapCleanup = null;
+    }
+  };
+}
+
+if(typeof window !== 'undefined'){
+  window.modalA11y = function(getter, setter){
+    return createModalA11y(getter, setter);
+  };
+}
 
 export async function waitForReady(ms = 10000) {
   if(appState.error){
@@ -351,6 +459,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         statuses: [],
         ranks: [],
         lastActiveElement: null,
+        focusTrapCleanup: null,
         db: null,
         dbPromise: null,
         async init(){
@@ -410,6 +519,9 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.open = true;
           return new Promise(resolve => {
             this.$nextTick(() => {
+              const container = this.$refs?.dialog || this.$el;
+              this.deactivateFocusTrap();
+              this.focusTrapCleanup = trapFocusWithin(container);
               const input = this.$refs?.name;
               if(input && typeof input.focus === 'function'){
                 try {
@@ -428,6 +540,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         hide(){
           this.open = false;
           this.reset();
+          this.deactivateFocusTrap();
           if(typeof window !== 'undefined'){
             this.$nextTick(() => {
               const target = this.lastActiveElement;
@@ -454,6 +567,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             });
           }
           return Promise.resolve();
+        },
+        deactivateFocusTrap(){
+          if(typeof this.focusTrapCleanup === 'function'){
+            this.focusTrapCleanup();
+          }
+          this.focusTrapCleanup = null;
         },
         close(){
           const result = this.hide();
