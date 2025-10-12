@@ -292,9 +292,28 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
     return String(value).trim();
   }
 
-  function normalizeComposite(lastName, firstName, role){
-    const parts = [lastName, firstName, role].map(part => (part == null ? '' : String(part).trim().toLowerCase()));
-    return parts.join('|');
+  function normalizeComposite(lastName, firstName){
+    const normalizePart = value => (value == null ? '' : String(value).trim().toLowerCase());
+    const last = normalizePart(lastName);
+    const first = normalizePart(firstName);
+    if (!last && !first) {
+      return '';
+    }
+    return `${last}|${first}`;
+  }
+
+  function buildEmployeeKey(employeeIdValue, lastName, firstName) {
+    const normalizedId = normalizeEmployeeId(employeeIdValue);
+    if (normalizedId) {
+      return `id:${normalizedId.toLowerCase()}`;
+    }
+
+    const composite = normalizeComposite(lastName, firstName);
+    if (composite) {
+      return `name:${composite}`;
+    }
+
+    return '';
   }
 
   async function importFromRows(rows){
@@ -369,7 +388,7 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
 
     const existingEmployees = await db.employees.toArray();
     const existingByEmployeeId = new Map();
-    const existingByComposite = new Map();
+    const existingByName = new Map();
 
     for (const existing of existingEmployees){
       const employeeIdKey = normalizeEmployeeId(existing.employeeId);
@@ -379,15 +398,16 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
           existingByEmployeeId.set(key, existing);
         }
       }
-      const compositeKey = normalizeComposite(existing.lastName, existing.firstName, existing.role);
-      if (compositeKey && !existingByComposite.has(compositeKey)) {
-        existingByComposite.set(compositeKey, existing);
+      const compositeKey = normalizeComposite(existing.lastName, existing.firstName);
+      if (compositeKey && !existingByName.has(compositeKey)) {
+        existingByName.set(compositeKey, existing);
       }
     }
 
     const timestamp = new Date().toISOString();
     const employees = [];
     const newEmployeeIds = new Set();
+    const seenImportKeys = new Set();
 
     for (const r of rows){
       const nameVal = nameCol ? r[nameCol] : (r['Name'] ?? r['Employee'] ?? '');
@@ -397,13 +417,21 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
       const employeeIdValue = normalizeEmployeeId(idVal);
       const employeeIdKey = employeeIdValue ? employeeIdValue.toLowerCase() : '';
       const roleRaw = roleCol ? (r[roleCol] ?? null) : null;
-      const compositeKey = normalizeComposite(lastName, firstName, roleRaw);
+      const compositeKey = normalizeComposite(lastName, firstName);
+
+      const importKey = buildEmployeeKey(employeeIdValue, lastName, firstName);
+      if (importKey) {
+        if (seenImportKeys.has(importKey)) {
+          continue;
+        }
+        seenImportKeys.add(importKey);
+      }
 
       let existingMatch = null;
       if (employeeIdKey && existingByEmployeeId.has(employeeIdKey)) {
         existingMatch = existingByEmployeeId.get(employeeIdKey);
-      } else if (compositeKey && existingByComposite.has(compositeKey)) {
-        existingMatch = existingByComposite.get(compositeKey);
+      } else if (compositeKey && existingByName.has(compositeKey)) {
+        existingMatch = existingByName.get(compositeKey);
       }
 
       const shSource = seniorityCol ? r[seniorityCol] : existingMatch?.seniorityHours;
@@ -452,8 +480,8 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
       if (employeeIdKey && !existingByEmployeeId.has(employeeIdKey)) {
         existingByEmployeeId.set(employeeIdKey, employee);
       }
-      if (compositeKey && !existingByComposite.has(compositeKey)) {
-        existingByComposite.set(compositeKey, employee);
+      if (compositeKey && !existingByName.has(compositeKey)) {
+        existingByName.set(compositeKey, employee);
       }
     }
 
