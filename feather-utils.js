@@ -1,7 +1,112 @@
-import feather from 'feather-icons';
+import rawFeatherIcons from 'feather-icons/dist/icons.json';
 
 const FEATHER_INIT_ATTR = 'data-feather-initialized';
 const FEATHER_PROCESSED_ATTR = 'data-feather-processed';
+const DEFAULT_SVG_ATTRIBUTES = Object.freeze({
+  xmlns: 'http://www.w3.org/2000/svg',
+  width: 24,
+  height: 24,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  'stroke-width': 2,
+  'stroke-linecap': 'round',
+  'stroke-linejoin': 'round',
+});
+const FEATHER_ICONS = createIconRegistry();
+
+function createIconRegistry() {
+  const registry = new Map();
+  if (!rawFeatherIcons || typeof rawFeatherIcons !== 'object') {
+    return registry;
+  }
+
+  Object.entries(rawFeatherIcons).forEach(([name, svgContent]) => {
+    if (typeof svgContent !== 'string' || !svgContent.trim()) {
+      return;
+    }
+
+    registry.set(name, {
+      toSvg(options = {}) {
+        const normalizedAttrs = normalizeAttributes(options);
+        const classAttr = normalizedAttrs.class;
+        delete normalizedAttrs.class;
+
+        const attributes = { ...DEFAULT_SVG_ATTRIBUTES, ...normalizedAttrs };
+        const classNames = new Set([`feather`, `feather-${name}`]);
+
+        if (typeof classAttr === 'string' && classAttr.trim()) {
+          classAttr
+            .split(/\s+/)
+            .filter(Boolean)
+            .forEach(value => classNames.add(value));
+        }
+
+        attributes.class = Array.from(classNames).join(' ');
+
+        return `<svg ${serializeAttributes(attributes)}>${svgContent}</svg>`;
+      },
+    });
+  });
+
+  return registry;
+}
+
+function normalizeAttributes(attributes) {
+  return Object.entries(attributes || {}).reduce((acc, [rawName, rawValue]) => {
+    if (rawValue === undefined || rawValue === null || rawValue === false) {
+      return acc;
+    }
+
+    const name = normalizeAttributeName(rawName);
+    if (!name) {
+      return acc;
+    }
+
+    const value = typeof rawValue === 'boolean' ? String(rawValue) : rawValue;
+    acc[name] = value;
+    return acc;
+  }, {});
+}
+
+function normalizeAttributeName(name) {
+  if (!name) {
+    return '';
+  }
+
+  if (name === 'className') {
+    return 'class';
+  }
+
+  if (name === 'strokeWidth') {
+    return 'stroke-width';
+  }
+
+  if (name === 'strokeLinecap') {
+    return 'stroke-linecap';
+  }
+
+  if (name === 'strokeLinejoin') {
+    return 'stroke-linejoin';
+  }
+
+  return name.replace(/[A-Z]/g, match => `-${match.toLowerCase()}`);
+}
+
+function serializeAttributes(attributes) {
+  return Object.entries(attributes)
+    .filter(([, value]) => value !== undefined && value !== null && value !== false)
+    .map(([key, value]) => `${key}="${escapeAttributeValue(value)}"`)
+    .join(' ');
+}
+
+function escapeAttributeValue(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
 function getElementAttributes(element) {
   return Array.from(element.attributes ?? []).reduce((attrs, attr) => {
@@ -139,8 +244,8 @@ export function safeFeatherReplace(root) {
     return;
   }
 
-  if (typeof feather === 'undefined' || !feather || typeof feather.icons !== 'object') {
-    console.warn('Feather icons library not available');
+  if (!FEATHER_ICONS.size) {
+    console.warn('Feather icon data not available');
     return;
   }
 
@@ -182,7 +287,7 @@ export function safeFeatherReplace(root) {
         return;
       }
 
-      const icon = feather.icons[iconName];
+      const icon = FEATHER_ICONS.get(iconName);
       if (!icon) {
         applyFallback(element, iconName);
         return;
