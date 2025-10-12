@@ -189,8 +189,6 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
     for (const r of rows){
       const nameVal = nameCol ? r[nameCol] : (r['Name'] ?? r['Employee'] ?? '');
       const { firstName, lastName } = splitName(nameVal);
-      const shSource = seniorityCol ? r[seniorityCol] : existingMatch?.seniorityHours;
-      const sh = normalizeSeniorityHours(shSource);
 
       const idVal = empidCol ? r[empidCol] : null;
       const employeeIdValue = normalizeEmployeeId(idVal);
@@ -203,6 +201,9 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
       } else if (compositeKey && existingByComposite.has(compositeKey)) {
         existingMatch = existingByComposite.get(compositeKey);
       }
+
+      const shSource = seniorityCol ? r[seniorityCol] : existingMatch?.seniorityHours;
+      const sh = normalizeSeniorityHours(shSource);
 
       const isExisting = Boolean(existingMatch);
       const id = isExisting ? existingMatch.id : (employeeIdValue || localGenerateId());
