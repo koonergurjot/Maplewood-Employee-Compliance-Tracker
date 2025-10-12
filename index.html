@@ -6,30 +6,11 @@
   <title>Compliance Matrix</title>
   <meta name="theme-color" content="#111827"/>
   <link rel="manifest" href="/manifest.webmanifest?v=1"/>
-  <script nonce="bWFwbGV3b29k">
-    (function(){
-      const storageKey = 'maplewood:theme';
-      const prefersDark = () => window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const applyTheme = (isDark) => {
-        document.documentElement.classList.toggle('dark', isDark);
-        document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
-      };
-      try{
-        const stored = window.localStorage.getItem(storageKey);
-        if(stored === 'dark' || stored === 'light'){
-          applyTheme(stored === 'dark');
-        }else{
-          applyTheme(prefersDark());
-        }
-      }catch(error){
-        applyTheme(prefersDark());
-      }
-    })();
-  </script>
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'nonce-bWFwbGV3b29k'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+    content="default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
   />
+  <script src="/theme-bootstrap.js"></script>
   <style>
     :root{ --bg:#f3f4f6; --card:#ffffff; --line:#e5e7eb; --text:#111827; --muted:#6b7280; --accent:#2563eb; --success:#10b981; --expiring:#f97316; --warn:#f59e0b; --danger:#ef4444; --badge-text:#111827; }
     .dark:root, .dark{ --bg:#0b1220; --card:#111827; --line:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --accent:#60a5fa; --success:#34d399; --expiring:#fb923c; --warn:#fbbf24; --danger:#f87171; --badge-text:#111827; }
