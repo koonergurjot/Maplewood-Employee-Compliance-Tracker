@@ -262,9 +262,11 @@ function defineSchema(db) {
 
     const valuesToInsert = [];
     const typeMappings = [
-      { field: 'position', type: 'position' },
+      { field: 'position', type: 'role' },
+      { field: 'role', type: 'role' },
       { field: 'status', type: 'status' },
-      { field: 'rank', type: 'rank' }
+      { field: 'rank', type: 'employmentType' },
+      { field: 'employmentType', type: 'employmentType' }
     ];
 
     await employeesTable.each(employee => {
@@ -434,5 +436,26 @@ export async function addLookup(type, value) {
 
     throw error;
   }
+}
+
+export async function putEmployeeRecord(dbOrRecord, maybeRecord) {
+  let db = dbOrRecord;
+  let record = maybeRecord;
+
+  if (record == null) {
+    record = db;
+    db = null;
+  }
+
+  if (!record || !record.id) {
+    throw new Error('putEmployeeRecord requires an employee object with an id');
+  }
+
+  const targetDb = db && typeof db.table === 'function'
+    ? db
+    : await openDatabase();
+
+  await targetDb.employees.put(record);
+  return record;
 }
 

@@ -12,11 +12,80 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
 import './styles.css';
 import './import-employees.js';
 import './onboarding.js';
-import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup } from './db.js';
+import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup, putEmployeeRecord } from './db.js';
 
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Recreation', 'Reception', 'Rehab Assistant', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
+const COLUMN_VISIBILITY_STORAGE_KEY = 'maplewood:employeeTable:visibleColumns';
+const DEFAULT_VISIBLE_COLUMNS = Object.freeze({
+  role: true,
+  employmentType: true,
+  status: true,
+  seniorityHours: true
+});
+
+function getColumnStorage(){
+  if(typeof window === 'undefined'){ return null; }
+  try {
+    return window.localStorage || null;
+  } catch (error) {
+    console.warn('Column visibility preferences: localStorage unavailable', error);
+    return null;
+  }
+}
+
+function loadStoredVisibleColumns(defaults = {}){
+  const storage = getColumnStorage();
+  const baseline = { ...defaults };
+  if(!storage){
+    return baseline;
+  }
+  try {
+    const raw = storage.getItem(COLUMN_VISIBILITY_STORAGE_KEY);
+    if(!raw){
+      return baseline;
+    }
+    const parsed = JSON.parse(raw);
+    if(!parsed || typeof parsed !== 'object' || Array.isArray(parsed)){
+      return baseline;
+    }
+
+    const normalized = { ...baseline };
+    for(const [key, defaultValue] of Object.entries(baseline)){
+      if(Object.prototype.hasOwnProperty.call(parsed, key)){
+        normalized[key] = parsed[key] !== false;
+      } else {
+        normalized[key] = defaultValue;
+      }
+    }
+    for(const [key, value] of Object.entries(parsed)){
+      if(!(key in normalized)){
+        normalized[key] = value !== false;
+      }
+    }
+    return normalized;
+  } catch (error) {
+    console.warn('Failed to load column visibility preferences', error);
+    return baseline;
+  }
+}
+
+function persistVisibleColumns(columns){
+  const storage = getColumnStorage();
+  if(!storage){
+    return;
+  }
+  try {
+    const payload = {};
+    for(const [key, value] of Object.entries(columns || {})){
+      payload[key] = value !== false;
+    }
+    storage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn('Failed to save column visibility preferences', error);
+  }
+}
 
 let cachedXlsx = (typeof window !== 'undefined' && (window.__xlsxModule || window.XLSX)) || null;
 let xlsxLoadPromise = null;
@@ -312,13 +381,70 @@ Alpine.store('app', {
     existing: [],
     onResolve: null
   },
+  visibleColumns: loadStoredVisibleColumns(DEFAULT_VISIBLE_COLUMNS),
+  initColumnPreferences(defaults = DEFAULT_VISIBLE_COLUMNS){
+    const normalizedDefaults = { ...DEFAULT_VISIBLE_COLUMNS, ...(defaults || {}) };
+    this.visibleColumns = loadStoredVisibleColumns(normalizedDefaults);
+    this.persistColumnPreferences();
+  },
+  ensureColumnVisibility(columns){
+    if(!Array.isArray(columns)){
+      return;
+    }
+    const current = { ...(this.visibleColumns || {}) };
+    let changed = false;
+    for(const column of columns){
+      if(typeof column !== 'string' || !column){
+        continue;
+      }
+      if(!(column in current)){
+        current[column] = true;
+        changed = true;
+      }
+    }
+    if(changed){
+      this.visibleColumns = current;
+      this.persistColumnPreferences();
+    }
+  },
+  persistColumnPreferences(){
+    persistVisibleColumns(this.visibleColumns);
+  },
+  setColumnVisibility(column, visible){
+    if(!column){
+      return;
+    }
+    const next = { ...(this.visibleColumns || {}) };
+    next[column] = visible !== false;
+    this.visibleColumns = next;
+    this.persistColumnPreferences();
+  },
+  toggleColumn(column){
+    if(!column){
+      return;
+    }
+    this.setColumnVisibility(column, !this.isColumnVisible(column));
+  },
+  isColumnVisible(column){
+    if(!column){
+      return true;
+    }
+    const prefs = this.visibleColumns || {};
+    if(!(column in prefs)){
+      return true;
+    }
+    return prefs[column] !== false;
+  },
+  setToast(t){
+    this.toast = t;
+  },
   async openLookupDialog({ type, label, initialValue = '', onSuccess, existingValues = [] } = {}){
     if(!type){
       return;
     }
 
     const dialog = this.lookupDialog;
-    this.showLookupModal = type;
+    this.showLookupModal = typeof type === 'string' ? type : '';
     dialog.type = String(type);
     dialog.label = label || 'Value';
     dialog.value = typeof initialValue === 'string' ? initialValue : '';
@@ -368,7 +494,7 @@ Alpine.store('app', {
     dialog.initializing = false;
     dialog.existing = [];
     dialog.onResolve = null;
-    this.showLookupModal = null;
+    this.showLookupModal = '';
   },
   async submitLookupDialog(){
     const dialog = this.lookupDialog;
@@ -492,12 +618,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         open: false,
         saving: false,
         name: '',
-        position: '',
+        role: '',
         status: '',
-        rank: '',
-        positions: [],
+        employmentType: '',
+        roles: [],
         statuses: [],
-        ranks: [],
+        employmentTypes: [],
         lastActiveElement: null,
         focusTrapCleanup: null,
         db: null,
@@ -523,27 +649,95 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           await this.loadLookups();
         },
         async loadLookups(){
-          try {
-            const [positions, statuses, ranks] = await Promise.all([
-              listLookups('position'),
-              listLookups('status'),
-              listLookups('rank')
-            ]);
-            this.positions = Array.isArray(positions) ? positions : [];
-            this.statuses = Array.isArray(statuses) ? statuses : [];
-            this.ranks = Array.isArray(ranks) ? ranks : [];
-          } catch (error) {
-            console.warn('addEmployeeModal: failed to preload lookup values.', error);
-            this.positions = [];
-            this.statuses = [];
-            this.ranks = [];
+          await Promise.all([
+            this.refreshLookupOptions('role'),
+            this.refreshLookupOptions('employmentType'),
+            this.refreshLookupOptions('status')
+          ]);
+        },
+        mergeLookupValues(...sources){
+          const seen = new Set();
+          const result = [];
+          for(const source of sources){
+            if(!Array.isArray(source)) continue;
+            for(const entry of source){
+              if(typeof entry !== 'string') continue;
+              const value = entry.trim();
+              if(!value) continue;
+              const key = value.toLocaleLowerCase();
+              if(seen.has(key)) continue;
+              seen.add(key);
+              result.push(value);
+            }
           }
+          return result.sort((a, b) => a.localeCompare(b));
+        },
+        defaultLookupValues(type){
+          if(type === 'role'){
+            return DEFAULT_ROLE_LOOKUPS;
+          }
+          if(type === 'employmentType'){
+            return DEFAULT_EMPLOYMENT_TYPE_LOOKUPS;
+          }
+          if(type === 'status'){
+            return DEFAULT_STATUS_LOOKUPS;
+          }
+          return [];
+        },
+        async collectLookupValues(type){
+          const map = {
+            role: ['role', 'position'],
+            employmentType: ['employmentType', 'rank'],
+            status: ['status']
+          };
+          const targets = map[type] || [type];
+          const results = await Promise.all(targets.map(async lookupType => {
+            try {
+              const values = await listLookups(lookupType);
+              return Array.isArray(values) ? values : [];
+            } catch (error) {
+              console.warn(`addEmployeeModal: failed to load ${lookupType} lookups`, error);
+              return [];
+            }
+          }));
+          return results.flat();
+        },
+        getLookupCollectionKey(type){
+          if(type === 'status'){
+            return 'statuses';
+          }
+          if(type === 'employmentType'){
+            return 'employmentTypes';
+          }
+          if(type === 'role'){
+            return 'roles';
+          }
+          return null;
+        },
+        getLookupLabel(type){
+          if(type === 'employmentType'){
+            return 'Employment Type';
+          }
+          if(type === 'status'){
+            return 'Status';
+          }
+          return 'Role';
+        },
+        async refreshLookupOptions(type){
+          const defaults = this.defaultLookupValues(type);
+          const values = await this.collectLookupValues(type);
+          const merged = this.mergeLookupValues(defaults, values);
+          const key = this.getLookupCollectionKey(type);
+          if(key){
+            this[key] = merged;
+          }
+          return merged;
         },
         reset(){
           this.name = '';
-          this.position = '';
+          this.role = '';
           this.status = '';
-          this.rank = '';
+          this.employmentType = '';
         },
         show(){
           this.lastActiveElement = null;
@@ -633,7 +827,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           return this.close();
         },
         valid(){
-          const required = [this.name, this.position, this.status, this.rank];
+          const required = [this.name, this.role, this.status, this.employmentType];
           return required.every(value => typeof value === 'string' && value.trim().length > 0);
         },
         async ensureDb(){
@@ -679,10 +873,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           try {
             const record = await addLookup(type, trimmed);
             const resolvedValue = record?.value || trimmed;
-            const key = type === 'status' ? 'statuses' : type === 'rank' ? 'ranks' : 'positions';
-            const current = Array.isArray(this[key]) ? this[key] : [];
-            if(!current.some(entry => entry.toLocaleLowerCase() === resolvedValue.toLocaleLowerCase())){
-              this[key] = [...current, resolvedValue].sort((a, b) => a.localeCompare(b));
+            const key = this.getLookupCollectionKey(type);
+            if(key){
+              const current = Array.isArray(this[key]) ? this[key] : [];
+              if(!current.some(entry => entry.toLocaleLowerCase() === resolvedValue.toLocaleLowerCase())){
+                this[key] = [...current, resolvedValue].sort((a, b) => a.localeCompare(b));
+              }
             }
             return resolvedValue;
           } catch (error) {
@@ -690,31 +886,43 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             return trimmed;
           }
         },
-        async addNew(type){
-          const labels = {
-            position: 'position title',
-            status: 'status',
-            rank: 'rank'
-          };
-
-          const label = labels[type] || 'value';
-          const rawValue = typeof window !== 'undefined' ? window.prompt(`Enter new ${label}`) : null;
-          const value = typeof rawValue === 'string' ? rawValue.trim() : '';
-          if(!value){
+        addNew(type){
+          const store = Alpine.store('app');
+          if(!store || typeof store.openLookupDialog !== 'function'){
+            console.warn('addEmployeeModal: lookup dialog is not available');
             return;
           }
 
-          const resolved = await this.ensureLookupValue(type, value);
-          if(!resolved){
+          const key = this.getLookupCollectionKey(type);
+          const existing = key && Array.isArray(this[key]) ? [...this[key]] : [];
+          const label = this.getLookupLabel(type);
+
+          store.showLookupModal = type;
+          store.openLookupDialog({
+            type,
+            label,
+            existingValues: existing,
+            onSuccess: value => {
+              Promise.resolve(this.handleLookupAdded(type, value)).catch(error => {
+                console.warn(`addEmployeeModal: failed to handle lookup add for ${type}`, error);
+              });
+            }
+          });
+        },
+        async handleLookupAdded(type, value){
+          const trimmed = typeof value === 'string' ? value.trim() : '';
+          if(!trimmed){
             return;
           }
 
-          if(type === 'position'){
-            this.position = resolved;
+          await this.refreshLookupOptions(type);
+
+          if(type === 'role'){
+            this.role = trimmed;
           } else if(type === 'status'){
-            this.status = resolved;
-          } else if(type === 'rank'){
-            this.rank = resolved;
+            this.status = trimmed;
+          } else if(type === 'employmentType'){
+            this.employmentType = trimmed;
           }
         },
         async save(){
@@ -747,27 +955,31 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             const baseEmployee = {
               id: generateId(),
               name: this.name.trim(),
-              position: this.position.trim(),
+              role: this.role.trim(),
+              employmentType: this.employmentType.trim(),
               status: this.status ? this.status.trim() : '',
-              rank: this.rank ? this.rank.trim() : '',
+              position: this.role.trim(),
+              rank: this.employmentType.trim(),
               createdAt: timestamp,
               updatedAt: timestamp
             };
 
-            const [positionValue, statusValue, rankValue] = await Promise.all([
-              this.ensureLookupValue('position', baseEmployee.position),
+            const [roleValue, statusValue, employmentTypeValue] = await Promise.all([
+              this.ensureLookupValue('role', baseEmployee.role),
               this.ensureLookupValue('status', baseEmployee.status),
-              this.ensureLookupValue('rank', baseEmployee.rank)
+              this.ensureLookupValue('employmentType', baseEmployee.employmentType)
             ]);
 
-            if(positionValue){
-              baseEmployee.position = positionValue;
+            if(roleValue){
+              baseEmployee.role = roleValue;
+              baseEmployee.position = roleValue;
             }
             if(statusValue){
               baseEmployee.status = statusValue;
             }
-            if(rankValue){
-              baseEmployee.rank = rankValue;
+            if(employmentTypeValue){
+              baseEmployee.employmentType = employmentTypeValue;
+              baseEmployee.rank = employmentTypeValue;
             }
 
             await db.employees.add(baseEmployee);
@@ -817,13 +1029,22 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         // Admin panel state
         showAddEmployeeModal:false, showAddRequirementModal:false, showBulkActionsModal:false,
         showEditEmployeeModal:false, showEditRequirementModal:false,
+        columnOptions:[
+          { key:'role', label:'Role' },
+          { key:'employmentType', label:'Type' },
+          { key:'status', label:'Status' },
+          { key:'seniorityHours', label:'Seniority' }
+        ],
+        showColumnMenu:false,
           searchQuery:'', roleFilter:'', statusFilter:'', reqStatusFilter:'', filteredEmployees:[], isFiltering:false, sortField:'firstName', sortDirection:'asc',
+          savedViews:[], selectedViewName:'',
           globalSearch:'', searchResults:[],
           globalSearchIndex:null, globalSearchIndexVersion:-1, globalSearchDataVersion:0, globalSearchData:[],
           virtualWindowSize:40, virtualStartIndex:0, virtualPaddingTop:0, virtualPaddingBottom:0, virtualRowHeight:68, virtualScrollInitialized:false,
         roleOptions:[...DEFAULT_ROLE_LOOKUPS],
         statusOptions:[...DEFAULT_STATUS_LOOKUPS],
         employmentTypeOptions:[...DEFAULT_EMPLOYMENT_TYPE_LOOKUPS],
+        inlineEditSnapshots:{},
         newEmployee:{firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:'', status:'Active'},
           newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
           editingEmployee:{}, editingRequirement:{},
@@ -844,6 +1065,26 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             ctx.fillRect(0, 0, width, height);
             ctx.restore();
           }
+        },
+
+        isColumnVisible(column){
+          const store = Alpine.store('app');
+          if(!store || typeof store.isColumnVisible !== 'function'){
+            return true;
+          }
+          return store.isColumnVisible(column);
+        },
+
+        visibleBaseColumnCount(){
+          if(!Array.isArray(this.columnOptions) || !this.columnOptions.length){
+            return Object.keys(DEFAULT_VISIBLE_COLUMNS).length;
+          }
+          return this.columnOptions.reduce((count, option) => {
+            if(!option || typeof option.key !== 'string'){
+              return count;
+            }
+            return count + (this.isColumnVisible(option.key) ? 1 : 0);
+          }, 0);
         },
 
         mergeLookupValues(...sources){
@@ -878,6 +1119,124 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           if(normalized === 'PRN'){ return 'PRN'; }
           if(normalized === 'CASUAL'){ return 'Casual'; }
           return value;
+        },
+
+        statusSelectClasses(status){
+          const value = typeof status === 'string' ? status.trim().toLowerCase() : '';
+          if(!value){
+            return '';
+          }
+          if(value === 'active'){
+            return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+          }
+          if(value === 'inactive'){
+            return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+          }
+          return '';
+        },
+
+        trackInlineEdit(emp, field){
+          if(!emp?.id || !field){
+            return;
+          }
+          if(!this.inlineEditSnapshots || typeof this.inlineEditSnapshots !== 'object'){
+            this.inlineEditSnapshots = {};
+          }
+          const key = `${emp.id}:${field}`;
+          this.inlineEditSnapshots[key] = emp[field] ?? '';
+        },
+
+        async handleInlineEmployeeUpdate(emp, field, value){
+          if(!emp?.id || !field || !this.db){
+            return;
+          }
+
+          const editableFields = ['role', 'status', 'employmentType'];
+          if(!editableFields.includes(field)){
+            return;
+          }
+
+          if(!this.inlineEditSnapshots || typeof this.inlineEditSnapshots !== 'object'){
+            this.inlineEditSnapshots = {};
+          }
+
+          const snapshotKey = `${emp.id}:${field}`;
+          const previousValue = Object.prototype.hasOwnProperty.call(this.inlineEditSnapshots, snapshotKey)
+            ? this.inlineEditSnapshots[snapshotKey]
+            : emp[field];
+          delete this.inlineEditSnapshots[snapshotKey];
+
+          const rawValue = value ?? emp[field] ?? '';
+          const sanitizedValue = typeof rawValue === 'string' ? rawValue.trim() : (rawValue ?? '');
+          const normalizedPrevious = typeof previousValue === 'string' ? previousValue.trim() : (previousValue ?? '');
+
+          if(sanitizedValue === normalizedPrevious){
+            if(emp[field] !== sanitizedValue){
+              emp[field] = sanitizedValue;
+            }
+            return;
+          }
+
+          const updatedAt = new Date().toISOString();
+          const baseRecord = this.employees.find(e => e.id === emp.id) || emp;
+          const updatedRecord = {
+            ...baseRecord,
+            [field]: sanitizedValue,
+            updatedAt
+          };
+
+          if(baseRecord?.createdAt && !updatedRecord.createdAt){
+            updatedRecord.createdAt = baseRecord.createdAt;
+          }
+
+          try{
+            await putEmployeeRecord(this.db, updatedRecord);
+
+            const applyUpdate = (collection) => {
+              if(!Array.isArray(collection)){
+                return;
+              }
+              const target = collection.find(e => e.id === emp.id);
+              if(target){
+                target[field] = sanitizedValue;
+                target.updatedAt = updatedAt;
+              }
+            };
+
+            applyUpdate(this.employees);
+            applyUpdate(this.filteredEmployees);
+
+            emp[field] = sanitizedValue;
+            emp.updatedAt = updatedAt;
+
+            this.ensureLookupValue(field, sanitizedValue);
+            this.touchGlobalSearchVersion();
+            this.filterEmployees();
+
+            const labels = {
+              role: 'Role',
+              status: 'Status',
+              employmentType: 'Employment Type'
+            };
+            const formattedValue = sanitizedValue
+              ? (field === 'employmentType'
+                  ? (this.formatEmploymentTypeLabel(sanitizedValue) || sanitizedValue)
+                  : sanitizedValue)
+              : 'cleared';
+            const message = sanitizedValue
+              ? `${labels[field]} updated to ${formattedValue}`
+              : `${labels[field]} cleared`;
+            this.notify(message);
+          } catch(error){
+            console.error('Failed to update employee inline', error);
+            const revertValue = typeof previousValue === 'string' ? previousValue : (previousValue ?? '');
+            emp[field] = revertValue;
+            const target = this.employees.find(e => e.id === emp.id);
+            if(target){
+              target[field] = revertValue;
+            }
+            this.notify('Failed to save change', 'var(--danger)');
+          }
         },
 
         appendLookupValue(type, value){
@@ -1122,6 +1481,18 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
 
         async init(){
+          const store = Alpine.store('app');
+          if(store){
+            const columnList = Array.isArray(this.columnOptions) ? this.columnOptions : [];
+            const defaults = columnList.length
+              ? Object.fromEntries(columnList.filter(option => option?.key).map(option => [option.key, true]))
+              : { ...DEFAULT_VISIBLE_COLUMNS };
+            if(typeof store.initColumnPreferences === 'function'){
+              store.initColumnPreferences(defaults);
+            } else if(typeof store.ensureColumnVisibility === 'function'){
+              store.ensureColumnVisibility(Object.keys(defaults));
+            }
+          }
           await this.initDB();
           if (this.loadError || !this.db) {
             this.$nextTick(() => this.$root?.removeAttribute('x-cloak'));
@@ -1137,6 +1508,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
           await this.initActivityLog();
           await this.loadData();
+          this.loadSavedViewsFromStorage();
           if (this.loadError || !this.db) return;
           this.setAppReady(true);
           const s = await this.db.settings.get('app');
@@ -3083,6 +3455,152 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.isFiltering = Boolean(trimmedQuery || this.roleFilter || this.statusFilter || this.reqStatusFilter);
           this.filteredEmployees = this.isFiltering ? filtered : [];
           this.resetVirtualWindow();
+          this.updateSelectedViewMatch();
+        },
+        get activeFilterChips(){
+          const chips = [];
+          if(this.roleFilter){
+            chips.push({ key: 'roleFilter', label: 'Role', value: this.roleFilter });
+          }
+          if(this.statusFilter){
+            chips.push({ key: 'statusFilter', label: 'Status', value: this.statusFilter });
+          }
+          if(this.reqStatusFilter){
+            chips.push({ key: 'reqStatusFilter', label: 'Expiry', value: this.formatRequirementStatusLabel(this.reqStatusFilter) });
+          }
+          return chips;
+        },
+        formatRequirementStatusLabel(value){
+          if(!value) return '';
+          const labels = {
+            Completed: 'Completed',
+            Expired: 'Expired',
+            NotCompleted: 'Incomplete',
+            NotRequired: 'Not Required'
+          };
+          return labels[value] || value;
+        },
+        clearFilterChip(key){
+          if(key === 'roleFilter'){
+            this.roleFilter = '';
+          } else if(key === 'statusFilter'){
+            this.statusFilter = '';
+          } else if(key === 'reqStatusFilter'){
+            this.reqStatusFilter = '';
+          }
+          this.filterEmployees();
+        },
+        getCurrentFilterState(){
+          return {
+            searchQuery: this.searchQuery || '',
+            roleFilter: this.roleFilter || '',
+            statusFilter: this.statusFilter || '',
+            reqStatusFilter: this.reqStatusFilter || ''
+          };
+        },
+        filtersMatchView(view){
+          if(!view || typeof view !== 'object'){
+            return false;
+          }
+          const current = this.getCurrentFilterState();
+          const filters = view.filters || {};
+          return (
+            (filters.searchQuery || '') === current.searchQuery &&
+            (filters.roleFilter || '') === current.roleFilter &&
+            (filters.statusFilter || '') === current.statusFilter &&
+            (filters.reqStatusFilter || '') === current.reqStatusFilter
+          );
+        },
+        updateSelectedViewMatch(){
+          const match = this.savedViews.find((view) => this.filtersMatchView(view));
+          this.selectedViewName = match ? match.name : '';
+        },
+        promptAndSaveView(){
+          const defaultName = this.selectedViewName || '';
+          const name = typeof window !== 'undefined'
+            ? (window.prompt('Name this view', defaultName) || '').trim()
+            : '';
+          if(!name){
+            return;
+          }
+          const filters = this.getCurrentFilterState();
+          const existingIndex = this.savedViews.findIndex((view) => view.name.toLowerCase() === name.toLowerCase());
+          const updatedView = { name, filters };
+          if(existingIndex >= 0){
+            const updated = [...this.savedViews];
+            updated[existingIndex] = updatedView;
+            this.savedViews = updated;
+          } else {
+            this.savedViews = [...this.savedViews.filter((view) => view.name.toLowerCase() !== name.toLowerCase()), updatedView];
+          }
+          this.selectedViewName = name;
+          this.persistViews();
+          this.updateSelectedViewMatch();
+          if(typeof this.notify === 'function'){
+            this.notify('View saved.', 'var(--accent)');
+          }
+        },
+        applyViewByName(name){
+          if(!name){
+            this.selectedViewName = '';
+            return;
+          }
+          const view = this.savedViews.find((entry) => entry.name === name);
+          if(!view){
+            return;
+          }
+          this.applyView(view);
+        },
+        applyView(view){
+          if(!view){
+            return;
+          }
+          const filters = view.filters || {};
+          this.searchQuery = filters.searchQuery || '';
+          this.roleFilter = filters.roleFilter || '';
+          this.statusFilter = filters.statusFilter || '';
+          this.reqStatusFilter = filters.reqStatusFilter || '';
+          this.selectedViewName = view.name;
+          this.filterEmployees();
+        },
+        loadSavedViewsFromStorage(){
+          if(typeof window === 'undefined' || !window.localStorage){
+            return;
+          }
+          try {
+            const raw = window.localStorage.getItem(FILTER_VIEWS_STORAGE_KEY);
+            if(!raw){
+              return;
+            }
+            const parsed = JSON.parse(raw);
+            if(Array.isArray(parsed)){
+              const views = parsed
+                .filter((view) => view && typeof view.name === 'string' && view.name.trim())
+                .map((view) => ({
+                  name: view.name.trim(),
+                  filters: {
+                    searchQuery: view.filters?.searchQuery || '',
+                    roleFilter: view.filters?.roleFilter || '',
+                    statusFilter: view.filters?.statusFilter || '',
+                    reqStatusFilter: view.filters?.reqStatusFilter || ''
+                  }
+                }));
+              this.savedViews = views;
+            }
+          } catch (error) {
+            console.warn('Failed to load saved views', error);
+          }
+          this.updateSelectedViewMatch();
+        },
+        persistViews(){
+          if(typeof window === 'undefined' || !window.localStorage){
+            return;
+          }
+          try {
+            window.localStorage.setItem(FILTER_VIEWS_STORAGE_KEY, JSON.stringify(this.savedViews));
+          } catch (error) {
+            console.warn('Failed to persist saved views', error);
+          }
         },
         performGlobalSearch(query){
           const requirementSource = this.orderedVisibleRequirements();
@@ -3328,7 +3846,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           return sorted.slice(start, end);
         },
         visibleColumnCount(){
-          return 4 + this.orderedVisibleRequirements().length;
+          const baseColumns = 1 + this.visibleBaseColumnCount();
+          return baseColumns + this.orderedVisibleRequirements().length;
         },
         measureVirtualRowHeight(){
           const container = this.$refs.virtualScroll;

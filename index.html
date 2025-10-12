@@ -46,6 +46,14 @@
     .command-toolbar__group--primary{padding-bottom:.25rem;border-bottom:1px solid var(--line)}
     .command-toolbar__group--secondary{padding-top:.25rem}
     .sticky-col{position:sticky;left:0;z-index:10;background:var(--card);min-width:14rem}
+    .table-header-sticky th{position:sticky;top:0;background:rgba(255,255,255,0.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:5;border-bottom:1px solid var(--line)}
+    .dark .table-header-sticky th{background:rgba(17,24,39,0.82)}
+    .table-header-sticky th.sticky-col{z-index:30}
+    .backdrop-blur{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+    .column-menu{position:absolute;right:0;margin-top:.5rem;min-width:12rem;background:var(--card);border:1px solid var(--line);border-radius:.75rem;box-shadow:0 20px 35px rgba(15,23,42,0.18);z-index:70;padding:.5rem}
+    .column-menu label{display:flex;align-items:center;gap:.65rem;padding:.4rem .5rem;border-radius:.5rem;cursor:pointer;font-size:.85rem}
+    .column-menu label:hover{background:rgba(15,23,42,0.06)}
+    .dark .column-menu label:hover{background:rgba(255,255,255,0.08)}
     .table-striped th,.table-striped td{vertical-align:middle}
     .table-striped tbody tr:nth-child(odd){background-color:var(--card)}
     .table-striped tbody tr:nth-child(even){background-color:rgba(17,24,39,0.03)}
@@ -143,58 +151,103 @@
           <img src="icon-192.svg" alt="Maplewood icon" class="w-10 h-10 rounded-lg shadow-sm">
           <h1 class="text-2xl font-bold">Maplewood Compliance Matrix</h1>
         </div>
-        <div class="search-float w-full md:w-auto">
-          <div class="relative w-full md:w-72 md:max-w-md" @keydown.escape.window="dismissSearchResults()">
-            <input
-              id="global-search"
-              aria-label="Search employees and requirements"
-              x-model="globalSearch"
-              @input="performGlobalSearch(globalSearch)"
-              type="text"
-              placeholder="Search..."
-              class="form-field form-field--search w-full"
-            />
-            <!-- Added for accessibility: ensure global search field has an accessible label -->
-            <button
-              x-show="globalSearch"
-              @click="clearGlobalSearch"
-              class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
-            >
-              <i data-feather="x" class="w-4 h-4"></i>
-            </button>
+        <div class="flex flex-col md:flex-row md:items-center gap-2 w-full md:w-auto">
+          <div class="search-float w-full md:w-auto">
+            <div class="relative w-full md:w-72 md:max-w-md" @keydown.escape.window="dismissSearchResults()">
+              <input
+                id="global-search"
+                aria-label="Search employees and requirements"
+                x-model="globalSearch"
+                @input="performGlobalSearch(globalSearch)"
+                type="text"
+                placeholder="Search..."
+                class="form-field form-field--search w-full"
+              />
+              <!-- Added for accessibility: ensure global search field has an accessible label -->
+              <button
+                x-show="globalSearch"
+                @click="clearGlobalSearch"
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
+              >
+                <i data-feather="x" class="w-4 h-4"></i>
+              </button>
 
-            <div
-              x-show="searchResults.length"
-              x-transition
-              class="search-results-panel"
-              @click.outside="dismissSearchResults()"
+              <div
+                x-show="searchResults.length"
+                x-transition
+                class="search-results-panel"
+                @click.outside="dismissSearchResults()"
+              >
+                <template x-for="result in searchResults" :key="`${result.item.id}-${result.item.type}`">
+                  <button
+                    type="button"
+                    class="search-result-item"
+                    @click="focusSearchResult(result)"
+                  >
+                    <span class="search-result-icon">
+                      <i
+                        :data-feather="result.item.type === 'employee' ? 'user' : 'target'"
+                        class="w-4 h-4"
+                      ></i>
+                    </span>
+                    <span class="min-w-0 flex-1">
+                      <span class="search-result-type" x-text="result.item.type === 'employee' ? 'Employee' : 'Requirement'"></span>
+                      <span class="block text-sm font-semibold" x-html="highlightText(result.item.label)"></span>
+                      <template x-if="result.item.type === 'employee'">
+                        <span class="block text-xs" style="color:var(--muted)">
+                          <span x-show="result.item.meta?.role" x-html="highlightText(result.item.meta?.role)"></span>
+                          <template x-if="result.item.meta?.role && result.item.meta?.employeeId">
+                            <span class="mx-1">•</span>
+                          </template>
+                          <span x-show="result.item.meta?.employeeId" x-html="highlightText(result.item.meta?.employeeId)"></span>
+                        </span>
+                      </template>
+                    </span>
+                  </button>
+                </template>
+              </div>
+            </div>
+          </div>
+          <div
+            class="relative self-end md:self-auto"
+            @keydown.escape.window="showColumnMenu = false"
+          >
+            <button
+              type="button"
+              id="column-visibility-button"
+              class="btn"
+              @click="showColumnMenu = !showColumnMenu"
+              :aria-expanded="showColumnMenu"
+              aria-haspopup="true"
             >
-              <template x-for="result in searchResults" :key="`${result.item.id}-${result.item.type}`">
-                <button
-                  type="button"
-                  class="search-result-item"
-                  @click="focusSearchResult(result)"
-                >
-                  <span class="search-result-icon">
-                    <i
-                      :data-feather="result.item.type === 'employee' ? 'user' : 'target'"
-                      class="w-4 h-4"
-                    ></i>
-                  </span>
-                  <span class="min-w-0 flex-1">
-                    <span class="search-result-type" x-text="result.item.type === 'employee' ? 'Employee' : 'Requirement'"></span>
-                    <span class="block text-sm font-semibold" x-html="highlightText(result.item.label)"></span>
-                    <template x-if="result.item.type === 'employee'">
-                      <span class="block text-xs" style="color:var(--muted)">
-                        <span x-show="result.item.meta?.role" x-html="highlightText(result.item.meta?.role)"></span>
-                        <template x-if="result.item.meta?.role && result.item.meta?.employeeId">
-                          <span class="mx-1">•</span>
-                        </template>
-                        <span x-show="result.item.meta?.employeeId" x-html="highlightText(result.item.meta?.employeeId)"></span>
-                      </span>
-                    </template>
-                  </span>
-                </button>
+              <i data-feather="columns" class="w-4 h-4"></i>
+              <span>Columns</span>
+            </button>
+            <div
+              x-show="showColumnMenu"
+              x-transition.origin-top-right
+              x-cloak
+              class="column-menu"
+              role="menu"
+              aria-labelledby="column-visibility-button"
+              @click.outside="showColumnMenu = false"
+              @keydown.escape.stop.prevent="showColumnMenu = false"
+            >
+              <p class="text-xs font-semibold mb-1" style="color:var(--muted); text-transform:uppercase; letter-spacing:.08em">
+                Show Columns
+              </p>
+              <template x-for="option in columnOptions" :key="option.key">
+                <label :for="`column-toggle-${option.key}`">
+                  <input
+                    type="checkbox"
+                    class="checkbox"
+                    :id="`column-toggle-${option.key}`"
+                    x-bind:checked="$store.app.isColumnVisible(option.key)"
+                    x-bind:aria-checked="$store.app.isColumnVisible(option.key)"
+                    @change="$store.app.setColumnVisibility(option.key, $event.target.checked)"
+                  />
+                  <span x-text="option.label"></span>
+                </label>
               </template>
             </div>
           </div>
@@ -293,7 +346,7 @@
     <div class="card rounded-lg shadow overflow-hidden">
       <div class="overflow-x-auto virtual-scroll" x-ref="virtualScroll" @scroll.passive="handleVirtualScroll">
         <table id="employee-table" x-ref="employeeTable" class="table-striped min-w-full divide-y" style="border-color:var(--line)">
-          <thead class="bg-gray-50 dark:bg-gray-900">
+          <thead class="bg-gray-50 dark:bg-gray-900 table-header-sticky">
             <tr>
               <th @click="sortEmployees('firstName')" class="sticky-col px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer" style="color:var(--muted)">
                 <div class="flex items-center">
@@ -301,22 +354,48 @@
                   <span x-show="sortField==='firstName'" x-text="sortDirection==='asc' ? '▲' : '▼'" class="ml-1"></span>
                 </div>
               </th>
-              <th @click="sortEmployees('role')" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer" style="color:var(--muted)">
+              <th
+                x-show="$store.app.isColumnVisible('role')"
+                @click="sortEmployees('role')"
+                class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer"
+                style="color:var(--muted)"
+              >
                 <div class="flex items-center">
                   <span>Role</span>
                   <span x-show="sortField==='role'" x-text="sortDirection==='asc' ? '▲' : '▼'" class="ml-1"></span>
                 </div>
               </th>
-              <th @click="sortEmployees('employmentType')" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer" style="color:var(--muted)">
+              <th
+                x-show="$store.app.isColumnVisible('employmentType')"
+                @click="sortEmployees('employmentType')"
+                class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer"
+                style="color:var(--muted)"
+              >
                 <div class="flex items-center">
                   <span>Type</span>
                   <span x-show="sortField==='employmentType'" x-text="sortDirection==='asc' ? '▲' : '▼'" class="ml-1"></span>
                 </div>
               </th>
-              <th @click="sortEmployees('status')" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer" style="color:var(--muted)">
+              <th
+                x-show="$store.app.isColumnVisible('status')"
+                @click="sortEmployees('status')"
+                class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer"
+                style="color:var(--muted)"
+              >
                 <div class="flex items-center">
                   <span>Status</span>
                   <span x-show="sortField==='status'" x-text="sortDirection==='asc' ? '▲' : '▼'" class="ml-1"></span>
+                </div>
+              </th>
+              <th
+                x-show="$store.app.isColumnVisible('seniorityHours')"
+                @click="sortEmployees('seniorityHours')"
+                class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer"
+                style="color:var(--muted)"
+              >
+                <div class="flex items-center">
+                  <span>Seniority</span>
+                  <span x-show="sortField==='seniorityHours'" x-text="sortDirection==='asc' ? '▲' : '▼'" class="ml-1"></span>
                 </div>
               </th>
               <template x-for="req in orderedVisibleRequirements()" :key="req.id">
@@ -375,10 +454,52 @@
                     </div>
                   </div>
                 </td>
-                <td class="px-4 py-3 text-sm" x-html="highlightText(emp.role)"></td>
-                <td class="px-4 py-3 text-sm" x-html="highlightText(emp.employmentType)"></td>
+                <td class="px-4 py-3 text-sm">
+                  <select
+                    class="select text-sm"
+                    x-model="emp.role"
+                    @focus="trackInlineEdit(emp, 'role')"
+                    @change="handleInlineEmployeeUpdate(emp, 'role', $event.target.value)"
+                    :aria-label="`Role for ${emp.firstName} ${emp.lastName}`"
+                  >
+                    <option value="">Select Role</option>
+                    <template x-for="role in roleOptions" :key="role">
+                      <option :value="role" x-text="role"></option>
+                    </template>
+                  </select>
+                </td>
+                <td class="px-4 py-3 text-sm">
+                  <select
+                    class="select text-sm"
+                    x-model="emp.employmentType"
+                    @focus="trackInlineEdit(emp, 'employmentType')"
+                    @change="handleInlineEmployeeUpdate(emp, 'employmentType', $event.target.value)"
+                    :aria-label="`Employment type for ${emp.firstName} ${emp.lastName}`"
+                  >
+                    <option value="">Select Employment Type</option>
+                    <template x-for="type in employmentTypeOptions" :key="type">
+                      <option :value="type" x-text="formatEmploymentTypeLabel(type) || type"></option>
+                    </template>
+                  </select>
+                </td>
                 <td class="px-4 py-3">
-                  <span :class="emp.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'" class="status-badge px-2 py-1 text-xs rounded-full" x-html="highlightText(emp.status)"></span>
+                  <select
+                    class="select text-sm font-semibold status-badge"
+                    :class="statusSelectClasses(emp.status)"
+                    style="min-width:8rem;"
+                    x-model="emp.status"
+                    @focus="trackInlineEdit(emp, 'status')"
+                    @change="handleInlineEmployeeUpdate(emp, 'status', $event.target.value)"
+                    :aria-label="`Status for ${emp.firstName} ${emp.lastName}`"
+                  >
+                    <option value="">Select Status</option>
+                    <template x-for="status in statusOptions" :key="status">
+                      <option :value="status" x-text="status"></option>
+                    </template>
+                  </select>
+                </td>
+                <td class="px-4 py-3 text-sm" x-show="$store.app.isColumnVisible('seniorityHours')">
+                  <span x-html="emp.seniorityHours != null && emp.seniorityHours !== '' ? highlightText(emp.seniorityHours) : '-'"></span>
                 </td>
                   <template x-for="req in orderedVisibleRequirements()" :key="req.id">
                     <td class="px-4 py-3">
@@ -556,6 +677,41 @@
           </select>
         </div>
       </div>
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
+        <div class="flex flex-wrap items-center gap-2" x-show="activeFilterChips.length" x-transition>
+          <template x-for="chip in activeFilterChips" :key="chip.key">
+            <span class="badge" style="gap:0.35rem;">
+              <span x-text="`${chip.label}: ${chip.value}`"></span>
+              <button
+                type="button"
+                class="inline-flex items-center justify-center w-5 h-5 rounded-full focus-ring"
+                style="background:transparent;border:none;color:inherit;font-size:0.75rem;line-height:1;"
+                :aria-label="`Remove ${chip.label} filter`"
+                @click="clearFilterChip(chip.key)"
+              >
+                ×
+              </button>
+            </span>
+          </template>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 md:justify-end">
+          <button type="button" class="btn btn-accent" @click="promptAndSaveView()">Save View</button>
+          <div class="flex items-center gap-2">
+            <label for="saved-views" class="text-sm font-medium" style="color:var(--muted)">Views</label>
+            <select
+              id="saved-views"
+              class="form-field w-full md:w-48"
+              x-model="selectedViewName"
+              @change="applyViewByName(selectedViewName)"
+            >
+              <option value="">Select a view</option>
+              <template x-for="view in savedViews" :key="view.name">
+                <option :value="view.name" x-text="view.name"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -608,64 +764,64 @@
                 />
               </div>
               <div>
-                <label for="add-emp-position" class="block text-sm font-medium mb-1">Position</label>
-                <div class="flex items-center gap-2">
-                  <select id="add-emp-position" x-model="position" class="form-field w-full">
-                    <option value="">Select position</option>
-                    <template x-for="item in positions" :key="item">
-                      <option :value="item" x-text="item"></option>
-                    </template>
-                  </select>
+                <div class="flex items-center justify-between text-sm font-medium mb-1">
+                  <label for="add-emp-role">Role</label>
                   <button
                     type="button"
-                    @click="addNew('position')"
-                    class="px-2 py-1 rounded"
-                    style="border:1px solid var(--line); background:var(--card); color:var(--text);"
-                    aria-label="Add new position"
+                    class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
+                    style="border-color:var(--line); color:var(--accent);"
+                    @click="addNew('role')"
+                    aria-label="Add new role"
                   >
-                    +
+                    <i data-feather="plus" class="w-3.5 h-3.5"></i>
                   </button>
                 </div>
+                <select id="add-emp-role" x-model="role" class="form-field w-full">
+                  <option value="">Select role</option>
+                  <template x-for="item in roles" :key="item">
+                    <option :value="item" x-text="item"></option>
+                  </template>
+                </select>
               </div>
               <div>
-                <label for="add-emp-status" class="block text-sm font-medium mb-1">Status</label>
-                <div class="flex items-center gap-2">
-                  <select id="add-emp-status" x-model="status" class="form-field w-full">
-                    <option value="">Select status</option>
-                    <template x-for="item in statuses" :key="item">
-                      <option :value="item" x-text="item"></option>
-                    </template>
-                  </select>
+                <div class="flex items-center justify-between text-sm font-medium mb-1">
+                  <label for="add-emp-employment-type">Employment Type</label>
                   <button
                     type="button"
+                    class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
+                    style="border-color:var(--line); color:var(--accent);"
+                    @click="addNew('employmentType')"
+                    aria-label="Add new employment type"
+                  >
+                    <i data-feather="plus" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+                <select id="add-emp-employment-type" x-model="employmentType" class="form-field w-full">
+                  <option value="">Select employment type</option>
+                  <template x-for="item in employmentTypes" :key="item">
+                    <option :value="item" x-text="item"></option>
+                  </template>
+                </select>
+              </div>
+              <div>
+                <div class="flex items-center justify-between text-sm font-medium mb-1">
+                  <label for="add-emp-status">Status</label>
+                  <button
+                    type="button"
+                    class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
+                    style="border-color:var(--line); color:var(--accent);"
                     @click="addNew('status')"
-                    class="px-2 py-1 rounded"
-                    style="border:1px solid var(--line); background:var(--card); color:var(--text);"
                     aria-label="Add new status"
                   >
-                    +
+                    <i data-feather="plus" class="w-3.5 h-3.5"></i>
                   </button>
                 </div>
-              </div>
-              <div>
-                <label for="add-emp-rank" class="block text-sm font-medium mb-1">Rank</label>
-                <div class="flex items-center gap-2">
-                  <select id="add-emp-rank" x-model="rank" class="form-field w-full">
-                    <option value="">Select rank</option>
-                    <template x-for="item in ranks" :key="item">
-                      <option :value="item" x-text="item"></option>
-                    </template>
-                  </select>
-                  <button
-                    type="button"
-                    @click="addNew('rank')"
-                    class="px-2 py-1 rounded"
-                    style="border:1px solid var(--line); background:var(--card); color:var(--text);"
-                    aria-label="Add new rank"
-                  >
-                    +
-                  </button>
-                </div>
+                <select id="add-emp-status" x-model="status" class="form-field w-full">
+                  <option value="">Select status</option>
+                  <template x-for="item in statuses" :key="item">
+                    <option :value="item" x-text="item"></option>
+                  </template>
+                </select>
               </div>
             </div>
           </div>
