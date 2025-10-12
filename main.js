@@ -1233,6 +1233,22 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           return '';
         },
 
+        statusCellClass(status){
+          const value = typeof status === 'string' ? status.toLowerCase() : '';
+          switch(value){
+            case 'compliant':
+              return 'requirement-status-cell--compliant';
+            case 'expiring':
+              return 'requirement-status-cell--expiring';
+            case 'overdue':
+              return 'requirement-status-cell--overdue';
+            case 'not-required':
+              return 'requirement-status-cell--not-required';
+            default:
+              return 'requirement-status-cell--incomplete';
+          }
+        },
+
         trackInlineEdit(emp, field){
           if(!emp?.id || !field){
             return;
