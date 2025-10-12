@@ -17,6 +17,7 @@ import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup, 
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Recreation', 'Reception', 'Rehab Assistant', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
+const THEME_STORAGE_KEY = 'maplewood:theme';
 const COLUMN_VISIBILITY_STORAGE_KEY = 'maplewood:employeeTable:visibleColumns';
 const DEFAULT_VISIBLE_COLUMNS = Object.freeze({
   role: true,
@@ -94,6 +95,102 @@ function resolveXlsxFromGlobals(){
   if(typeof window === 'undefined') return null;
   return window.__xlsxModule || window.XLSX || null;
 }
+
+function getThemeStorage(){
+  if(typeof window === 'undefined') return null;
+  try {
+    return window.localStorage || null;
+  } catch (error) {
+    console.warn('Theme preference: localStorage unavailable', error);
+    return null;
+  }
+}
+
+function readStoredThemePreference(){
+  const storage = getThemeStorage();
+  if(!storage) return null;
+  try {
+    return storage.getItem(THEME_STORAGE_KEY);
+  } catch (error) {
+    console.warn('Theme preference: failed to read preference', error);
+    return null;
+  }
+}
+
+function hasStoredThemePreference(){
+  const value = readStoredThemePreference();
+  return value === 'dark' || value === 'light';
+}
+
+function persistThemePreference(value){
+  const storage = getThemeStorage();
+  if(!storage) return;
+  try {
+    if(value === null){
+      storage.removeItem(THEME_STORAGE_KEY);
+    } else {
+      storage.setItem(THEME_STORAGE_KEY, value);
+    }
+  } catch (error) {
+    console.warn('Theme preference: failed to persist preference', error);
+  }
+}
+
+function systemPrefersDark(){
+  if(typeof window === 'undefined' || typeof window.matchMedia !== 'function'){
+    return false;
+  }
+  try {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  } catch (error) {
+    return false;
+  }
+}
+
+function applyDocumentDarkMode(isDark){
+  if(typeof document === 'undefined') return;
+  document.documentElement.classList.toggle('dark', Boolean(isDark));
+  document.documentElement.style.colorScheme = Boolean(isDark) ? 'dark' : 'light';
+}
+
+function resolveInitialDarkMode(){
+  const stored = readStoredThemePreference();
+  if(stored === 'dark') return true;
+  if(stored === 'light') return false;
+  return systemPrefersDark();
+}
+
+function watchSystemThemeChange(callback){
+  if(typeof window === 'undefined' || typeof window.matchMedia !== 'function'){
+    return () => {};
+  }
+  let mediaQuery;
+  try {
+    mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  } catch (error) {
+    return () => {};
+  }
+  if(!mediaQuery) return () => {};
+  const handler = (event) => {
+    try {
+      callback(Boolean(event.matches));
+    } catch (error) {
+      console.warn('Theme preference: system preference handler failed', error);
+    }
+  };
+  if(typeof mediaQuery.addEventListener === 'function'){
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }
+  if(typeof mediaQuery.addListener === 'function'){
+    mediaQuery.addListener(handler);
+    return () => mediaQuery.removeListener(handler);
+  }
+  return () => {};
+}
+
+const initialDarkMode = resolveInitialDarkMode();
+applyDocumentDarkMode(initialDarkMode);
 
 function rememberXlsxModule(mod){
   if(!mod) return null;
@@ -999,7 +1096,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
     const app = () => ({
         loadError:'',
-        darkMode:false, showImportModal:false, showExportDropdown:false,
+        darkMode:initialDarkMode, showImportModal:false, showExportDropdown:false,
         showSettingsModal:false, settingsSortable:null,
         showActivityLogModal:false,
         appReady:false,
@@ -1010,6 +1107,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         templateApplyLoading:false,
         importHeaders: [], // ensure array exists before templates iterate over it
         highlightHelpButton:false,
+        themeMediaCleanup:null,
         tourMarkedSeen:false,
         tourPromptActive:false,
         // Import UI state
@@ -1511,9 +1609,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.loadSavedViewsFromStorage();
           if (this.loadError || !this.db) return;
           this.setAppReady(true);
-          const s = await this.db.settings.get('app');
-          if (s?.darkMode) this.darkMode = true;
-          document.documentElement.classList.toggle('dark', this.darkMode);
+          this.applyDarkMode(this.darkMode);
+          this.setupThemeWatcher();
 
           // Ensure our custom chart plugin exists before charts initialize
           this.chartBgPlugin.fullSize = true;
@@ -2233,13 +2330,43 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             return null;
           }
         },
+        applyDarkMode(isDark){
+          const next = Boolean(isDark);
+          this.darkMode = next;
+          applyDocumentDarkMode(next);
+        },
+        setupThemeWatcher(){
+          if(this.themeMediaCleanup){
+            this.themeMediaCleanup();
+            this.themeMediaCleanup = null;
+          }
+          if(hasStoredThemePreference()){
+            return;
+          }
+          this.themeMediaCleanup = watchSystemThemeChange((matches) => {
+            if(hasStoredThemePreference()){
+              this.teardownThemeWatcher();
+              return;
+            }
+            this.applyDarkMode(matches);
+            this.renderComplianceChart();
+          });
+        },
+        teardownThemeWatcher(){
+          if(this.themeMediaCleanup){
+            this.themeMediaCleanup();
+            this.themeMediaCleanup = null;
+          }
+        },
         async toggleDarkMode(){
-          this.darkMode=!this.darkMode;
-          document.documentElement.classList.toggle('dark', this.darkMode);
+          const next=!this.darkMode;
+          this.applyDarkMode(next);
+          this.teardownThemeWatcher();
           this.renderComplianceChart();
-          if (this.loadError || !this.db) return;
-          const prev=await this.db.settings.get('app')||{id:'app'};
-          await this.db.settings.put({...prev, darkMode:this.darkMode});
+          persistThemePreference(next ? 'dark' : 'light');
+          if(!hasStoredThemePreference()){
+            this.setupThemeWatcher();
+          }
         },
         initializeFeatherIcons() {
           try {
