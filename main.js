@@ -259,6 +259,7 @@ window.Alpine = Alpine;
 // Global store for shared UI state
 Alpine.store('app', {
   showImportModal: false,
+  showLookupModal: '',
   toast: null,
   lookupDialog: {
     open: false,
@@ -280,6 +281,7 @@ Alpine.store('app', {
     }
 
     const dialog = this.lookupDialog;
+    this.showLookupModal = typeof type === 'string' ? type : '';
     dialog.type = String(type);
     dialog.label = label || 'Value';
     dialog.value = typeof initialValue === 'string' ? initialValue : '';
@@ -329,6 +331,7 @@ Alpine.store('app', {
     dialog.initializing = false;
     dialog.existing = [];
     dialog.onResolve = null;
+    this.showLookupModal = '';
   },
   async submitLookupDialog(){
     const dialog = this.lookupDialog;
@@ -452,12 +455,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         open: false,
         saving: false,
         name: '',
-        position: '',
+        role: '',
         status: '',
-        rank: '',
-        positions: [],
+        employmentType: '',
+        roles: [],
         statuses: [],
-        ranks: [],
+        employmentTypes: [],
         lastActiveElement: null,
         focusTrapCleanup: null,
         db: null,
@@ -483,27 +486,95 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           await this.loadLookups();
         },
         async loadLookups(){
-          try {
-            const [positions, statuses, ranks] = await Promise.all([
-              listLookups('position'),
-              listLookups('status'),
-              listLookups('rank')
-            ]);
-            this.positions = Array.isArray(positions) ? positions : [];
-            this.statuses = Array.isArray(statuses) ? statuses : [];
-            this.ranks = Array.isArray(ranks) ? ranks : [];
-          } catch (error) {
-            console.warn('addEmployeeModal: failed to preload lookup values.', error);
-            this.positions = [];
-            this.statuses = [];
-            this.ranks = [];
+          await Promise.all([
+            this.refreshLookupOptions('role'),
+            this.refreshLookupOptions('employmentType'),
+            this.refreshLookupOptions('status')
+          ]);
+        },
+        mergeLookupValues(...sources){
+          const seen = new Set();
+          const result = [];
+          for(const source of sources){
+            if(!Array.isArray(source)) continue;
+            for(const entry of source){
+              if(typeof entry !== 'string') continue;
+              const value = entry.trim();
+              if(!value) continue;
+              const key = value.toLocaleLowerCase();
+              if(seen.has(key)) continue;
+              seen.add(key);
+              result.push(value);
+            }
           }
+          return result.sort((a, b) => a.localeCompare(b));
+        },
+        defaultLookupValues(type){
+          if(type === 'role'){
+            return DEFAULT_ROLE_LOOKUPS;
+          }
+          if(type === 'employmentType'){
+            return DEFAULT_EMPLOYMENT_TYPE_LOOKUPS;
+          }
+          if(type === 'status'){
+            return DEFAULT_STATUS_LOOKUPS;
+          }
+          return [];
+        },
+        async collectLookupValues(type){
+          const map = {
+            role: ['role', 'position'],
+            employmentType: ['employmentType', 'rank'],
+            status: ['status']
+          };
+          const targets = map[type] || [type];
+          const results = await Promise.all(targets.map(async lookupType => {
+            try {
+              const values = await listLookups(lookupType);
+              return Array.isArray(values) ? values : [];
+            } catch (error) {
+              console.warn(`addEmployeeModal: failed to load ${lookupType} lookups`, error);
+              return [];
+            }
+          }));
+          return results.flat();
+        },
+        getLookupCollectionKey(type){
+          if(type === 'status'){
+            return 'statuses';
+          }
+          if(type === 'employmentType'){
+            return 'employmentTypes';
+          }
+          if(type === 'role'){
+            return 'roles';
+          }
+          return null;
+        },
+        getLookupLabel(type){
+          if(type === 'employmentType'){
+            return 'Employment Type';
+          }
+          if(type === 'status'){
+            return 'Status';
+          }
+          return 'Role';
+        },
+        async refreshLookupOptions(type){
+          const defaults = this.defaultLookupValues(type);
+          const values = await this.collectLookupValues(type);
+          const merged = this.mergeLookupValues(defaults, values);
+          const key = this.getLookupCollectionKey(type);
+          if(key){
+            this[key] = merged;
+          }
+          return merged;
         },
         reset(){
           this.name = '';
-          this.position = '';
+          this.role = '';
           this.status = '';
-          this.rank = '';
+          this.employmentType = '';
         },
         show(){
           this.lastActiveElement = null;
@@ -593,7 +664,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           return this.close();
         },
         valid(){
-          const required = [this.name, this.position, this.status, this.rank];
+          const required = [this.name, this.role, this.status, this.employmentType];
           return required.every(value => typeof value === 'string' && value.trim().length > 0);
         },
         async ensureDb(){
@@ -639,10 +710,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           try {
             const record = await addLookup(type, trimmed);
             const resolvedValue = record?.value || trimmed;
-            const key = type === 'status' ? 'statuses' : type === 'rank' ? 'ranks' : 'positions';
-            const current = Array.isArray(this[key]) ? this[key] : [];
-            if(!current.some(entry => entry.toLocaleLowerCase() === resolvedValue.toLocaleLowerCase())){
-              this[key] = [...current, resolvedValue].sort((a, b) => a.localeCompare(b));
+            const key = this.getLookupCollectionKey(type);
+            if(key){
+              const current = Array.isArray(this[key]) ? this[key] : [];
+              if(!current.some(entry => entry.toLocaleLowerCase() === resolvedValue.toLocaleLowerCase())){
+                this[key] = [...current, resolvedValue].sort((a, b) => a.localeCompare(b));
+              }
             }
             return resolvedValue;
           } catch (error) {
@@ -650,31 +723,43 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             return trimmed;
           }
         },
-        async addNew(type){
-          const labels = {
-            position: 'position title',
-            status: 'status',
-            rank: 'rank'
-          };
-
-          const label = labels[type] || 'value';
-          const rawValue = typeof window !== 'undefined' ? window.prompt(`Enter new ${label}`) : null;
-          const value = typeof rawValue === 'string' ? rawValue.trim() : '';
-          if(!value){
+        addNew(type){
+          const store = Alpine.store('app');
+          if(!store || typeof store.openLookupDialog !== 'function'){
+            console.warn('addEmployeeModal: lookup dialog is not available');
             return;
           }
 
-          const resolved = await this.ensureLookupValue(type, value);
-          if(!resolved){
+          const key = this.getLookupCollectionKey(type);
+          const existing = key && Array.isArray(this[key]) ? [...this[key]] : [];
+          const label = this.getLookupLabel(type);
+
+          store.showLookupModal = type;
+          store.openLookupDialog({
+            type,
+            label,
+            existingValues: existing,
+            onSuccess: value => {
+              Promise.resolve(this.handleLookupAdded(type, value)).catch(error => {
+                console.warn(`addEmployeeModal: failed to handle lookup add for ${type}`, error);
+              });
+            }
+          });
+        },
+        async handleLookupAdded(type, value){
+          const trimmed = typeof value === 'string' ? value.trim() : '';
+          if(!trimmed){
             return;
           }
 
-          if(type === 'position'){
-            this.position = resolved;
+          await this.refreshLookupOptions(type);
+
+          if(type === 'role'){
+            this.role = trimmed;
           } else if(type === 'status'){
-            this.status = resolved;
-          } else if(type === 'rank'){
-            this.rank = resolved;
+            this.status = trimmed;
+          } else if(type === 'employmentType'){
+            this.employmentType = trimmed;
           }
         },
         async save(){
@@ -702,27 +787,31 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             const baseEmployee = {
               id: generateId(),
               name: this.name.trim(),
-              position: this.position.trim(),
+              role: this.role.trim(),
+              employmentType: this.employmentType.trim(),
               status: this.status ? this.status.trim() : '',
-              rank: this.rank ? this.rank.trim() : '',
+              position: this.role.trim(),
+              rank: this.employmentType.trim(),
               createdAt: timestamp,
               updatedAt: timestamp
             };
 
-            const [positionValue, statusValue, rankValue] = await Promise.all([
-              this.ensureLookupValue('position', baseEmployee.position),
+            const [roleValue, statusValue, employmentTypeValue] = await Promise.all([
+              this.ensureLookupValue('role', baseEmployee.role),
               this.ensureLookupValue('status', baseEmployee.status),
-              this.ensureLookupValue('rank', baseEmployee.rank)
+              this.ensureLookupValue('employmentType', baseEmployee.employmentType)
             ]);
 
-            if(positionValue){
-              baseEmployee.position = positionValue;
+            if(roleValue){
+              baseEmployee.role = roleValue;
+              baseEmployee.position = roleValue;
             }
             if(statusValue){
               baseEmployee.status = statusValue;
             }
-            if(rankValue){
-              baseEmployee.rank = rankValue;
+            if(employmentTypeValue){
+              baseEmployee.employmentType = employmentTypeValue;
+              baseEmployee.rank = employmentTypeValue;
             }
 
             await db.employees.add(baseEmployee);

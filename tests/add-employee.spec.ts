@@ -15,34 +15,32 @@ test('user can add an employee from the quick add modal', async ({ page }) => {
   const employeeName = withTimestamp('Test Employee');
   await nameInput.fill(employeeName);
 
-  const newPosition = withTimestamp('QA Position');
-  const positionDialog = page.waitForEvent('dialog');
-  await page.click('button[aria-label="Add new position"]');
-  const positionPrompt = await positionDialog;
-  expect(positionPrompt.type()).toBe('prompt');
-  await positionPrompt.accept(newPosition);
-  await expect(page.locator('#add-emp-position')).toHaveValue(newPosition);
+  const addLookupValue = async (trigger: string, value: string) => {
+    const dialog = page.locator('#lookup-dialog');
+    await page.click(trigger);
+    await expect(dialog).toBeVisible();
+    const input = dialog.locator('#lookup-dialog-input');
+    await input.fill(value);
+    await dialog.locator('button.btn-primary').click();
+    await expect(dialog).toBeHidden();
+  };
+
+  const newRole = withTimestamp('QA Role');
+  await addLookupValue('button[aria-label="Add new role"]', newRole);
+  await expect(page.locator('#add-emp-role')).toHaveValue(newRole);
+
+  const newEmploymentType = withTimestamp('Employment Type');
+  await addLookupValue('button[aria-label="Add new employment type"]', newEmploymentType);
+  await expect(page.locator('#add-emp-employment-type')).toHaveValue(newEmploymentType);
 
   const newStatus = withTimestamp('Status');
-  const statusDialog = page.waitForEvent('dialog');
-  await page.click('button[aria-label="Add new status"]');
-  const statusPrompt = await statusDialog;
-  expect(statusPrompt.type()).toBe('prompt');
-  await statusPrompt.accept(newStatus);
+  await addLookupValue('button[aria-label="Add new status"]', newStatus);
   await expect(page.locator('#add-emp-status')).toHaveValue(newStatus);
-
-  const newRank = withTimestamp('Rank');
-  const rankDialog = page.waitForEvent('dialog');
-  await page.click('button[aria-label="Add new rank"]');
-  const rankPrompt = await rankDialog;
-  expect(rankPrompt.type()).toBe('prompt');
-  await rankPrompt.accept(newRank);
-  await expect(page.locator('#add-emp-rank')).toHaveValue(newRank);
 
   await page.click('#add-emp-modal button[type="submit"]');
   await expect(page.locator('#add-emp-modal')).toBeHidden();
 
-  const newRow = page.locator('#employee-table tbody tr').filter({ hasText: newPosition });
+  const newRow = page.locator('#employee-table tbody tr').filter({ hasText: newRole });
   await expect(newRow).toBeVisible();
   await expect(newRow).toContainText(employeeName);
   await expect(newRow).toContainText(newStatus);

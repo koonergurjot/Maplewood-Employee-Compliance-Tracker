@@ -608,64 +608,64 @@
                 />
               </div>
               <div>
-                <label for="add-emp-position" class="block text-sm font-medium mb-1">Position</label>
-                <div class="flex items-center gap-2">
-                  <select id="add-emp-position" x-model="position" class="form-field w-full">
-                    <option value="">Select position</option>
-                    <template x-for="item in positions" :key="item">
-                      <option :value="item" x-text="item"></option>
-                    </template>
-                  </select>
+                <div class="flex items-center justify-between text-sm font-medium mb-1">
+                  <label for="add-emp-role">Role</label>
                   <button
                     type="button"
-                    @click="addNew('position')"
-                    class="px-2 py-1 rounded"
-                    style="border:1px solid var(--line); background:var(--card); color:var(--text);"
-                    aria-label="Add new position"
+                    class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
+                    style="border-color:var(--line); color:var(--accent);"
+                    @click="addNew('role')"
+                    aria-label="Add new role"
                   >
-                    +
+                    <i data-feather="plus" class="w-3.5 h-3.5"></i>
                   </button>
                 </div>
+                <select id="add-emp-role" x-model="role" class="form-field w-full">
+                  <option value="">Select role</option>
+                  <template x-for="item in roles" :key="item">
+                    <option :value="item" x-text="item"></option>
+                  </template>
+                </select>
               </div>
               <div>
-                <label for="add-emp-status" class="block text-sm font-medium mb-1">Status</label>
-                <div class="flex items-center gap-2">
-                  <select id="add-emp-status" x-model="status" class="form-field w-full">
-                    <option value="">Select status</option>
-                    <template x-for="item in statuses" :key="item">
-                      <option :value="item" x-text="item"></option>
-                    </template>
-                  </select>
+                <div class="flex items-center justify-between text-sm font-medium mb-1">
+                  <label for="add-emp-employment-type">Employment Type</label>
                   <button
                     type="button"
+                    class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
+                    style="border-color:var(--line); color:var(--accent);"
+                    @click="addNew('employmentType')"
+                    aria-label="Add new employment type"
+                  >
+                    <i data-feather="plus" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+                <select id="add-emp-employment-type" x-model="employmentType" class="form-field w-full">
+                  <option value="">Select employment type</option>
+                  <template x-for="item in employmentTypes" :key="item">
+                    <option :value="item" x-text="item"></option>
+                  </template>
+                </select>
+              </div>
+              <div>
+                <div class="flex items-center justify-between text-sm font-medium mb-1">
+                  <label for="add-emp-status">Status</label>
+                  <button
+                    type="button"
+                    class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
+                    style="border-color:var(--line); color:var(--accent);"
                     @click="addNew('status')"
-                    class="px-2 py-1 rounded"
-                    style="border:1px solid var(--line); background:var(--card); color:var(--text);"
                     aria-label="Add new status"
                   >
-                    +
+                    <i data-feather="plus" class="w-3.5 h-3.5"></i>
                   </button>
                 </div>
-              </div>
-              <div>
-                <label for="add-emp-rank" class="block text-sm font-medium mb-1">Rank</label>
-                <div class="flex items-center gap-2">
-                  <select id="add-emp-rank" x-model="rank" class="form-field w-full">
-                    <option value="">Select rank</option>
-                    <template x-for="item in ranks" :key="item">
-                      <option :value="item" x-text="item"></option>
-                    </template>
-                  </select>
-                  <button
-                    type="button"
-                    @click="addNew('rank')"
-                    class="px-2 py-1 rounded"
-                    style="border:1px solid var(--line); background:var(--card); color:var(--text);"
-                    aria-label="Add new rank"
-                  >
-                    +
-                  </button>
-                </div>
+                <select id="add-emp-status" x-model="status" class="form-field w-full">
+                  <option value="">Select status</option>
+                  <template x-for="item in statuses" :key="item">
+                    <option :value="item" x-text="item"></option>
+                  </template>
+                </select>
               </div>
             </div>
           </div>
