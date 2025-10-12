@@ -1040,7 +1040,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           savedViews:[], selectedViewName:'',
           globalSearch:'', searchResults:[],
           globalSearchIndex:null, globalSearchIndexVersion:-1, globalSearchDataVersion:0, globalSearchData:[],
-          virtualWindowSize:40, virtualStartIndex:0, virtualPaddingTop:0, virtualPaddingBottom:0, virtualRowHeight:68, virtualScrollInitialized:false,
+          virtualWindowSize:60, virtualStartIndex:0, virtualPaddingTop:0, virtualPaddingBottom:0, virtualRowHeight:48, virtualScrollInitialized:false, virtualOverscan:6,
         roleOptions:[...DEFAULT_ROLE_LOOKUPS],
         statusOptions:[...DEFAULT_STATUS_LOOKUPS],
         employmentTypeOptions:[...DEFAULT_EMPLOYMENT_TYPE_LOOKUPS],
@@ -3855,8 +3855,37 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           const probe = container.querySelector('tbody tr[data-employee-row]');
           if(!probe) return;
           const height = probe.getBoundingClientRect().height;
-          if(height > 0 && Math.abs(height - this.virtualRowHeight) > 0.5){
-            this.virtualRowHeight = height;
+          if(height > 0){
+            const normalized = Math.max(1, Math.round(height));
+            if(Math.abs(normalized - this.virtualRowHeight) > 0.5){
+              this.virtualRowHeight = normalized;
+            }
+          }
+          this.updateVirtualWindowSize();
+        },
+        updateVirtualWindowSize(){
+          const container = this.$refs.virtualScroll;
+          const rowHeight = this.virtualRowHeight || 48;
+          if(!container || !rowHeight){
+            const minimum = Math.max(50, this.virtualWindowSize || 0);
+            if(this.virtualWindowSize !== minimum){
+              this.virtualWindowSize = minimum;
+              this.scheduleVirtualUpdate(() => {
+                const sorted = this.sortedEmployees();
+                this.syncVirtualPadding(sorted.length);
+              });
+            }
+            return;
+          }
+          const visibleCount = Math.max(1, Math.ceil(container.clientHeight / rowHeight));
+          const overscan = Math.max(0, this.virtualOverscan || 0);
+          const desired = Math.max(visibleCount + overscan * 2, 50);
+          if(this.virtualWindowSize !== desired){
+            this.virtualWindowSize = desired;
+            this.scheduleVirtualUpdate(() => {
+              const sorted = this.sortedEmployees();
+              this.syncVirtualPadding(sorted.length);
+            });
           }
         },
         resetVirtualWindow({ scrollToTop = true } = {}){
@@ -3886,6 +3915,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.virtualScrollInitialized = true;
             this.measureVirtualRowHeight();
           }
+          this.updateVirtualWindowSize();
           const rowHeight = this.virtualRowHeight || 1;
           const sorted = this.sortedEmployees();
           const total = sorted.length;
@@ -3893,7 +3923,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.syncVirtualPadding(0);
             return;
           }
-          const rawStart = Math.floor(container.scrollTop / rowHeight);
+          const overscan = Math.max(0, this.virtualOverscan || 0);
+          const rawStart = Math.floor(container.scrollTop / rowHeight) - overscan;
           const maxStart = Math.max(0, total - this.virtualWindowSize);
           const startIndex = Math.min(Math.max(0, rawStart), maxStart);
           if(startIndex !== this.virtualStartIndex){

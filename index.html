@@ -69,6 +69,8 @@
     .checkbox.expired{background-color:var(--warn);border-color:var(--warn)}
     .checkbox.completed::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-60%) rotate(-45deg);width:.75rem;height:.4rem;border-left:2px solid #fff;border-bottom:2px solid #fff}
     .virtual-scroll{overflow-y:auto;max-height:calc(100vh - 260px)}
+    .virtual-scroll tbody tr[data-employee-row]{height:48px}
+    .virtual-scroll tbody tr[data-employee-row] > td{vertical-align:middle}
     .virtual-spacer td{padding:0!important;border:none!important;height:0}
     .status-badge{transition:all 0.2s ease}
     .badge{display:inline-flex;align-items:center;padding:.125rem .5rem;border-radius:.25rem;font-size:.75rem;font-weight:600;color:var(--badge-text);border:none;cursor:pointer;transition:box-shadow .2s ease,transform .2s ease}
