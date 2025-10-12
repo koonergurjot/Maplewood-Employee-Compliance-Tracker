@@ -17,6 +17,7 @@ import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup }
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Recreation', 'Reception', 'Rehab Assistant', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
+const FILTER_VIEWS_STORAGE_KEY = 'complianceFilterViews';
 
 let cachedXlsx = (typeof window !== 'undefined' && (window.__xlsxModule || window.XLSX)) || null;
 let xlsxLoadPromise = null;
@@ -775,6 +776,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         showAddEmployeeModal:false, showAddRequirementModal:false, showBulkActionsModal:false,
         showEditEmployeeModal:false, showEditRequirementModal:false,
           searchQuery:'', roleFilter:'', statusFilter:'', reqStatusFilter:'', filteredEmployees:[], isFiltering:false, sortField:'firstName', sortDirection:'asc',
+          savedViews:[], selectedViewName:'',
           globalSearch:'', searchResults:[],
           globalSearchIndex:null, globalSearchIndexVersion:-1, globalSearchDataVersion:0, globalSearchData:[],
           virtualWindowSize:40, virtualStartIndex:0, virtualPaddingTop:0, virtualPaddingBottom:0, virtualRowHeight:68, virtualScrollInitialized:false,
@@ -1094,6 +1096,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
           await this.initActivityLog();
           await this.loadData();
+          this.loadSavedViewsFromStorage();
           if (this.loadError || !this.db) return;
           this.setAppReady(true);
           const s = await this.db.settings.get('app');
@@ -3020,6 +3023,152 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.isFiltering = Boolean(trimmedQuery || this.roleFilter || this.statusFilter || this.reqStatusFilter);
           this.filteredEmployees = this.isFiltering ? filtered : [];
           this.resetVirtualWindow();
+          this.updateSelectedViewMatch();
+        },
+        get activeFilterChips(){
+          const chips = [];
+          if(this.roleFilter){
+            chips.push({ key: 'roleFilter', label: 'Role', value: this.roleFilter });
+          }
+          if(this.statusFilter){
+            chips.push({ key: 'statusFilter', label: 'Status', value: this.statusFilter });
+          }
+          if(this.reqStatusFilter){
+            chips.push({ key: 'reqStatusFilter', label: 'Expiry', value: this.formatRequirementStatusLabel(this.reqStatusFilter) });
+          }
+          return chips;
+        },
+        formatRequirementStatusLabel(value){
+          if(!value) return '';
+          const labels = {
+            Completed: 'Completed',
+            Expired: 'Expired',
+            NotCompleted: 'Incomplete',
+            NotRequired: 'Not Required'
+          };
+          return labels[value] || value;
+        },
+        clearFilterChip(key){
+          if(key === 'roleFilter'){
+            this.roleFilter = '';
+          } else if(key === 'statusFilter'){
+            this.statusFilter = '';
+          } else if(key === 'reqStatusFilter'){
+            this.reqStatusFilter = '';
+          }
+          this.filterEmployees();
+        },
+        getCurrentFilterState(){
+          return {
+            searchQuery: this.searchQuery || '',
+            roleFilter: this.roleFilter || '',
+            statusFilter: this.statusFilter || '',
+            reqStatusFilter: this.reqStatusFilter || ''
+          };
+        },
+        filtersMatchView(view){
+          if(!view || typeof view !== 'object'){
+            return false;
+          }
+          const current = this.getCurrentFilterState();
+          const filters = view.filters || {};
+          return (
+            (filters.searchQuery || '') === current.searchQuery &&
+            (filters.roleFilter || '') === current.roleFilter &&
+            (filters.statusFilter || '') === current.statusFilter &&
+            (filters.reqStatusFilter || '') === current.reqStatusFilter
+          );
+        },
+        updateSelectedViewMatch(){
+          const match = this.savedViews.find((view) => this.filtersMatchView(view));
+          this.selectedViewName = match ? match.name : '';
+        },
+        promptAndSaveView(){
+          const defaultName = this.selectedViewName || '';
+          const name = typeof window !== 'undefined'
+            ? (window.prompt('Name this view', defaultName) || '').trim()
+            : '';
+          if(!name){
+            return;
+          }
+          const filters = this.getCurrentFilterState();
+          const existingIndex = this.savedViews.findIndex((view) => view.name.toLowerCase() === name.toLowerCase());
+          const updatedView = { name, filters };
+          if(existingIndex >= 0){
+            const updated = [...this.savedViews];
+            updated[existingIndex] = updatedView;
+            this.savedViews = updated;
+          } else {
+            this.savedViews = [...this.savedViews.filter((view) => view.name.toLowerCase() !== name.toLowerCase()), updatedView];
+          }
+          this.selectedViewName = name;
+          this.persistViews();
+          this.updateSelectedViewMatch();
+          if(typeof this.notify === 'function'){
+            this.notify('View saved.', 'var(--accent)');
+          }
+        },
+        applyViewByName(name){
+          if(!name){
+            this.selectedViewName = '';
+            return;
+          }
+          const view = this.savedViews.find((entry) => entry.name === name);
+          if(!view){
+            return;
+          }
+          this.applyView(view);
+        },
+        applyView(view){
+          if(!view){
+            return;
+          }
+          const filters = view.filters || {};
+          this.searchQuery = filters.searchQuery || '';
+          this.roleFilter = filters.roleFilter || '';
+          this.statusFilter = filters.statusFilter || '';
+          this.reqStatusFilter = filters.reqStatusFilter || '';
+          this.selectedViewName = view.name;
+          this.filterEmployees();
+        },
+        loadSavedViewsFromStorage(){
+          if(typeof window === 'undefined' || !window.localStorage){
+            return;
+          }
+          try {
+            const raw = window.localStorage.getItem(FILTER_VIEWS_STORAGE_KEY);
+            if(!raw){
+              return;
+            }
+            const parsed = JSON.parse(raw);
+            if(Array.isArray(parsed)){
+              const views = parsed
+                .filter((view) => view && typeof view.name === 'string' && view.name.trim())
+                .map((view) => ({
+                  name: view.name.trim(),
+                  filters: {
+                    searchQuery: view.filters?.searchQuery || '',
+                    roleFilter: view.filters?.roleFilter || '',
+                    statusFilter: view.filters?.statusFilter || '',
+                    reqStatusFilter: view.filters?.reqStatusFilter || ''
+                  }
+                }));
+              this.savedViews = views;
+            }
+          } catch (error) {
+            console.warn('Failed to load saved views', error);
+          }
+          this.updateSelectedViewMatch();
+        },
+        persistViews(){
+          if(typeof window === 'undefined' || !window.localStorage){
+            return;
+          }
+          try {
+            window.localStorage.setItem(FILTER_VIEWS_STORAGE_KEY, JSON.stringify(this.savedViews));
+          } catch (error) {
+            console.warn('Failed to persist saved views', error);
+          }
         },
         performGlobalSearch(query){
           const requirementSource = this.orderedVisibleRequirements();
