@@ -658,6 +658,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           searchQuery:'', roleFilter:'', statusFilter:'', reqStatusFilter:'', filteredEmployees:[], isFiltering:false, sortField:'firstName', sortDirection:'asc',
           globalSearch:'', searchResults:[],
           globalSearchIndex:null, globalSearchIndexVersion:-1, globalSearchDataVersion:0, globalSearchData:[],
+          virtualWindowSize:40, virtualStartIndex:0, virtualPaddingTop:0, virtualPaddingBottom:0, virtualRowHeight:68, virtualScrollInitialized:false,
         roleOptions:[...DEFAULT_ROLE_LOOKUPS],
         statusOptions:[...DEFAULT_STATUS_LOOKUPS],
         employmentTypeOptions:[...DEFAULT_EMPLOYMENT_TYPE_LOOKUPS],
@@ -2899,6 +2900,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
           this.isFiltering = Boolean(trimmedQuery || this.roleFilter || this.statusFilter || this.reqStatusFilter);
           this.filteredEmployees = this.isFiltering ? filtered : [];
+          this.resetVirtualWindow();
         },
         performGlobalSearch(query){
           const requirementSource = this.orderedVisibleRequirements();
@@ -2951,6 +2953,9 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         focusSearchResult(result){
           if(!result?.item) return;
           const { type, id } = result.item;
+          if(type === 'employee'){
+            this.ensureEmployeeVisible(id);
+          }
           this.$nextTick(() => {
             let selector = '';
             if(type === 'employee'){
@@ -3043,6 +3048,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.sortField = field;
             this.sortDirection = 'asc';
           }
+          this.resetVirtualWindow();
         },
         sortedEmployees(){
           const source = this.isFiltering ? this.filteredEmployees : this.employees;
@@ -3090,6 +3096,136 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             if (aVal < bVal) return this.sortDirection === 'asc' ? -1 : 1;
             if (aVal > bVal) return this.sortDirection === 'asc' ? 1 : -1;
             return 0;
+          });
+        },
+        scheduleVirtualUpdate(cb){
+          if(typeof cb !== 'function') return;
+          if(typeof requestAnimationFrame === 'function'){
+            requestAnimationFrame(cb);
+          } else {
+            setTimeout(cb, 16);
+          }
+        },
+        syncVirtualPadding(totalCount){
+          if(!Number.isFinite(totalCount) || totalCount <= 0){
+            if(this.virtualStartIndex !== 0){
+              this.virtualStartIndex = 0;
+            }
+            if(this.virtualPaddingTop !== 0){
+              this.virtualPaddingTop = 0;
+            }
+            if(this.virtualPaddingBottom !== 0){
+              this.virtualPaddingBottom = 0;
+            }
+            return { start: 0, end: 0 };
+          }
+
+          const maxStart = Math.max(0, totalCount - this.virtualWindowSize);
+          let startIndex = Math.min(this.virtualStartIndex, maxStart);
+          if(startIndex !== this.virtualStartIndex){
+            this.virtualStartIndex = startIndex;
+          }
+
+          const endIndex = Math.min(totalCount, startIndex + this.virtualWindowSize);
+          const rowHeight = this.virtualRowHeight || 1;
+          const top = startIndex * rowHeight;
+          const bottom = Math.max(0, (totalCount - endIndex) * rowHeight);
+
+          if(this.virtualPaddingTop !== top){
+            this.virtualPaddingTop = top;
+          }
+          if(this.virtualPaddingBottom !== bottom){
+            this.virtualPaddingBottom = bottom;
+          }
+
+          return { start: startIndex, end: endIndex };
+        },
+        visibleEmployees(){
+          const sorted = this.sortedEmployees();
+          const { start, end } = this.syncVirtualPadding(sorted.length);
+          return sorted.slice(start, end);
+        },
+        visibleColumnCount(){
+          return 4 + this.orderedVisibleRequirements().length;
+        },
+        measureVirtualRowHeight(){
+          const container = this.$refs.virtualScroll;
+          if(!container) return;
+          const probe = container.querySelector('tbody tr[data-employee-row]');
+          if(!probe) return;
+          const height = probe.getBoundingClientRect().height;
+          if(height > 0 && Math.abs(height - this.virtualRowHeight) > 0.5){
+            this.virtualRowHeight = height;
+          }
+        },
+        resetVirtualWindow({ scrollToTop = true } = {}){
+          this.virtualScrollInitialized = false;
+          this.virtualStartIndex = 0;
+          if(scrollToTop){
+            this.$nextTick(() => {
+              const container = this.$refs.virtualScroll;
+              if(container){
+                container.scrollTop = 0;
+              }
+            });
+          }
+          this.$nextTick(() => {
+            this.scheduleVirtualUpdate(() => {
+              this.measureVirtualRowHeight();
+              const sorted = this.sortedEmployees();
+              this.syncVirtualPadding(sorted.length);
+              this.refreshFeatherIcons();
+            });
+          });
+        },
+        handleVirtualScroll(){
+          const container = this.$refs.virtualScroll;
+          if(!container) return;
+          if(!this.virtualScrollInitialized){
+            this.virtualScrollInitialized = true;
+            this.measureVirtualRowHeight();
+          }
+          const rowHeight = this.virtualRowHeight || 1;
+          const sorted = this.sortedEmployees();
+          const total = sorted.length;
+          if(!total){
+            this.syncVirtualPadding(0);
+            return;
+          }
+          const rawStart = Math.floor(container.scrollTop / rowHeight);
+          const maxStart = Math.max(0, total - this.virtualWindowSize);
+          const startIndex = Math.min(Math.max(0, rawStart), maxStart);
+          if(startIndex !== this.virtualStartIndex){
+            this.virtualStartIndex = startIndex;
+            this.syncVirtualPadding(total);
+            this.refreshFeatherIcons();
+          } else {
+            this.syncVirtualPadding(total);
+          }
+        },
+        ensureEmployeeVisible(employeeId){
+          if(!employeeId) return;
+          const sorted = this.sortedEmployees();
+          const index = sorted.findIndex(emp => emp.id === employeeId);
+          if(index === -1){
+            return;
+          }
+          const halfWindow = Math.max(0, Math.floor(this.virtualWindowSize / 2));
+          const maxStart = Math.max(0, sorted.length - this.virtualWindowSize);
+          const desiredStart = Math.min(Math.max(0, index - halfWindow), maxStart);
+          if(desiredStart !== this.virtualStartIndex){
+            this.virtualStartIndex = desiredStart;
+          }
+          this.$nextTick(() => {
+            const container = this.$refs.virtualScroll;
+            if(container){
+              const rowHeight = this.virtualRowHeight || 1;
+              container.scrollTop = desiredStart * rowHeight;
+            }
+            this.scheduleVirtualUpdate(() => {
+              this.syncVirtualPadding(sorted.length);
+              this.refreshFeatherIcons();
+            });
           });
         },
         async addEmployee(){
