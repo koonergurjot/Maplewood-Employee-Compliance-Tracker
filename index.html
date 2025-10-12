@@ -654,7 +654,7 @@
   <!-- Add Requirement Modal -->
   <div
     id="add-requirement-modal"
-    x-show="showAddRequirementModal"
+    x-show="$root.showAddRequirementModal"
     x-cloak
     class="fixed inset-0 z-50"
     x-data="modalA11y(() => showAddRequirementModal, value => showAddRequirementModal = value)"
@@ -675,17 +675,17 @@
           <div class="space-y-4">
             <div>
               <label class="block text-sm font-medium mb-1">Requirement Name</label>
-              <input x-model="newRequirement.name" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <input x-model="$root.newRequirement.name" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">Expiry Days (optional)</label>
-              <input x-model="newRequirement.defaultExpiryDays" type="number" placeholder="e.g., 365 for 1 year" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <input x-model="$root.newRequirement.defaultExpiryDays" type="number" placeholder="e.g., 365 for 1 year" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">Color</label>
               <div class="flex gap-2">
-                <input x-model="newRequirement.color" type="color" class="w-12 h-10 border rounded" style="border-color:var(--line)">
-                <select x-model="newRequirement.color" class="flex-1 border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <input x-model="$root.newRequirement.color" type="color" class="w-12 h-10 border rounded" style="border-color:var(--line)">
+                <select x-model="$root.newRequirement.color" class="flex-1 border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
                   <option value="#e0e7ff">Light Blue</option>
                   <option value="#f0f9ff">Light Cyan</option>
                   <option value="#fef3c7">Light Yellow</option>
@@ -702,8 +702,8 @@
           </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button @click="addRequirement()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Add Requirement</button>
-            <button @click="close()" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+          <button @click="$root.addRequirement()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Add Requirement</button>
+          <button @click="close()" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
     </div>
@@ -712,7 +712,7 @@
   <!-- Edit Requirement Modal -->
   <div
     id="edit-requirement-modal"
-    x-show="showEditRequirementModal"
+    x-show="$root.showEditRequirementModal"
     x-cloak
     class="fixed inset-0 z-50"
     x-data="modalA11y(() => showEditRequirementModal, value => showEditRequirementModal = value)"
@@ -733,19 +733,19 @@
           <div class="space-y-4">
             <div>
               <label class="block text-sm font-medium mb-1">Requirement Name</label>
-              <input x-model="editingRequirement.name" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <input x-model="$root.editingRequirement.name" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">Expiry Days (optional)</label>
-              <input x-model="editingRequirement.defaultExpiryDays" type="number" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
-              <p class="text-xs mt-1" x-show="editingRequirement.defaultExpiryDays"
-                 x-text="formatYears(editingRequirement.defaultExpiryDays)"></p>
+              <input x-model="$root.editingRequirement.defaultExpiryDays" type="number" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <p class="text-xs mt-1" x-show="$root.editingRequirement.defaultExpiryDays"
+                 x-text="$root.formatYears($root.editingRequirement.defaultExpiryDays)"></p>
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">Color</label>
               <div class="flex gap-2">
-                <input x-model="editingRequirement.color" type="color" class="w-12 h-10 border rounded" style="border-color:var(--line)">
-                <select x-model="editingRequirement.color" class="flex-1 border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <input x-model="$root.editingRequirement.color" type="color" class="w-12 h-10 border rounded" style="border-color:var(--line)">
+                <select x-model="$root.editingRequirement.color" class="flex-1 border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
                   <option value="#e0e7ff">Light Blue</option>
                   <option value="#f0f9ff">Light Cyan</option>
                   <option value="#fef3c7">Light Yellow</option>
@@ -762,7 +762,7 @@
           </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-          <button @click="updateRequirement()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save Changes</button>
+          <button @click="$root.updateRequirement()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save Changes</button>
           <button @click="close()" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
@@ -772,7 +772,7 @@
   <!-- Edit Employee Modal -->
   <div
     id="edit-employee-modal"
-    x-show="showEditEmployeeModal"
+    x-show="$root.showEditEmployeeModal"
     x-cloak
     class="fixed inset-0 z-50"
     x-data="modalA11y(() => showEditEmployeeModal, value => showEditEmployeeModal = value)"
@@ -794,11 +794,11 @@
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium mb-1">First Name</label>
-                <input x-model="editingEmployee.firstName" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <input x-model="$root.editingEmployee.firstName" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
               </div>
               <div>
                 <label class="block text-sm font-medium mb-1">Last Name</label>
-                <input x-model="editingEmployee.lastName" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <input x-model="$root.editingEmployee.lastName" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
               </div>
             </div>
             <div>
@@ -808,15 +808,15 @@
                   type="button"
                   class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
                   style="border-color:var(--line); color:var(--accent);"
-                  @click="$store.app.openLookupDialog({ type: 'role', label: 'Role', existingValues: roleOptions, onSuccess(value){ appendLookupValue('role', value); editingEmployee.role = value; } })"
+                  @click="$store.app.openLookupDialog({ type: 'role', label: 'Role', existingValues: $root.roleOptions, onSuccess(value){ $root.appendLookupValue('role', value); $root.editingEmployee.role = value; } })"
                   aria-label="Add role option"
                 >
                   <i data-feather="plus" class="w-3.5 h-3.5"></i>
                 </button>
               </label>
-              <select x-model="editingEmployee.role" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <select x-model="$root.editingEmployee.role" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
                 <option value="">Select Role</option>
-                <template x-for="role in roleOptions" :key="role">
+                <template x-for="role in $root.roleOptions" :key="role">
                   <option :value="role" x-text="role"></option>
                 </template>
               </select>
@@ -828,16 +828,16 @@
                   type="button"
                   class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
                   style="border-color:var(--line); color:var(--accent);"
-                  @click="$store.app.openLookupDialog({ type: 'employmentType', label: 'Employment Type', existingValues: employmentTypeOptions, onSuccess(value){ appendLookupValue('employmentType', value); editingEmployee.employmentType = value; } })"
+                  @click="$store.app.openLookupDialog({ type: 'employmentType', label: 'Employment Type', existingValues: $root.employmentTypeOptions, onSuccess(value){ $root.appendLookupValue('employmentType', value); $root.editingEmployee.employmentType = value; } })"
                   aria-label="Add employment type option"
                 >
                   <i data-feather="plus" class="w-3.5 h-3.5"></i>
                 </button>
               </label>
-              <select x-model="editingEmployee.employmentType" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <select x-model="$root.editingEmployee.employmentType" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
                 <option value="">Select Employment Type</option>
-                <template x-for="type in employmentTypeOptions" :key="type">
-                  <option :value="type" x-text="formatEmploymentTypeLabel(type)"></option>
+                <template x-for="type in $root.employmentTypeOptions" :key="type">
+                  <option :value="type" x-text="$root.formatEmploymentTypeLabel(type)"></option>
                 </template>
               </select>
             </div>
@@ -848,33 +848,33 @@
                   type="button"
                   class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
                   style="border-color:var(--line); color:var(--accent);"
-                  @click="$store.app.openLookupDialog({ type: 'status', label: 'Status', existingValues: statusOptions, onSuccess(value){ appendLookupValue('status', value); editingEmployee.status = value; } })"
+                  @click="$store.app.openLookupDialog({ type: 'status', label: 'Status', existingValues: $root.statusOptions, onSuccess(value){ $root.appendLookupValue('status', value); $root.editingEmployee.status = value; } })"
                   aria-label="Add status option"
                 >
                   <i data-feather="plus" class="w-3.5 h-3.5"></i>
                 </button>
               </label>
-              <select x-model="editingEmployee.status" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <select x-model="$root.editingEmployee.status" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
                 <option value="">Select Status</option>
-                <template x-for="status in statusOptions" :key="status">
+                <template x-for="status in $root.statusOptions" :key="status">
                   <option :value="status" x-text="status"></option>
                 </template>
               </select>
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">Employee ID</label>
-              <input x-model="editingEmployee.employeeId" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <input x-model="$root.editingEmployee.employeeId" type="text" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">Seniority Hours</label>
-              <input x-model="editingEmployee.seniorityHours" type="number" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <input x-model="$root.editingEmployee.seniorityHours" type="number" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
             </div>
           </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-          <button @click="updateEmployee()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save Changes</button>
+          <button @click="$root.updateEmployee()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save Changes</button>
           <button @click="close()" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
-          <button @click="confirmDeleteEmployee(editingEmployee)" class="mt-3 sm:mt-0 sm:mr-auto w-full sm:w-auto px-4 py-2 btn btn-danger">Delete Employee</button>
+          <button @click="$root.confirmDeleteEmployee($root.editingEmployee)" class="mt-3 sm:mt-0 sm:mr-auto w-full sm:w-auto px-4 py-2 btn btn-danger">Delete Employee</button>
         </div>
       </div>
     </div>
@@ -883,7 +883,7 @@
   <!-- Bulk Actions Modal -->
   <div
     id="bulk-actions-modal"
-    x-show="showBulkActionsModal"
+    x-show="$root.showBulkActionsModal"
     x-cloak
     class="fixed inset-0 z-50"
     x-data="modalA11y(() => showBulkActionsModal, value => showBulkActionsModal = value)"
@@ -905,9 +905,9 @@
             <div>
               <label class="block text-sm font-medium mb-2">Select Employees</label>
               <div class="max-h-60 overflow-auto border rounded p-2" style="border-color:var(--line)">
-                <template x-for="emp in employees" :key="emp.id">
+                <template x-for="emp in $root.employees" :key="emp.id">
                   <label class="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded">
-                    <input type="checkbox" x-model="selectedEmployees" :value="emp.id" class="checkbox">
+                    <input type="checkbox" x-model="$root.selectedEmployees" :value="emp.id" class="checkbox">
                     <span x-text="`${emp.firstName} ${emp.lastName}`"></span>
                     <span class="text-sm" style="color:var(--muted)" x-text="emp.role"></span>
                   </label>
@@ -916,7 +916,7 @@
             </div>
             <div>
               <label class="block text-sm font-medium mb-2">Bulk Action</label>
-              <select x-model="bulkAction" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+              <select x-model="$root.bulkAction" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
                 <option value="">Select Action</option>
                 <option value="complete">Mark Requirements Complete</option>
                 <option value="incomplete">Mark Requirements Incomplete</option>
@@ -924,12 +924,12 @@
                 <option value="delete">Delete Selected</option>
               </select>
             </div>
-            <div x-show="bulkAction === 'complete' || bulkAction === 'incomplete'">
+            <div x-show="$root.bulkAction === 'complete' || $root.bulkAction === 'incomplete'">
               <label class="block text-sm font-medium mb-2">Select Requirements</label>
               <div class="grid grid-cols-2 gap-2">
-                <template x-for="req in requirements" :key="req.id">
+                <template x-for="req in $root.requirements" :key="req.id">
                   <label class="flex items-center gap-2 p-2 border rounded" style="border-color:var(--line)">
-                    <input type="checkbox" x-model="selectedRequirements" :value="req.id" class="checkbox">
+                    <input type="checkbox" x-model="$root.selectedRequirements" :value="req.id" class="checkbox">
                     <span x-text="req.name" class="text-sm"></span>
                   </label>
                 </template>
@@ -938,7 +938,7 @@
           </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-          <button @click="executeBulkAction()" x-show="bulkAction && selectedEmployees.length" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Execute</button>
+          <button @click="$root.executeBulkAction()" x-show="$root.bulkAction && $root.selectedEmployees.length" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Execute</button>
           <button @click="close()" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
@@ -948,7 +948,7 @@
   <!-- Settings Modal -->
   <div
     id="settings-modal"
-    x-show="showSettingsModal"
+    x-show="$root.showSettingsModal"
     x-cloak
     class="fixed inset-0 z-50"
     x-data="modalA11y(() => showSettingsModal, value => showSettingsModal = value)"
@@ -967,7 +967,7 @@
         <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
           <h3 id="settings-modal-title" class="text-lg font-semibold mb-4" tabindex="-1" data-modal-initial-focus>Column Settings</h3>
           <ul x-ref="settingsList" class="space-y-2">
-            <template x-for="req in visibleRequirements" :key="req.id">
+            <template x-for="req in $root.visibleRequirements" :key="req.id">
               <li class="flex items-center justify-between p-2 border rounded" style="border-color:var(--line)">
                 <div class="flex items-center gap-2">
                   <i data-feather="menu" class="w-4 h-4 handle cursor-move"></i>
@@ -980,13 +980,13 @@
           <div class="mt-6 pt-4 border-t space-y-4" style="border-color:var(--line)">
             <div class="flex items-center justify-between">
               <h4 class="text-base font-semibold">Role Templates</h4>
-              <button type="button" class="btn btn-primary text-sm" @click="startTemplateCreate()">New Template</button>
+              <button type="button" class="btn btn-primary text-sm" @click="$root.startTemplateCreate()">New Template</button>
             </div>
-            <template x-if="!templates.length">
+            <template x-if="!$root.templates.length">
               <p class="text-sm" style="color:var(--muted)">No templates yet. Create one to tailor requirements per role.</p>
             </template>
-            <ul class="space-y-2" x-show="templates.length">
-              <template x-for="template in templates" :key="template.id">
+            <ul class="space-y-2" x-show="$root.templates.length">
+              <template x-for="template in $root.templates" :key="template.id">
                 <li class="border rounded p-3" style="border-color:var(--line)">
                   <div class="flex flex-col gap-3">
                     <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -996,53 +996,53 @@
                           <span x-text="template.roles.length ? template.roles.join(', ') : 'No roles assigned'"></span>
                         </div>
                         <div class="text-xs" style="color:var(--muted)">
-                          <span x-text="`Required: ${templateRequirementCount(template)} of ${requirements.length}`"></span>
+                          <span x-text="`Required: ${$root.templateRequirementCount(template)} of ${$root.requirements.length}`"></span>
                         </div>
                       </div>
                       <div class="flex flex-wrap gap-2 justify-end">
-                        <button type="button" class="btn text-sm" @click="editTemplate(template)">Edit</button>
-                        <button type="button" class="btn text-sm" :disabled="templateApplyLoading" @click="applyTemplateToRoles(template)">Apply to Roles</button>
-                        <button type="button" class="btn text-sm" :disabled="templateApplyLoading" x-show="selectedEmployees.length" @click="applyTemplateToSelection(template)">Apply to Selection</button>
-                        <button type="button" class="btn text-sm" style="color:var(--danger)" @click="confirmDeleteTemplate(template)">Delete</button>
+                        <button type="button" class="btn text-sm" @click="$root.editTemplate(template)">Edit</button>
+                        <button type="button" class="btn text-sm" :disabled="$root.templateApplyLoading" @click="$root.applyTemplateToRoles(template)">Apply to Roles</button>
+                        <button type="button" class="btn text-sm" :disabled="$root.templateApplyLoading" x-show="$root.selectedEmployees.length" @click="$root.applyTemplateToSelection(template)">Apply to Selection</button>
+                        <button type="button" class="btn text-sm" style="color:var(--danger)" @click="$root.confirmDeleteTemplate(template)">Delete</button>
                       </div>
                     </div>
                   </div>
                 </li>
               </template>
             </ul>
-            <div x-show="showTemplateForm" class="border rounded p-3" style="border-color:var(--line)">
+            <div x-show="$root.showTemplateForm" class="border rounded p-3" style="border-color:var(--line)">
               <div class="grid gap-4">
                 <div>
                   <label class="block text-sm font-medium mb-1">Template Name</label>
-                  <input type="text" x-model="templateEditor.name" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                  <input type="text" x-model="$root.templateEditor.name" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
                 </div>
                 <div>
                   <label class="block text-sm font-medium mb-1">Roles</label>
-                  <input type="text" x-model="templateEditor.rolesInput" placeholder="Comma separated roles" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                  <input type="text" x-model="$root.templateEditor.rolesInput" placeholder="Comma separated roles" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
                   <p class="text-xs mt-1" style="color:var(--muted)">Roles are matched case-insensitively.</p>
                 </div>
                 <div>
                   <label class="block text-sm font-medium mb-2">Required Requirements</label>
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
-                    <template x-for="req in getTemplateRequirementList()" :key="req.id">
+                    <template x-for="req in $root.getTemplateRequirementList()" :key="req.id">
                       <label class="flex items-center gap-2 p-2 border rounded" style="border-color:var(--line)">
-                        <input type="checkbox" class="checkbox" :checked="!templateEditor.excludedRequirementIds.includes(req.id)" @change="toggleTemplateRequirement(req.id, $event.target.checked)">
+                        <input type="checkbox" class="checkbox" :checked="!$root.templateEditor.excludedRequirementIds.includes(req.id)" @change="$root.toggleTemplateRequirement(req.id, $event.target.checked)">
                         <span class="text-sm" x-text="req.name"></span>
                       </label>
                     </template>
                   </div>
                 </div>
                 <div class="flex justify-end gap-2">
-                  <button type="button" class="btn" @click="cancelTemplateEdit()">Cancel</button>
-                  <button type="button" class="btn btn-primary" @click="saveTemplate()">Save Template</button>
+                  <button type="button" class="btn" @click="$root.cancelTemplateEdit()">Cancel</button>
+                  <button type="button" class="btn btn-primary" @click="$root.saveTemplate()">Save Template</button>
                 </div>
               </div>
             </div>
-            <div x-show="templateApplyLoading" class="text-xs" style="color:var(--muted)">Applying template updates...</div>
+            <div x-show="$root.templateApplyLoading" class="text-xs" style="color:var(--muted)">Applying template updates...</div>
           </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-          <button @click="saveAndCloseSettings" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save</button>
+          <button @click="$root.saveAndCloseSettings()" class="w-full sm:w-auto px-4 py-2 btn btn-primary">Save</button>
           <button @click="close()" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
       </div>
@@ -1072,52 +1072,52 @@
           <div class="flex items-center justify-between">
             <h3 id="import-modal-title" class="text-lg font-semibold mb-3" tabindex="-1" data-modal-initial-focus>Import Data</h3>
             <div class="text-xs" :style="'color:var(--muted)'">
-              <span x-text="'Headers: ' + importHeaders.length + ' • Rows: ' + importData.length + ' • Eligible: ' + previewEligible"></span>
+              <span x-text="'Headers: ' + $root.importHeaders.length + ' • Rows: ' + $root.importData.length + ' • Eligible: ' + $root.previewEligible"></span>
             </div>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div x-show="importMode !== 'backup'">
+            <div x-show="$root.importMode !== 'backup'">
               <label class="block text-sm">File Type</label>
               <div class="mt-1 flex gap-4 text-sm">
-                <label class="inline-flex items-center"><input type="radio" x-model="importType" value="csv"> <span class="ml-2">CSV</span></label>
-                <label class="inline-flex items-center"><input type="radio" x-model="importType" value="excel"> <span class="ml-2">Excel</span></label>
+                <label class="inline-flex items-center"><input type="radio" x-model="$root.importType" value="csv"> <span class="ml-2">CSV</span></label>
+                <label class="inline-flex items-center"><input type="radio" x-model="$root.importType" value="excel"> <span class="ml-2">Excel</span></label>
               </div>
             </div>
             <div>
               <label class="block text-sm">Import Mode</label>
               <div class="mt-1 flex gap-4 text-sm">
-                <label class="inline-flex items-center"><input type="radio" x-model="importMode" value="employees"> <span class="ml-2">Employees</span></label>
-                <label class="inline-flex items-center"><input type="radio" x-model="importMode" value="completions"> <span class="ml-2">Completions</span></label>
-                <label class="inline-flex items-center"><input type="radio" x-model="importMode" value="backup"> <span class="ml-2">Backup</span></label>
+                <label class="inline-flex items-center"><input type="radio" x-model="$root.importMode" value="employees"> <span class="ml-2">Employees</span></label>
+                <label class="inline-flex items-center"><input type="radio" x-model="$root.importMode" value="completions"> <span class="ml-2">Completions</span></label>
+                <label class="inline-flex items-center"><input type="radio" x-model="$root.importMode" value="backup"> <span class="ml-2">Backup</span></label>
               </div>
             </div>
             <div>
               <label class="block text-sm">File</label>
               <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md" style="border-color:var(--line)">
                 <div class="space-y-1 text-center">
-                  <label for="file-upload" class="relative cursor-pointer rounded-md font-medium text-blue-600 hover:opacity-80" x-show="!importLoading">
+                  <label for="file-upload" class="relative cursor-pointer rounded-md font-medium text-blue-600 hover:opacity-80" x-show="!$root.importLoading">
                     <span>Upload a file</span>
-                    <input id="file-upload" type="file" class="sr-only" @change="handleFileUpload" :accept="importMode === 'backup' ? '.json' : '.csv,.xlsx,.xls'" multiple="false">
+                    <input id="file-upload" type="file" class="sr-only" @change="$root.handleFileUpload" :accept="$root.importMode === 'backup' ? '.json' : '.csv,.xlsx,.xls'" multiple="false">
                   </label>
-                  <div x-show="importLoading" class="flex items-center justify-center">
+                  <div x-show="$root.importLoading" class="flex items-center justify-center">
                     <div class="animate-spin rounded-full h-6 w-6 border-b-2" style="border-color:var(--accent)"></div>
                     <span class="ml-2 text-sm">Processing file...</span>
                   </div>
-                  <p class="text-xs" style="color:var(--muted)" x-text="importMode === 'backup' ? 'JSON backup up to 10MB' : 'CSV or Excel up to 10MB'"></p>
+                  <p class="text-xs" style="color:var(--muted)" x-text="$root.importMode === 'backup' ? 'JSON backup up to 10MB' : 'CSV or Excel up to 10MB'"></p>
                 </div>
               </div>
             </div>
           </div>
-          <template x-if="duplicateHeaderGroups.length && !duplicateHeaderWarningDismissed">
+          <template x-if="$root.duplicateHeaderGroups.length && !$root.duplicateHeaderWarningDismissed">
             <div class="mt-3 p-3 rounded border" style="border-color:var(--danger); background-color:rgba(248,113,113,0.12); color:var(--danger)" data-import-duplicate-headers>
               <div class="flex items-start justify-between gap-3">
                 <div>
                   <div class="font-semibold">Duplicate headers detected</div>
-                  <p class="text-sm mt-1">We found duplicate headers: <span class="font-semibold" x-text="duplicateHeaderNames.join(', ')"></span>. Please select which column maps to which field.</p>
+                  <p class="text-sm mt-1">We found duplicate headers: <span class="font-semibold" x-text="$root.duplicateHeaderNames.join(', ')"></span>. Please select which column maps to which field.</p>
                   <p class="text-xs mt-2">✅ The first column is used automatically. ⚠️ Additional duplicates are ignored until you map them manually.</p>
                   <div class="mt-2 space-y-1 text-xs">
-                    <template x-for="group in duplicateHeaderGroups" :key="group.base">
+                    <template x-for="group in $root.duplicateHeaderGroups" :key="group.base">
                       <div class="flex flex-wrap items-center gap-1">
                         <span class="font-semibold" x-text="group.base + ':'"></span>
                         <template x-for="(entry, idx) in group.entries" :key="group.base + '-' + idx">
@@ -1129,95 +1129,95 @@
                     </template>
                   </div>
                 </div>
-                <button class="text-xs uppercase tracking-wide" @click="duplicateHeaderWarningDismissed = true" style="color:inherit">Dismiss</button>
+                <button class="text-xs uppercase tracking-wide" @click="$root.duplicateHeaderWarningDismissed = true" style="color:inherit">Dismiss</button>
               </div>
             </div>
           </template>
-          <template x-if="missingRequiredColumns.length && !missingColumnsBannerDismissed">
+          <template x-if="$root.missingRequiredColumns.length && !$root.missingColumnsBannerDismissed">
             <div class="mt-3 p-3 rounded border" style="border-color:var(--danger); background-color:rgba(248,113,113,0.12); color:var(--danger)" data-import-missing-columns data-managed-by="alpine">
               <div class="flex items-start justify-between gap-3">
                 <div>
                   <div class="font-semibold">Column mapping needed</div>
-                  <p class="text-sm mt-1">We couldn't automatically detect <span class="font-semibold" x-text="missingRequiredColumns.join(', ')"></span>. Review the Field Mapping section below and assign the correct columns.</p>
+                  <p class="text-sm mt-1">We couldn't automatically detect <span class="font-semibold" x-text="$root.missingRequiredColumns.join(', ')"></span>. Review the Field Mapping section below and assign the correct columns.</p>
                 </div>
-                <button class="text-xs uppercase tracking-wide" @click="missingColumnsBannerDismissed = true" style="color:inherit">Dismiss</button>
+                <button class="text-xs uppercase tracking-wide" @click="$root.missingColumnsBannerDismissed = true" style="color:inherit">Dismiss</button>
               </div>
             </div>
           </template>
-          <div x-show="importMode !== 'backup' && importData.length" class="mt-3">
+          <div x-show="$root.importMode !== 'backup' && $root.importData.length" class="mt-3">
             <div class="w-full bg-gray-200 rounded-full h-2">
-              <div class="bg-blue-600 h-2 rounded-full" :style="{width: importProgress + '%'}"></div>
+              <div class="bg-blue-600 h-2 rounded-full" :style="{width: $root.importProgress + '%'}"></div>
             </div>
-            <div class="text-xs mt-1 text-center" x-text="importProgress + '%'" :style="'color:var(--muted)'"></div>
+            <div class="text-xs mt-1 text-center" x-text="$root.importProgress + '%'" :style="'color:var(--muted)'"></div>
           </div>
-          <template x-if="importMode === 'backup' && !backupPayload && !importLoading">
+          <template x-if="$root.importMode === 'backup' && !$root.backupPayload && !$root.importLoading">
             <div class="mt-3 p-3 rounded border" style="border-color:var(--line)">
               <div class="text-sm">Upload the JSON file generated by <strong>Export → JSON</strong> to preview totals and restore.</div>
             </div>
           </template>
-          <template x-if="importMode === 'backup' && backupSummary">
+          <template x-if="$root.importMode === 'backup' && $root.backupSummary">
             <div class="mt-3 p-3 rounded border" style="border-color:var(--line)">
               <div class="font-semibold mb-2">Backup summary</div>
               <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-1 text-sm">
-                <div class="flex justify-between"><dt>Employees</dt><dd x-text="backupSummary.employees"></dd></div>
-                <div class="flex justify-between"><dt>Requirements</dt><dd x-text="backupSummary.requirements"></dd></div>
-                <div class="flex justify-between"><dt>Completions</dt><dd x-text="backupSummary.completions"></dd></div>
-                <div class="flex justify-between"><dt>Settings</dt><dd x-text="backupSummary.settings"></dd></div>
-                <div class="flex justify-between"><dt>Templates</dt><dd x-text="backupSummary.templates"></dd></div>
-                <div class="flex justify-between"><dt>Snapshots</dt><dd x-text="backupSummary.snapshots"></dd></div>
-                <div class="flex justify-between"><dt>Activity log entries</dt><dd x-text="backupSummary.activityLog"></dd></div>
-                <template x-if="backupSummary.generatedAt">
-                  <div class="flex justify-between col-span-full"><dt>Generated</dt><dd x-text="new Date(backupSummary.generatedAt).toLocaleString()"></dd></div>
+                <div class="flex justify-between"><dt>Employees</dt><dd x-text="$root.backupSummary.employees"></dd></div>
+                <div class="flex justify-between"><dt>Requirements</dt><dd x-text="$root.backupSummary.requirements"></dd></div>
+                <div class="flex justify-between"><dt>Completions</dt><dd x-text="$root.backupSummary.completions"></dd></div>
+                <div class="flex justify-between"><dt>Settings</dt><dd x-text="$root.backupSummary.settings"></dd></div>
+                <div class="flex justify-between"><dt>Templates</dt><dd x-text="$root.backupSummary.templates"></dd></div>
+                <div class="flex justify-between"><dt>Snapshots</dt><dd x-text="$root.backupSummary.snapshots"></dd></div>
+                <div class="flex justify-between"><dt>Activity log entries</dt><dd x-text="$root.backupSummary.activityLog"></dd></div>
+                <template x-if="$root.backupSummary.generatedAt">
+                  <div class="flex justify-between col-span-full"><dt>Generated</dt><dd x-text="new Date($root.backupSummary.generatedAt).toLocaleString()"></dd></div>
                 </template>
               </dl>
             </div>
           </template>
-          <template x-if="importMode === 'backup' && backupValidationErrors.length">
+          <template x-if="$root.importMode === 'backup' && $root.backupValidationErrors.length">
             <div class="mt-3 p-3 rounded border" style="border-color:var(--danger); color:var(--danger)">
               <div class="font-semibold mb-1">Backup validation issues</div>
               <ul class="list-disc ml-5 space-y-1 text-sm">
-                <template x-for="(err, idx) in backupValidationErrors" :key="idx">
+                <template x-for="(err, idx) in $root.backupValidationErrors" :key="idx">
                   <li x-text="err"></li>
                 </template>
               </ul>
             </div>
           </template>
-          <template x-if="importMode !== 'backup' && importErrors.length">
+          <template x-if="$root.importMode !== 'backup' && $root.importErrors.length">
             <div class="mt-2 text-left">
               <div class="flex items-center justify-between mb-1">
                 <span class="text-sm font-semibold text-red-600">Errors</span>
-                <button class="btn text-xs" @click="downloadImportErrors()">Download CSV</button>
+                <button class="btn text-xs" @click="$root.downloadImportErrors()">Download CSV</button>
               </div>
               <ul class="max-h-40 overflow-auto list-disc ml-5 text-xs text-red-600">
-                <template x-for="e in importErrors" :key="e.row">
+                <template x-for="e in $root.importErrors" :key="e.row">
                   <li x-text="'Row ' + e.row + ': ' + e.message"></li>
                 </template>
               </ul>
             </div>
           </template>
 
-          <div x-show="importMode !== 'backup' && importSheets.length" class="mb-3">
+          <div x-show="$root.importMode !== 'backup' && $root.importSheets.length" class="mb-3">
             <div class="flex items-center gap-3">
               <label class="text-sm">Worksheet:</label>
-              <select x-model="importSheetName" @change="selectExcelSheet(importSheetName)" class="border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)">
-                <template x-for="s in importSheets" :key="s"><option :value="s" x-text="s"></option></template>
+              <select x-model="$root.importSheetName" @change="$root.selectExcelSheet($root.importSheetName)" class="border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)">
+                <template x-for="s in $root.importSheets" :key="s"><option :value="s" x-text="s"></option></template>
               </select>
             </div>
           </div>
 
           <!-- Preset mapping -->
-          <div class="mb-3" x-show="importMode !== 'backup'">
+          <div class="mb-3" x-show="$root.importMode !== 'backup'">
             <label class="block text-sm font-semibold">Quick Map (presets)</label>
             <div class="flex flex-wrap gap-2 mt-1">
-              <button class="btn" @click="applyPreset('maplewood_csv')">Maplewood Seniority (CSV)</button>
-              <button class="btn" @click="applyPreset('education_name')">Education Tracker — Name sheet</button>
+              <button class="btn" @click="$root.applyPreset('maplewood_csv')">Maplewood Seniority (CSV)</button>
+              <button class="btn" @click="$root.applyPreset('education_name')">Education Tracker — Name sheet</button>
             </div>
           </div>
 
           <!-- Name format control -->
-          <div class="mb-4" x-show="importMode !== 'backup'">
+          <div class="mb-4" x-show="$root.importMode !== 'backup'">
             <label class="block text-sm font-semibold">Name Format (for Payroll/Employee Name)</label>
-            <select x-model="nameFormat" class="mt-1 border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)">
+            <select x-model="$root.nameFormat" class="mt-1 border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)">
               <option value="auto">Auto-detect</option>
               <option value="last_first">Last, First</option>
               <option value="first_last">First Last</option>
@@ -1225,42 +1225,42 @@
           </div>
 
           <!-- Mapping -->
-          <div x-show="importMode !== 'backup' && importHeaders.length" class="space-y-6" x-ref="employeeMappingPanel">
-            <div class="p-4 border rounded-lg" style="border-color:var(--line)" x-data="{ mappingValidated: false }">
+          <div x-show="$root.importMode !== 'backup' && $root.importHeaders.length" class="space-y-6" x-ref="employeeMappingPanel">
+            <div class="p-4 border rounded-lg" style="border-color:var(--line)" x-data="{ mappingValidated: $root.mappingValidated }" x-effect="$root.mappingValidated = mappingValidated">
               <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                 <div>
                   <h4 class="font-semibold text-base">Step 1: Map Columns</h4>
                   <p class="text-xs mt-1" style="color:var(--muted)">Review each application field and confirm the detected column before continuing.</p>
                 </div>
-                <button type="button" class="btn" @click="mappingValidated = true; updateMissingRequiredColumns()">Validate</button>
+                <button type="button" class="btn" @click="mappingValidated = true; $root.updateMissingRequiredColumns()">Validate</button>
               </div>
               <div class="grid gap-y-2 gap-x-4 sm:grid-cols-[200px_auto]" role="list">
-                <template x-for="(label, key) in fieldLabels" :key="key">
+                <template x-for="(label, key) in $root.fieldLabels" :key="key">
                   <div class="sm:contents" role="listitem">
                     <div class="text-sm font-medium sm:py-1" x-text="label"></div>
                     <div class="mt-1 sm:mt-0">
                       <select class="w-full border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)"
-                              x-model="columnMap[key]"
-                              @change="mappingValidated = false; updateEligibilityPreview()">
+                              x-model="$root.columnMap[key]"
+                              @change="mappingValidated = false; $root.updateEligibilityPreview()">
                         <option value="">-- Not Mapped --</option>
-                        <template x-for="(h, idx) in importHeaders" :key="idx"><option :value="h" x-text="h"></option></template>
+                        <template x-for="(h, idx) in $root.importHeaders" :key="idx"><option :value="h" x-text="h"></option></template>
                       </select>
                     </div>
                   </div>
                 </template>
               </div>
               <div x-show="mappingValidated" class="mt-4" x-cloak>
-                <template x-if="missingRequiredColumns.length">
+                <template x-if="$root.missingRequiredColumns.length">
                   <div class="p-3 rounded border" style="border-color:var(--danger); background-color:rgba(248,113,113,0.12); color:var(--danger)">
                     <div class="text-sm font-semibold mb-2">Finish mapping the required fields</div>
                     <ul class="list-disc ml-5 space-y-1 text-xs">
-                      <template x-for="(col, idx) in missingRequiredColumns" :key="idx">
+                      <template x-for="(col, idx) in $root.missingRequiredColumns" :key="idx">
                         <li x-text="col"></li>
                       </template>
                     </ul>
                   </div>
                 </template>
-                <template x-if="!missingRequiredColumns.length">
+                <template x-if="!$root.missingRequiredColumns.length">
                   <div class="p-3 rounded border" style="border-color:var(--success); background-color:rgba(16,185,129,0.12); color:var(--success)">
                     <div class="text-sm font-semibold">All required fields are mapped.</div>
                     <p class="text-xs mt-1">You can continue to preview and import your data.</p>
@@ -1272,13 +1272,13 @@
               <h4 class="font-semibold mb-2">Requirement Columns — Completions</h4>
               <div class="text-xs" style="color:var(--muted)">Map sheet columns to requirement completion dates (optional).</div>
               <div class="max-h-64 overflow-auto pr-1">
-                <template x-for="r in requirements" :key="r.id">
+                <template x-for="r in $root.requirements" :key="r.id">
                   <div class="flex items-center gap-2 mb-2">
                     <label class="w-52 text-sm truncate" :title="r.name" x-text="r.name"></label>
                     <select class="flex-1 border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)"
-                            x-model="completionMap[r.id]">
+                            x-model="$root.completionMap[r.id]">
                       <option value="">-- Not Mapped --</option>
-                      <template x-for="(h, idx) in importHeaders" :key="idx"><option :value="h" x-text="h"></option></template>
+                      <template x-for="(h, idx) in $root.importHeaders" :key="idx"><option :value="h" x-text="h"></option></template>
                     </select>
                   </div>
                 </template>
@@ -1287,24 +1287,24 @@
           </div>
 
           <!-- Preview -->
-          <div x-show="importMode !== 'backup' && importData.length" class="mt-4">
+          <div x-show="$root.importMode !== 'backup' && $root.importData.length" class="mt-4">
             <div class="flex items-center justify-between">
               <label class="block text-sm font-semibold">Preview (first 6 rows)</label>
               <div class="space-x-2">
-                <button class="btn" @click="dryRun()" x-show="importMode !== 'backup'">Dry Run</button>
+                <button class="btn" @click="$root.dryRun()" x-show="$root.importMode !== 'backup'">Dry Run</button>
               </div>
             </div>
             <div class="overflow-auto max-h-60 border rounded-md" style="border-color:var(--line)">
               <table class="min-w-full divide-y" style="border-color:var(--line)">
                 <thead class="bg-gray-50 dark:bg-gray-900"><tr>
-                  <template x-for="(header, index) in importHeaders" :key="index">
+                  <template x-for="(header, index) in $root.importHeaders" :key="index">
                     <th class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider"><span x-text="header"></span></th>
                   </template>
                 </tr></thead>
                 <tbody class="divide-y">
-                  <template x-for="(row, rowIndex) in importData.slice(0,6)" :key="rowIndex">
+                  <template x-for="(row, rowIndex) in $root.importData.slice(0,6)" :key="rowIndex">
                     <tr>
-                      <template x-for="(header, headerIndex) in importHeaders" :key="headerIndex">
+                      <template x-for="(header, headerIndex) in $root.importHeaders" :key="headerIndex">
                         <td class="px-3 py-2 whitespace-nowrap text-sm" x-text="row[header]"></td>
                       </template>
                     </tr>
@@ -1315,40 +1315,40 @@
           </div>
 
           <!-- Warnings / Errors -->
-          <template x-if="importWarning">
+          <template x-if="$root.importWarning">
             <div class="mt-3 p-3 rounded border" style="border-color:var(--warn); color:var(--warn)">
               <div class="font-semibold">Heads up</div>
-              <div class="text-sm" x-text="importWarning"></div>
+              <div class="text-sm" x-text="$root.importWarning"></div>
             </div>
           </template>
-          <template x-if="importError">
+          <template x-if="$root.importError">
             <div class="mt-3 p-3 rounded border" style="border-color:var(--danger); color:var(--danger)">
               <div class="font-semibold">Import blocked</div>
-              <div class="text-sm" x-text="importError"></div>
+              <div class="text-sm" x-text="$root.importError"></div>
             </div>
           </template>
-          <template x-if="importMode !== 'backup' && dryRunDetails.length">
+          <template x-if="$root.importMode !== 'backup' && $root.dryRunDetails.length">
             <div class="mt-3 p-3 rounded border" style="border-color:var(--line)">
               <div class="font-semibold mb-1">Dry Run result</div>
-              <div class="text-sm" x-text="'Would add: ' + dryRunSummary.added + ', update: ' + dryRunSummary.updated + ', skip: ' + dryRunSummary.skipped"></div>
+              <div class="text-sm" x-text="'Would add: ' + $root.dryRunSummary.added + ', update: ' + $root.dryRunSummary.updated + ', skip: ' + $root.dryRunSummary.skipped"></div>
               <ul class="list-disc ml-5 mt-2 text-sm">
-                <template x-for="(d, idx) in dryRunDetails.slice(0,8)" :key="idx">
+                <template x-for="(d, idx) in $root.dryRunDetails.slice(0,8)" :key="idx">
                   <li x-text="d"></li>
                 </template>
-                <template x-if="dryRunDetails.length>8"><li>…and more</li></template>
+                <template x-if="$root.dryRunDetails.length>8"><li>…and more</li></template>
               </ul>
             </div>
           </template>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
           <button
-            @click="processImport"
-            x-show="importMode === 'backup' ? backupPayload : importData.length"
+            @click="$root.processImport"
+            x-show="$root.importMode === 'backup' ? $root.backupPayload : $root.importData.length"
             class="w-full sm:w-auto px-4 py-2 btn btn-primary"
-            :class="{'opacity-50 cursor-not-allowed': importMode === 'backup' && (!!backupValidationErrors.length || !backupPayload)}"
-            :disabled="importMode === 'backup' && (!!backupValidationErrors.length || !backupPayload)"
+            :class="{'opacity-50 cursor-not-allowed': $root.importMode === 'backup' && (!!$root.backupValidationErrors.length || !$root.backupPayload)}"
+            :disabled="$root.importMode === 'backup' && (!!$root.backupValidationErrors.length || !$root.backupPayload)"
           >
-            <span x-text="importMode === 'backup' ? 'Restore Backup' : 'Process Import'"></span>
+            <span x-text="$root.importMode === 'backup' ? 'Restore Backup' : 'Process Import'"></span>
           </button>
           <button @click="close()" data-close-import-modal class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
         </div>
@@ -1359,7 +1359,7 @@
   <!-- Activity Log Modal -->
   <div
     id="activity-log-modal"
-    x-show="showActivityLogModal"
+    x-show="$root.showActivityLogModal"
     x-cloak
     class="fixed inset-0 z-50"
     x-data="modalA11y(() => showActivityLogModal, value => showActivityLogModal = value)"
