@@ -997,6 +997,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           savedViews:[], selectedViewName:'',
           globalSearch:'', searchResults:[],
           globalSearchIndex:null, globalSearchIndexVersion:-1, globalSearchDataVersion:0, globalSearchData:[],
+          employeeSearchIndex:null, employeeSearchIndexVersion:-1, employeeSearchDataVersion:0,
+          employeeSearchHighlights:{}, employeeSearchGeneralQuery:'',
           virtualWindowSize:40, virtualStartIndex:0, virtualPaddingTop:0, virtualPaddingBottom:0, virtualRowHeight:68, virtualScrollInitialized:false,
         roleOptions:[...DEFAULT_ROLE_LOOKUPS],
         statusOptions:[...DEFAULT_STATUS_LOOKUPS],
@@ -1168,6 +1170,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
             this.ensureLookupValue(field, sanitizedValue);
             this.touchGlobalSearchVersion();
+            this.touchEmployeeSearchIndex();
             this.filterEmployees();
 
             const labels = {
@@ -1594,6 +1597,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.employees = employees;
             this.requirements = requirements;
             this.employeeRequirements = employeeRequirements;
+            this.touchEmployeeSearchIndex();
 
             await this.loadEmployeeLookups();
 
@@ -1620,6 +1624,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.requirements = [];
             this.employeeRequirements = [];
             this.erMap = new Map();
+            this.touchEmployeeSearchIndex();
 
             const friendlyMessage = 'We couldn\'t access the local dashboard database. Private browsing or low device storage can block offline data. Reload in a standard window or free up space, then try again.';
             this.loadError = friendlyMessage;
@@ -1655,6 +1660,11 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.globalSearchIndex = null;
           this.globalSearchIndexVersion = -1;
           this.globalSearchData = [];
+        },
+        touchEmployeeSearchIndex(){
+          this.employeeSearchDataVersion += 1;
+          this.employeeSearchIndex = null;
+          this.employeeSearchIndexVersion = -1;
         },
 
         async loadVisibleRequirements(){
@@ -3360,39 +3370,454 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             return [...new Set(roles)];
           },
         filterEmployees(){
-          let filtered = [...this.employees];
+          const employees = Array.isArray(this.employees) ? this.employees : [];
+          let filtered = [...employees];
           const rawQuery = this.searchQuery || '';
           const trimmedQuery = rawQuery.trim();
-          if (trimmedQuery) {
-            const query = trimmedQuery.toLowerCase();
-            filtered = filtered.filter(emp => {
-              const first = (emp.firstName ?? '').toString().toLowerCase();
-              const last = (emp.lastName ?? '').toString().toLowerCase();
-              const role = (emp.role ?? '').toString().toLowerCase();
-              const employeeId = (emp.employeeId ?? '').toString().toLowerCase();
-              return (
-                first.includes(query) ||
-                last.includes(query) ||
-                role.includes(query) ||
-                employeeId.includes(query)
-              );
-            });
+          let highlightMap = {};
+          let generalQuery = '';
+
+          if(trimmedQuery){
+            const parsed = this.parseEmployeeSearchQuery(trimmedQuery);
+            generalQuery = parsed.general || '';
+            const fuse = this.getEmployeeSearchIndex();
+            const queries = [];
+
+            if(parsed.general){
+              queries.push({ term: parsed.general, fields: null });
+            }
+
+            for(const scope of parsed.scopes){
+              const value = (scope?.value || '').trim();
+              if(!value){
+                continue;
+              }
+              queries.push({ term: value, fields: scope.fields });
+            }
+
+            if(fuse && queries.length){
+              const queryMaps = queries.map((query) => this.runEmployeeSearchQuery(fuse, query.term, query.fields));
+              let candidateIds = null;
+
+              for(const resultMap of queryMaps){
+                if(candidateIds === null){
+                  candidateIds = new Set(resultMap.keys());
+                } else {
+                  const next = new Set();
+                  for(const id of candidateIds){
+                    if(resultMap.has(id)){
+                      next.add(id);
+                    }
+                  }
+                  candidateIds = next;
+                }
+              }
+
+              if(candidateIds && candidateIds.size){
+                const combinedEntries = [];
+
+                for(const id of candidateIds){
+                  let item = null;
+                  let matches = [];
+                  let minScore = Infinity;
+
+                  for(const resultMap of queryMaps){
+                    const entry = resultMap.get(id);
+                    if(!entry) continue;
+                    item = entry.item;
+                    if(Array.isArray(entry.matches) && entry.matches.length){
+                      matches = matches.concat(entry.matches);
+                    }
+                    if(typeof entry.score === 'number' && entry.score < minScore){
+                      minScore = entry.score;
+                    }
+                  }
+
+                  if(item){
+                    combinedEntries.push({
+                      item,
+                      matches,
+                      score: Number.isFinite(minScore) ? minScore : null
+                    });
+                  }
+                }
+
+                combinedEntries.sort((a, b) => {
+                  const scoreA = typeof a.score === 'number' ? a.score : 1;
+                  const scoreB = typeof b.score === 'number' ? b.score : 1;
+                  if(scoreA !== scoreB){
+                    return scoreA - scoreB;
+                  }
+                  const nameA = `${a.item?.lastName || ''} ${a.item?.firstName || ''}`.trim().toLowerCase();
+                  const nameB = `${b.item?.lastName || ''} ${b.item?.firstName || ''}`.trim().toLowerCase();
+                  return nameA.localeCompare(nameB);
+                });
+
+                filtered = combinedEntries.map((entry) => entry.item);
+                highlightMap = this.buildEmployeeHighlights(combinedEntries);
+              } else {
+                filtered = [];
+                highlightMap = {};
+              }
+            } else {
+              const fallbackTerm = (generalQuery || trimmedQuery).toLowerCase();
+              filtered = employees.filter((emp) => {
+                const first = (emp.firstName ?? '').toString().toLowerCase();
+                const last = (emp.lastName ?? '').toString().toLowerCase();
+                const role = (emp.role ?? '').toString().toLowerCase();
+                const employeeId = (emp.employeeId ?? '').toString().toLowerCase();
+                const status = (emp.status ?? '').toString().toLowerCase();
+                return (
+                  first.includes(fallbackTerm) ||
+                  last.includes(fallbackTerm) ||
+                  role.includes(fallbackTerm) ||
+                  employeeId.includes(fallbackTerm) ||
+                  status.includes(fallbackTerm)
+                );
+              });
+              if(!generalQuery){
+                generalQuery = trimmedQuery;
+              }
+            }
           }
-          if (this.roleFilter) {
+
+          if(this.roleFilter){
             filtered = filtered.filter(emp => emp.role === this.roleFilter);
           }
-          if (this.statusFilter) {
+          if(this.statusFilter){
             filtered = filtered.filter(emp => emp.status === this.statusFilter);
           }
-          if (this.reqStatusFilter) {
+          if(this.reqStatusFilter){
             filtered = filtered.filter(emp =>
               this.requirements.some(req => this.getStatus(emp.id, req.id) === this.reqStatusFilter)
             );
           }
+
+          this.employeeSearchGeneralQuery = generalQuery || '';
+          this.employeeSearchHighlights = highlightMap;
           this.isFiltering = Boolean(trimmedQuery || this.roleFilter || this.statusFilter || this.reqStatusFilter);
           this.filteredEmployees = this.isFiltering ? filtered : [];
           this.resetVirtualWindow();
           this.updateSelectedViewMatch();
+        },
+        parseEmployeeSearchQuery(rawQuery){
+          const result = { general:'', scopes:[] };
+          if(!rawQuery){
+            return result;
+          }
+
+          const text = String(rawQuery);
+          const consumed = [];
+          const scopes = [];
+          const pattern = /(\w+):(?:"([^"]*)"|([^\s]+))/gi;
+          let match;
+
+          while((match = pattern.exec(text)) !== null){
+            const field = match[1];
+            const quoted = match[2];
+            const unquoted = match[3];
+            const value = (quoted ?? unquoted ?? '').trim();
+            if(!value){
+              continue;
+            }
+            const fields = this.resolveEmployeeSearchFields(field);
+            if(!fields.length){
+              continue;
+            }
+            scopes.push({ fields, value });
+            consumed.push([match.index, match.index + match[0].length]);
+          }
+
+          result.scopes = scopes;
+
+          if(consumed.length){
+            consumed.sort((a, b) => a[0] - b[0]);
+            let cursor = 0;
+            const segments = [];
+            for(const [start, end] of consumed){
+              if(cursor < start){
+                segments.push(text.slice(cursor, start));
+              }
+              cursor = end;
+            }
+            if(cursor < text.length){
+              segments.push(text.slice(cursor));
+            }
+            result.general = segments.join(' ').trim();
+          } else {
+            result.general = text.trim();
+          }
+
+          return result;
+        },
+        resolveEmployeeSearchFields(field){
+          if(!field){
+            return [];
+          }
+          const normalized = String(field).toLowerCase();
+          const dictionary = {
+            firstname: ['firstName'],
+            first: ['firstName'],
+            'first_name': ['firstName'],
+            lastname: ['lastName'],
+            last: ['lastName'],
+            'last_name': ['lastName'],
+            name: ['firstName', 'lastName'],
+            role: ['role'],
+            status: ['status'],
+            employeeid: ['employeeId'],
+            'employee_id': ['employeeId'],
+            id: ['employeeId']
+          };
+          const fields = dictionary[normalized];
+          return Array.isArray(fields) ? [...fields] : [];
+        },
+        getEmployeeSearchIndex(){
+          if(!Array.isArray(this.employees) || !this.employees.length){
+            this.employeeSearchIndex = null;
+            this.employeeSearchIndexVersion = this.employeeSearchDataVersion;
+            return null;
+          }
+          if(this.employeeSearchIndex && this.employeeSearchIndexVersion === this.employeeSearchDataVersion){
+            return this.employeeSearchIndex;
+          }
+          try {
+            this.employeeSearchIndex = new Fuse(this.employees, {
+              isCaseSensitive: false,
+              keys: ['firstName', 'lastName', 'employeeId', 'role', 'status'],
+              includeMatches: true,
+              threshold: 0.35,
+              ignoreLocation: true,
+              minMatchCharLength: 1,
+              useExtendedSearch: true,
+              getFn: (obj, path) => {
+                const value = obj?.[path];
+                if(value == null){
+                  return '';
+                }
+                return String(value);
+              }
+            });
+          } catch (error) {
+            console.warn('Failed to build employee search index', error);
+            this.employeeSearchIndex = null;
+          }
+          this.employeeSearchIndexVersion = this.employeeSearchDataVersion;
+          return this.employeeSearchIndex;
+        },
+        runEmployeeSearchQuery(fuse, term, fields){
+          const map = new Map();
+          if(!fuse){
+            return map;
+          }
+          const searchTerm = (term ?? '').toString().trim();
+          if(!searchTerm){
+            return map;
+          }
+          try {
+            const results = fuse.search(searchTerm);
+            for(const result of results){
+              const item = result?.item;
+              if(!item || !item.id){
+                continue;
+              }
+              const allowedFields = Array.isArray(fields) ? fields : [];
+              const matches = [];
+              if(Array.isArray(result.matches)){
+                for(const match of result.matches){
+                  if(!match?.key){
+                    continue;
+                  }
+                  if(allowedFields.length && !allowedFields.includes(match.key)){
+                    continue;
+                  }
+                  if(!Array.isArray(match.indices) || !match.indices.length){
+                    continue;
+                  }
+                  matches.push({
+                    key: match.key,
+                    indices: match.indices.map(([start, end]) => [start, end])
+                  });
+                }
+              }
+              if(allowedFields.length && !matches.length){
+                continue;
+              }
+              map.set(item.id, {
+                item,
+                matches,
+                score: typeof result.score === 'number' ? result.score : null
+              });
+            }
+          } catch (error) {
+            console.warn('Employee search query failed', error);
+          }
+          return map;
+        },
+        buildEmployeeHighlights(entries){
+          if(!Array.isArray(entries) || !entries.length){
+            return {};
+          }
+          const highlight = Object.create(null);
+          for(const entry of entries){
+            const item = entry?.item;
+            if(!item || !item.id){
+              continue;
+            }
+            const id = item.id;
+            const matches = Array.isArray(entry.matches) ? entry.matches : [];
+            if(!matches.length){
+              continue;
+            }
+            if(!highlight[id]){
+              highlight[id] = Object.create(null);
+            }
+            for(const match of matches){
+              if(!match?.key || !Array.isArray(match.indices)){
+                continue;
+              }
+              if(!highlight[id][match.key]){
+                highlight[id][match.key] = [];
+              }
+              for(const [start, end] of match.indices){
+                const safeStart = Number.isFinite(start) ? Math.max(0, start) : 0;
+                const safeEnd = Number.isFinite(end) ? Math.max(safeStart, end + 1) : safeStart;
+                if(safeEnd <= safeStart){
+                  continue;
+                }
+                highlight[id][match.key].push([safeStart, safeEnd]);
+              }
+            }
+          }
+
+          for(const id of Object.keys(highlight)){
+            const fieldMap = highlight[id];
+            for(const field of Object.keys(fieldMap)){
+              const segments = fieldMap[field];
+              if(!Array.isArray(segments) || !segments.length){
+                delete fieldMap[field];
+                continue;
+              }
+              segments.sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+              const merged = [];
+              for(const [start, end] of segments){
+                if(!merged.length){
+                  merged.push([start, end]);
+                  continue;
+                }
+                const last = merged[merged.length - 1];
+                if(start <= last[1]){
+                  last[1] = Math.max(last[1], end);
+                } else {
+                  merged.push([start, end]);
+                }
+              }
+              if(merged.length){
+                fieldMap[field] = merged;
+              } else {
+                delete fieldMap[field];
+              }
+            }
+            if(!Object.keys(fieldMap).length){
+              delete highlight[id];
+            }
+          }
+
+          return highlight;
+        },
+        getEmployeeHighlightSegments(employeeId, field){
+          if(!employeeId || !field){
+            return null;
+          }
+          const map = this.employeeSearchHighlights || {};
+          const entry = map[employeeId];
+          if(!entry){
+            return null;
+          }
+          const segments = entry[field];
+          return Array.isArray(segments) && segments.length ? segments : null;
+        },
+        applyHighlightSegments(value, segments){
+          if(value == null){
+            return '';
+          }
+          const text = String(value);
+          if(!Array.isArray(segments) || !segments.length){
+            return this.escapeHtml(text);
+          }
+          const normalized = segments
+            .map(([start, end]) => [
+              Math.max(0, Math.min(text.length, start)),
+              Math.max(0, Math.min(text.length, end))
+            ])
+            .filter(([start, end]) => end > start)
+            .sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+          if(!normalized.length){
+            return this.escapeHtml(text);
+          }
+          let lastIndex = 0;
+          const parts = [];
+          for(const [start, end] of normalized){
+            if(start > lastIndex){
+              parts.push(this.escapeHtml(text.slice(lastIndex, start)));
+            }
+            parts.push(`<mark>${this.escapeHtml(text.slice(start, end))}</mark>`);
+            lastIndex = end;
+          }
+          if(lastIndex < text.length){
+            parts.push(this.escapeHtml(text.slice(lastIndex)));
+          }
+          return parts.join('');
+        },
+        escapeForRegex(value){
+          if(value == null){
+            return '';
+          }
+          return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        },
+        highlightEmployeeName(emp){
+          if(!emp){
+            return '';
+          }
+          const firstRaw = emp.firstName ?? '';
+          const lastRaw = emp.lastName ?? '';
+          const first = firstRaw
+            ? this.highlightText(firstRaw, {
+                employeeId: emp.id,
+                field: 'firstName',
+                query: this.employeeSearchGeneralQuery
+              })
+            : '';
+          const last = lastRaw
+            ? this.highlightText(lastRaw, {
+                employeeId: emp.id,
+                field: 'lastName',
+                query: this.employeeSearchGeneralQuery
+              })
+            : '';
+
+          if(first && last){
+            return `${first} ${last}`.trim();
+          }
+          if(first){
+            return first;
+          }
+          if(last){
+            return last;
+          }
+          const fallback = [firstRaw, lastRaw].filter(Boolean).join(' ').trim();
+          return fallback ? this.escapeHtml(fallback) : '';
+        },
+        highlightEmployeeId(emp){
+          if(!emp?.employeeId){
+            return '';
+          }
+          const highlightedId = this.highlightText(emp.employeeId, {
+            employeeId: emp.id,
+            field: 'employeeId',
+            query: this.employeeSearchGeneralQuery
+          });
+          return `${this.escapeHtml('ID: ')}${highlightedId}`;
         },
         get activeFilterChips(){
           const chips = [];
@@ -3632,7 +4057,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
         getEscapedGlobalSearch(){
           if(!this.globalSearch) return '';
-          return String(this.globalSearch).replace(/[.*+?^${}()|[\]\\]/g, '\$&');
+          return this.escapeForRegex(this.globalSearch);
         },
         escapeHtml(text){
           if(text == null) return '';
@@ -3647,36 +4072,58 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             }
           });
         },
-        highlightText(text){
-          if(text == null) return '';
+        highlightText(text, options = {}){
+          if(text == null){
+            return '';
+          }
           const value = String(text);
-          if(!this.globalSearch) return this.escapeHtml(value);
-          const escapedSearch = this.getEscapedGlobalSearch();
-          if(!escapedSearch) return this.escapeHtml(value);
+          const explicitSegments = Array.isArray(options.segments) ? options.segments : null;
+          let segments = explicitSegments;
 
-          const regex = new RegExp(`(${escapedSearch})`, 'gi');
-          let match;
-          let lastIndex = 0;
-          const segments = [];
-
-          while((match = regex.exec(value)) !== null){
-            const preceding = value.slice(lastIndex, match.index);
-            if(preceding){
-              segments.push(this.escapeHtml(preceding));
-            }
-            segments.push(`<mark>${this.escapeHtml(match[0])}</mark>`);
-            lastIndex = match.index + match[0].length;
+          if(!segments && options.employeeId && options.field){
+            segments = this.getEmployeeHighlightSegments(options.employeeId, options.field) || null;
           }
 
-          if(!segments.length){
+          if(segments && segments.length){
+            return this.applyHighlightSegments(value, segments);
+          }
+
+          const querySource = Object.prototype.hasOwnProperty.call(options, 'query')
+            ? options.query
+            : this.globalSearch;
+          const fallback = (querySource ?? '').trim();
+          if(!fallback){
+            return this.escapeHtml(value);
+          }
+
+          const escaped = this.escapeForRegex(fallback);
+          if(!escaped){
+            return this.escapeHtml(value);
+          }
+
+          const regex = new RegExp(`(${escaped})`, 'gi');
+          let match;
+          let lastIndex = 0;
+          const parts = [];
+
+          while((match = regex.exec(value)) !== null){
+            if(match.index > lastIndex){
+              parts.push(this.escapeHtml(value.slice(lastIndex, match.index)));
+            }
+            const matched = match[0];
+            parts.push(`<mark>${this.escapeHtml(matched)}</mark>`);
+            lastIndex = match.index + matched.length;
+          }
+
+          if(!parts.length){
             return this.escapeHtml(value);
           }
 
           if(lastIndex < value.length){
-            segments.push(this.escapeHtml(value.slice(lastIndex)));
+            parts.push(this.escapeHtml(value.slice(lastIndex)));
           }
 
-          return segments.join('');
+          return parts.join('');
         },
         sortEmployees(field){
           if (this.sortField === field) {
