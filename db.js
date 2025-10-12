@@ -436,3 +436,24 @@ export async function addLookup(type, value) {
   }
 }
 
+export async function putEmployeeRecord(dbOrRecord, maybeRecord) {
+  let db = dbOrRecord;
+  let record = maybeRecord;
+
+  if (record == null) {
+    record = db;
+    db = null;
+  }
+
+  if (!record || !record.id) {
+    throw new Error('putEmployeeRecord requires an employee object with an id');
+  }
+
+  const targetDb = db && typeof db.table === 'function'
+    ? db
+    : await openDatabase();
+
+  await targetDb.employees.put(record);
+  return record;
+}
+

@@ -375,10 +375,49 @@
                     </div>
                   </div>
                 </td>
-                <td class="px-4 py-3 text-sm" x-html="highlightText(emp.role)"></td>
-                <td class="px-4 py-3 text-sm" x-html="highlightText(emp.employmentType)"></td>
+                <td class="px-4 py-3 text-sm">
+                  <select
+                    class="select text-sm"
+                    x-model="emp.role"
+                    @focus="trackInlineEdit(emp, 'role')"
+                    @change="handleInlineEmployeeUpdate(emp, 'role', $event.target.value)"
+                    :aria-label="`Role for ${emp.firstName} ${emp.lastName}`"
+                  >
+                    <option value="">Select Role</option>
+                    <template x-for="role in roleOptions" :key="role">
+                      <option :value="role" x-text="role"></option>
+                    </template>
+                  </select>
+                </td>
+                <td class="px-4 py-3 text-sm">
+                  <select
+                    class="select text-sm"
+                    x-model="emp.employmentType"
+                    @focus="trackInlineEdit(emp, 'employmentType')"
+                    @change="handleInlineEmployeeUpdate(emp, 'employmentType', $event.target.value)"
+                    :aria-label="`Employment type for ${emp.firstName} ${emp.lastName}`"
+                  >
+                    <option value="">Select Employment Type</option>
+                    <template x-for="type in employmentTypeOptions" :key="type">
+                      <option :value="type" x-text="formatEmploymentTypeLabel(type) || type"></option>
+                    </template>
+                  </select>
+                </td>
                 <td class="px-4 py-3">
-                  <span :class="emp.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'" class="status-badge px-2 py-1 text-xs rounded-full" x-html="highlightText(emp.status)"></span>
+                  <select
+                    class="select text-sm font-semibold status-badge"
+                    :class="statusSelectClasses(emp.status)"
+                    style="min-width:8rem;"
+                    x-model="emp.status"
+                    @focus="trackInlineEdit(emp, 'status')"
+                    @change="handleInlineEmployeeUpdate(emp, 'status', $event.target.value)"
+                    :aria-label="`Status for ${emp.firstName} ${emp.lastName}`"
+                  >
+                    <option value="">Select Status</option>
+                    <template x-for="status in statusOptions" :key="status">
+                      <option :value="status" x-text="status"></option>
+                    </template>
+                  </select>
                 </td>
                   <template x-for="req in orderedVisibleRequirements()" :key="req.id">
                     <td class="px-4 py-3">
