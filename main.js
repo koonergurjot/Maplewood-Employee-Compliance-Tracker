@@ -270,12 +270,13 @@ Alpine.store('app', {
     loading: false,
     initializing: false,
     existing: [],
-    onResolve: null
+    onResolve: null,
+    onClose: null
   },
   setToast(t){
     this.toast = t;
   },
-  async openLookupDialog({ type, label, initialValue = '', onSuccess, existingValues = [] } = {}){
+  async openLookupDialog({ type, label, initialValue = '', onSuccess, existingValues = [], onClose } = {}){
     if(!type){
       return;
     }
@@ -290,6 +291,7 @@ Alpine.store('app', {
     dialog.initializing = true;
     dialog.open = true;
     dialog.onResolve = typeof onSuccess === 'function' ? onSuccess : null;
+    dialog.onClose = typeof onClose === 'function' ? onClose : null;
     dialog.existing = Array.isArray(existingValues)
       ? existingValues
           .map(entry => {
@@ -331,7 +333,16 @@ Alpine.store('app', {
     dialog.initializing = false;
     dialog.existing = [];
     dialog.onResolve = null;
+    const handleClose = dialog.onClose;
+    dialog.onClose = null;
     this.showLookupModal = '';
+    if(typeof handleClose === 'function'){
+      try {
+        handleClose();
+      } catch (error) {
+        console.warn('lookupDialog: onClose handler failed', error);
+      }
+    }
   },
   async submitLookupDialog(){
     const dialog = this.lookupDialog;
@@ -590,9 +601,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.open = true;
           return new Promise(resolve => {
             this.$nextTick(() => {
-              const container = this.$refs?.dialog || this.$el;
-              this.deactivateFocusTrap();
-              this.focusTrapCleanup = trapFocusWithin(container);
+              this.activateFocusTrap();
               const input = this.$refs?.name;
               if(input && typeof input.focus === 'function'){
                 try {
@@ -638,6 +647,19 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             });
           }
           return Promise.resolve();
+        },
+        activateFocusTrap(){
+          if(!this.open){
+            return;
+          }
+
+          const container = this.$refs?.dialog || this.$el;
+          if(!container){
+            return;
+          }
+
+          this.deactivateFocusTrap();
+          this.focusTrapCleanup = trapFocusWithin(container);
         },
         deactivateFocusTrap(){
           if(typeof this.focusTrapCleanup === 'function'){
@@ -734,17 +756,64 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           const existing = key && Array.isArray(this[key]) ? [...this[key]] : [];
           const label = this.getLookupLabel(type);
 
+          const activeElement = typeof document !== 'undefined' ? document.activeElement : null;
+          const restoreFocusTarget = activeElement && this.$el && this.$el.contains(activeElement) ? activeElement : null;
+          this.deactivateFocusTrap();
+
           store.showLookupModal = type;
-          store.openLookupDialog({
-            type,
-            label,
-            existingValues: existing,
-            onSuccess: value => {
-              Promise.resolve(this.handleLookupAdded(type, value)).catch(error => {
-                console.warn(`addEmployeeModal: failed to handle lookup add for ${type}`, error);
-              });
+
+          const reopenFocusTrap = () => {
+            if(!this.open){
+              return;
             }
-          });
+
+            this.$nextTick(() => {
+              if(!this.open){
+                return;
+              }
+
+              this.activateFocusTrap();
+
+              if(!restoreFocusTarget || typeof restoreFocusTarget.focus !== 'function'){
+                return;
+              }
+
+              let isInDocument = true;
+              if(typeof document !== 'undefined'){
+                const docContains = typeof document.contains === 'function' ? document.contains(restoreFocusTarget) : false;
+                const bodyContains = document.body && typeof document.body.contains === 'function' ? document.body.contains(restoreFocusTarget) : false;
+                const rootContains = document.documentElement && typeof document.documentElement.contains === 'function' ? document.documentElement.contains(restoreFocusTarget) : false;
+                isInDocument = docContains || bodyContains || rootContains;
+              }
+
+              if(!isInDocument){
+                return;
+              }
+
+              try {
+                restoreFocusTarget.focus({ preventScroll: true });
+              } catch (error) {
+                restoreFocusTarget.focus();
+              }
+            });
+          };
+
+          try {
+            store.openLookupDialog({
+              type,
+              label,
+              existingValues: existing,
+              onSuccess: value => {
+                Promise.resolve(this.handleLookupAdded(type, value)).catch(error => {
+                  console.warn(`addEmployeeModal: failed to handle lookup add for ${type}`, error);
+                });
+              },
+              onClose: reopenFocusTrap
+            });
+          } catch (error) {
+            console.warn('addEmployeeModal: failed to open lookup dialog', error);
+            reopenFocusTrap();
+          }
         },
         async handleLookupAdded(type, value){
           const trimmed = typeof value === 'string' ? value.trim() : '';
