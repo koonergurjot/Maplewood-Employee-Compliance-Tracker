@@ -259,7 +259,48 @@ window.Alpine = Alpine;
 // Global store for shared UI state
 Alpine.store('app', {
   showImportModal: false,
+  showLookupModal: null,
   toast: null,
+  _toastTimer: null,
+  showToast(msg){
+    if(this._toastTimer){
+      clearTimeout(this._toastTimer);
+      this._toastTimer = null;
+    }
+    const payload = typeof msg === 'object' && msg !== null ? { ...msg } : { message: String(msg ?? '') };
+    if(!payload.type){
+      payload.type = 'info';
+    }
+    this.toast = payload;
+    if(payload.type !== 'progress'){
+      const duration = typeof payload.duration === 'number' && Number.isFinite(payload.duration)
+        ? Math.max(0, payload.duration)
+        : 3500;
+      if(duration > 0){
+        this._toastTimer = setTimeout(() => {
+          if(this.toast?.type !== 'progress'){
+            this.toast = null;
+          }
+          this._toastTimer = null;
+        }, duration);
+      }
+    }
+  },
+  hideToast(){
+    if(this._toastTimer){
+      clearTimeout(this._toastTimer);
+      this._toastTimer = null;
+    }
+    this.toast = null;
+  },
+  setProgress(p){
+    if(this._toastTimer){
+      clearTimeout(this._toastTimer);
+      this._toastTimer = null;
+    }
+    const percent = typeof p === 'number' && Number.isFinite(p) ? Math.max(0, Math.min(100, Math.round(p))) : 0;
+    this.toast = { type: 'progress', message: 'Importing...', percent };
+  },
   lookupDialog: {
     open: false,
     type: '',
@@ -271,15 +312,13 @@ Alpine.store('app', {
     existing: [],
     onResolve: null
   },
-  setToast(t){
-    this.toast = t;
-  },
   async openLookupDialog({ type, label, initialValue = '', onSuccess, existingValues = [] } = {}){
     if(!type){
       return;
     }
 
     const dialog = this.lookupDialog;
+    this.showLookupModal = type;
     dialog.type = String(type);
     dialog.label = label || 'Value';
     dialog.value = typeof initialValue === 'string' ? initialValue : '';
@@ -329,6 +368,7 @@ Alpine.store('app', {
     dialog.initializing = false;
     dialog.existing = [];
     dialog.onResolve = null;
+    this.showLookupModal = null;
   },
   async submitLookupDialog(){
     const dialog = this.lookupDialog;
@@ -683,7 +723,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
 
           if(!this.valid()){
-            if(typeof window !== 'undefined' && typeof window.alert === 'function'){
+            if(typeof Alpine !== 'undefined' && typeof Alpine.store === 'function'){
+              const store = Alpine.store('app');
+              if(store && typeof store.showToast === 'function'){
+                store.showToast({ type: 'error', message: 'Please fill out all required fields before saving.' });
+              }
+            } else if(typeof window !== 'undefined' && typeof window.alert === 'function'){
               window.alert('Please fill out all required fields before saving.');
             }
 
@@ -752,8 +797,6 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         templateEditor:{ id:null, name:'', rolesInput:'', excludedRequirementIds:[] },
         templateApplyLoading:false,
         importHeaders: [], // ensure array exists before templates iterate over it
-        // Toast notification variables
-        showToast: false, toastMessage: '', toastColor: 'var(--success)', toastUndo:null, toastTimeout:null,
         highlightHelpButton:false,
         tourMarkedSeen:false,
         tourPromptActive:false,
@@ -1661,18 +1704,34 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
         // UI helpers
         notify(msg,color='var(--success)',undoHandler=null,duration=3000){
-          this.toastMessage=msg;
-          this.toastColor=color;
-          this.toastUndo=undoHandler;
-          this.showToast=true;
-          if(this.toastTimeout){
-            clearTimeout(this.toastTimeout);
+          const hasAlpineStore = typeof Alpine !== 'undefined' && typeof Alpine.store === 'function';
+          if(hasAlpineStore){
+            let type = 'success';
+            const normalized = typeof color === 'string' ? color.toLowerCase() : '';
+            if(normalized.includes('danger') || normalized.includes('error')){
+              type = 'error';
+            } else if(normalized.includes('warn') || normalized.includes('warning') || normalized.includes('accent')){
+              type = 'info';
+            }
+            const store = Alpine.store('app');
+            if(store && typeof store.showToast === 'function'){
+              const payload = {
+                type,
+                message: typeof msg === 'string' ? msg : String(msg ?? '')
+              };
+              if(typeof duration === 'number' && Number.isFinite(duration)){
+                payload.duration = duration;
+              }
+              if(typeof undoHandler === 'function'){
+                payload.action = { label: 'Undo', handler: undoHandler };
+              }
+              store.showToast(payload);
+              return;
+            }
           }
-          this.toastTimeout=setTimeout(()=>{
-            this.showToast=false;
-            this.toastUndo=null;
-            this.toastTimeout=null;
-          },duration);
+          if(typeof window !== 'undefined' && typeof window.alert === 'function'){
+            window.alert(typeof msg === 'string' ? msg : String(msg ?? ''));
+          }
         },
         async runCommand({
           command,
@@ -1749,12 +1808,16 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.highlightHelpButton=false;
           if(this.tourPromptActive){
             this.tourPromptActive=false;
-            if(this.toastTimeout){
-              clearTimeout(this.toastTimeout);
-              this.toastTimeout=null;
+            if(typeof Alpine !== 'undefined' && typeof Alpine.store === 'function'){
+              const store = Alpine.store('app');
+              if(store){
+                if(typeof store.hideToast === 'function'){
+                  store.hideToast();
+                } else {
+                  store.toast = null;
+                }
+              }
             }
-            this.showToast=false;
-            this.toastUndo=null;
           }
           if(this.tourMarkedSeen){
             return;

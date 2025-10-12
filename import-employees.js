@@ -26,6 +26,20 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     return Boolean(getAppStore());
   }
 
+  function showToastMessage(message, type = 'info', options = {}){
+    const payload = typeof options === 'object' && options !== null ? { ...options } : {};
+    payload.message = typeof message === 'string' ? message : String(message ?? '');
+    payload.type = type;
+    const store = getAppStore();
+    if(store && typeof store.showToast === 'function'){
+      store.showToast(payload);
+      return;
+    }
+    if(typeof window !== 'undefined' && typeof window.alert === 'function'){
+      window.alert(payload.message);
+    }
+  }
+
   function toggleImportModal(open){
     const store = getAppStore();
     if (store){
@@ -737,7 +751,7 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     });
   }
 
-  async function importFromRows(rows, mapping, headers){
+  async function importFromRows(rows, mapping, headers, options = {}){
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('No rows detected.');
 
     const validation = validateMappingSelection(mapping, headers);
@@ -890,7 +904,7 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     // Write to DB
     const newlyCreatedEmployees = employees.filter(emp => newEmployeeIds.has(emp.id));
 
-    const progressCallback = typeof onProgress === 'function' ? onProgress : null;
+    const progressCallback = typeof options.onProgress === 'function' ? options.onProgress : null;
     const progressState = {
       processed: 0,
       total: Math.max(employees.length, 1)
@@ -1015,7 +1029,9 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
   async function handleImport(input){
     const file = input.files && input.files[0];
     if (!file) return;
-    const progressReporter = !isAlpineReady() ? createLegacyProgressReporter() : null;
+    const store = getAppStore();
+    const usingStoreProgress = Boolean(store && typeof store.setProgress === 'function' && typeof store.showToast === 'function');
+    const progressReporter = usingStoreProgress ? null : (!isAlpineReady() ? createLegacyProgressReporter() : null);
     let progressFinished = false;
     try {
       const { rows, headers } = await parseFile(file);
@@ -1027,8 +1043,25 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
 
       updateMissingColumnsBanner([]);
 
-      const result = await importFromRows(rows, mapping, headers);
-      const store = getAppStore();
+      const handleProgress = (percent) => {
+        if(usingStoreProgress){
+          store.setProgress(percent);
+        } else if(progressReporter && typeof progressReporter.update === 'function'){
+          progressReporter.update(percent);
+        }
+      };
+
+      if(usingStoreProgress){
+        store.setProgress(0);
+      } else if(progressReporter && typeof progressReporter.start === 'function'){
+        progressReporter.start();
+      }
+
+      const result = await importFromRows(rows, mapping, headers, { onProgress: handleProgress });
+      progressFinished = true;
+      if(progressReporter && typeof progressReporter.finish === 'function'){
+        progressReporter.finish();
+      }
       const baseMessage = `Imported ${result.importedCount} employee${result.importedCount === 1 ? '' : 's'}.`;
       const skippedCount = result.skippedRows.length;
       let message = baseMessage;
@@ -1039,15 +1072,16 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
         message += ` Skipped ${skippedCount} row${skippedCount === 1 ? '' : 's'} (${details}).`;
       }
 
-      if (store && typeof store.notify === 'function'){
-        store.notify(message, skippedCount ? 'var(--warning, #f59e0b)' : 'var(--success)');
-      } else {
-        alert(message);
-      }
+      showToastMessage(message, skippedCount ? 'info' : 'success');
       toggleImportModal(false);
     } catch (e) {
       console.error('Import failed:', e);
-      alert(`Import failed: ${e.message || e}`);
+      progressFinished = true;
+      if(progressReporter && typeof progressReporter.finish === 'function'){
+        progressReporter.finish();
+      }
+      const failureMessage = `Import failed: ${e.message || e}`;
+      showToastMessage(failureMessage, 'error');
     } finally {
       if (progressReporter && !progressFinished){
         progressReporter.finish();

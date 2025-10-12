@@ -1612,9 +1612,56 @@
     </div>
   </div>
 
-  <div x-show="showToast" class="fixed bottom-4 right-4 px-4 py-2 rounded shadow-lg" :style="'background:'+toastColor+';color:white'" role="status" aria-live="polite" aria-atomic="true"><!-- Provide polite live toast announcements for assistive technology -->
-    <span x-text="toastMessage"></span>
-    <button x-show="toastUndo" @click="toastUndo()" class="ml-3 underline font-semibold focus-ring">Undo</button>
+  <div
+    x-data="{
+      async runToastAction(){
+        const action = this.$store.app.toast?.action;
+        if(!action || typeof action.handler !== 'function') return;
+        try {
+          await action.handler();
+        } catch (error) {
+          console.error('Toast action failed', error);
+        } finally {
+          if(action.dismiss !== false){
+            if(typeof this.$store.app.hideToast === 'function'){
+              this.$store.app.hideToast();
+            } else {
+              this.$store.app.toast = null;
+            }
+          }
+        }
+      }
+    }"
+    x-show="$store.app.toast"
+    x-cloak
+    class="fixed bottom-4 left-1/2 -translate-x-1/2 w-[min(92vw,480px)]"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+  >
+    <div class="rounded-xl shadow-lg bg-neutral-900/90 text-white p-3 flex items-center gap-3">
+      <template x-if="$store.app.toast?.type==='progress'">
+        <div class="w-full">
+          <div class="text-sm mb-1" x-text="$store.app.toast.message"></div>
+          <div class="h-2 bg-white/10 rounded">
+            <div class="h-2 rounded bg-white/70" :style="`width:${$store.app.toast.percent||0}%`"></div>
+          </div>
+        </div>
+      </template>
+      <template x-if="$store.app.toast?.type!=='progress'">
+        <div class="flex w-full items-center justify-between gap-3">
+          <div class="text-sm flex-1" x-text="$store.app.toast.message"></div>
+          <template x-if="$store.app.toast?.action">
+            <button
+              type="button"
+              class="text-xs font-semibold underline focus-ring shrink-0"
+              @click="runToastAction()"
+              x-text="$store.app.toast.action.label || 'Undo'"
+            ></button>
+          </template>
+        </div>
+      </template>
+    </div>
   </div>
 
   <script type="module" src="/main.js"></script>
