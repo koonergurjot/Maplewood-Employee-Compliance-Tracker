@@ -844,3 +844,136 @@ body {
   width: 0.25rem;
   height: 0.25rem;
 }
+
+/* Requirement status cells */
+.requirement-status-cell {
+  position: relative;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.requirement-status-cell--compliant {
+  background-color: var(--status-complete-bg);
+  color: var(--status-complete-text);
+}
+
+.requirement-status-cell--expiring {
+  background-color: var(--status-due-bg);
+  color: var(--status-due-text);
+}
+
+.requirement-status-cell--overdue {
+  background-color: var(--status-overdue-bg);
+  color: var(--status-overdue-text);
+  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.35);
+}
+
+.requirement-status-cell--not-required {
+  background-color: var(--status-optional-bg);
+  color: var(--status-optional-text);
+}
+
+.requirement-status-cell--incomplete {
+  background-color: var(--status-incomplete-bg);
+  color: var(--status-incomplete-text);
+}
+
+.requirement-status-cell .status-chip {
+  color: inherit;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.status-chip:hover {
+  transform: translateY(-1px);
+}
+
+.status-chip:disabled {
+  cursor: not-allowed;
+}
+
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.dark .status-legend {
+  background: rgba(17, 24, 39, 0.78);
+}
+
+.status-legend__title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.status-legend__list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.status-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text);
+}
+
+.status-legend__swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.06);
+}
+
+.dark .status-legend__swatch {
+  box-shadow: none;
+}
+
+.status-legend__swatch--complete {
+  background-color: var(--status-complete-bg);
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+.status-legend__swatch--due {
+  background-color: var(--status-due-bg);
+  border-color: rgba(217, 119, 6, 0.45);
+}
+
+.status-legend__swatch--overdue {
+  background-color: var(--status-overdue-bg);
+  border-color: rgba(220, 38, 38, 0.5);
+}
+
+.status-legend__swatch--not-required {
+  background-color: var(--status-optional-bg);
+  border-color: rgba(107, 114, 128, 0.45);
+}
+
