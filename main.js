@@ -316,6 +316,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             AddRequirement: e => new commands.AddRequirement(this.$root.db, { requirement: e.metadata?.requirement }),
             UpdateRequirement: e => new commands.UpdateRequirement(this.$root.db, { requirementId: e.targets?.[0], newData: e.metadata?.newData }),
             DeleteRequirement: e => new commands.DeleteRequirement(this.$root.db, { requirementId: e.targets?.[0] }),
+            DeleteEmployee: e => new commands.DeleteEmployee(this.$root.db, { employeeId: e.targets?.[0] }),
             BulkUpdateStatus: e => new commands.BulkUpdateStatus(this.$root.db, {
               employeeIds: e.metadata?.employeeIds || e.targets || [],
               requirementIds: e.metadata?.requirementIds || [],
@@ -325,6 +326,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             BulkDeleteEmployees: e => new commands.BulkDeleteEmployees(this.$root.db, {
               employeeIds: e.metadata?.employeeIds || e.targets || []
             }),
+            ApplyTemplateToEmployees: () => new commands.ApplyTemplateToEmployees(this.$root.db, { template: {}, employeeIds: [], requirements: [] }),
             ImportEmployees: () => new commands.ImportEmployees(this.$root.db),
             ImportCompletions: () => new commands.ImportCompletions(this.$root.db)
           };
@@ -633,7 +635,6 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         importHeaders: [], // ensure array exists before templates iterate over it
         // Toast notification variables
         showToast: false, toastMessage: '', toastColor: 'var(--success)', toastUndo:null, toastTimeout:null,
-        lastDeletedRequirement:null,
         highlightHelpButton:false,
         tourMarkedSeen:false,
         tourPromptActive:false,
@@ -1365,51 +1366,30 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         async applyTemplateToEmployees(template, employeeIds){
           if (this.loadError || !this.db || !Array.isArray(employeeIds) || !employeeIds.length) return;
           this.templateApplyLoading = true;
-          const timestamp = new Date().toISOString();
-          const excludedSet = new Set((template?.excludedRequirementIds || []).map(id => (id ?? '').toString().trim()).filter(Boolean));
-          const requirementIds = this.requirements.map(r => r.id);
           try{
-            await this.db.transaction('rw', this.db.employeeRequirements, async () => {
-              for (const employeeId of employeeIds){
-                for (const requirementId of requirementIds){
-                  const isExcluded = excludedSet.has((requirementId ?? '').toString().trim());
-                  const existing = this.getER(employeeId, requirementId);
-                  if(existing){
-                    if(isExcluded){
-                      if(existing.status !== 'NotRequired' || existing.completedOn || existing.expiresOn){
-                        await this.db.employeeRequirements.update(existing.id, {
-                          status:'NotRequired',
-                          completedOn:null,
-                          expiresOn:null,
-                          updatedAt: timestamp
-                        });
-                      }
-                    } else if (existing.status === 'NotRequired') {
-                      await this.db.employeeRequirements.update(existing.id, {
-                        status:'NotCompleted',
-                        completedOn:null,
-                        expiresOn:null,
-                        updatedAt: timestamp
-                      });
-                    }
-                  } else {
-                    const record = {
-                      id: generateId(),
-                      employeeId,
-                      requirementId,
-                      status: isExcluded ? 'NotRequired' : 'NotCompleted',
-                      completedOn: null,
-                      expiresOn: null,
-                      notes: null,
-                      updatedAt: timestamp
-                    };
-                    await this.db.employeeRequirements.add(record);
-                  }
-                }
-              }
+            const { ApplyTemplateToEmployees } = await import('./commands.js');
+            const command = new ApplyTemplateToEmployees(this.db, {
+              template,
+              employeeIds,
+              requirements: this.requirements
             });
-            await this.loadData();
-            this.notify(`Template applied to ${employeeIds.length} employee${employeeIds.length === 1 ? '' : 's'}.`);
+            await this.runCommand({
+              command,
+              actionType: 'ApplyTemplateToEmployees',
+              targets: [...employeeIds],
+              metadata: {
+                templateId: template?.id,
+                templateName: template?.name,
+                employeeIds: [...employeeIds],
+                excludedRequirementIds: Array.isArray(template?.excludedRequirementIds)
+                  ? [...template.excludedRequirementIds]
+                  : []
+              },
+              successMessage: `Template applied to ${employeeIds.length} employee${employeeIds.length === 1 ? '' : 's'}.`,
+              successColor: 'var(--accent)',
+              undoMessage: `Template application undone for ${employeeIds.length} employee${employeeIds.length === 1 ? '' : 's'}.`,
+              refreshIcons: true
+            });
           }catch(error){
             console.error('Failed to apply template to employees', error);
             this.notify('Failed to apply template', 'var(--danger)');
@@ -1548,6 +1528,66 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.toastTimeout=null;
           },duration);
         },
+        async runCommand({
+          command,
+          actionType,
+          targets = [],
+          metadata = {},
+          successMessage = '',
+          successColor = 'var(--success)',
+          undoMessage = 'Action undone',
+          undoColor = 'var(--success)',
+          undoErrorMessage = 'Failed to undo action',
+          refresh = true,
+          refreshIcons = false,
+          toastDuration = 10000,
+          supportsUndo = true
+        } = {}){
+          if (!command || typeof command.execute !== 'function') {
+            throw new Error('runCommand requires a command instance with execute()');
+          }
+
+          const undoPayload = await command.execute();
+          let entry = null;
+          if (actionType) {
+            entry = await this.recordActivity(actionType, targets, metadata, undoPayload, { supportsUndo });
+          }
+
+          if (refresh) {
+            await this.loadData();
+            if (refreshIcons && typeof this.refreshFeatherIcons === 'function') {
+              this.refreshFeatherIcons();
+            }
+          }
+
+          const undoHandler = supportsUndo === false ? null : async () => {
+            try {
+              if (entry && this.activityLog) {
+                await this.activityLog.undo(entry.id, () => command);
+              } else if (typeof command.undo === 'function') {
+                await command.undo(undoPayload);
+              }
+              if (refresh) {
+                await this.loadData();
+                if (refreshIcons && typeof this.refreshFeatherIcons === 'function') {
+                  this.refreshFeatherIcons();
+                }
+              }
+              if (undoMessage) {
+                this.notify(undoMessage, undoColor);
+              }
+            } catch (error) {
+              console.error(`Failed to undo ${actionType || 'command'}`, error);
+              this.notify(undoErrorMessage, 'var(--danger)');
+            }
+          };
+
+          if (successMessage) {
+            this.notify(successMessage, successColor, undoHandler, toastDuration);
+          }
+
+          return { undo: undoHandler, entry, undoPayload };
+        },
         promptTour(){
           this.tourPromptActive=true;
           this.highlightHelpButton=true;
@@ -1591,9 +1631,9 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
         },
         async recordActivity(actionType, targets = [], metadata = {}, undoPayload = null, options = {}){
-          if(!this.activityLog) return;
+          if(!this.activityLog) return null;
           try{
-            await this.activityLog.record({
+            const entry = await this.activityLog.record({
               actionType,
               actor:'user',
               targets,
@@ -1606,8 +1646,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             } else {
               this.pendingTimelineRefresh = true;
             }
+            return entry;
           }catch(error){
             console.error('Failed to record activity', error);
+            return null;
           }
         },
         async toggleDarkMode(){
@@ -3147,28 +3189,20 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           try{
             const { DeleteRequirement } = await import('./commands.js');
             const command = new DeleteRequirement(this.db, { requirementId: req.id });
-            const undoPayload = await command.execute();
-            this.lastDeletedRequirement = undoPayload;
-            await this.recordActivity('DeleteRequirement', [req.id], { requirement: req }, undoPayload);
-            await this.loadData();
-            this.refreshFeatherIcons();
-            this.notify('Requirement deleted','var(--warn)',() => this.undoDeleteRequirement());
+            await this.runCommand({
+              command,
+              actionType: 'DeleteRequirement',
+              targets: [req.id],
+              metadata: { requirement: req },
+              successMessage: 'Requirement deleted',
+              successColor: 'var(--warn)',
+              undoMessage: 'Requirement restored',
+              refreshIcons: true
+            });
           }catch(error){
             console.error('Failed to delete requirement', error);
             this.notify('Failed to delete requirement', 'var(--danger)');
           }
-        },
-        async undoDeleteRequirement(){
-          if(!this.lastDeletedRequirement) return;
-          await this.db.requirements.add(this.lastDeletedRequirement.requirement);
-          if(this.lastDeletedRequirement.employeeRequirements.length){
-            await this.db.employeeRequirements.bulkAdd(this.lastDeletedRequirement.employeeRequirements);
-          }
-          this.lastDeletedRequirement=null;
-          this.toastUndo=null;
-          await this.loadData();
-          this.refreshFeatherIcons();
-          this.notify('Requirement restored');
         },
         async editEmployee(emp){
           this.editingEmployee = { ...emp, seniorityHours: emp.seniorityHours ?? '' };
@@ -3209,6 +3243,39 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }catch(error){
             console.error('Failed to update employee', error);
             this.notify('Failed to update employee', 'var(--danger)');
+          }
+        },
+        confirmDeleteEmployee(emp){
+          if(!emp) return;
+          if(confirm(`Delete employee "${emp.firstName} ${emp.lastName}"? This will remove all associated records.`)){
+            this.deleteEmployee(emp);
+          }
+        },
+        async deleteEmployee(emp){
+          if (!emp?.id) return;
+          try{
+            const { DeleteEmployee } = await import('./commands.js');
+            const command = new DeleteEmployee(this.db, { employeeId: emp.id });
+            await this.runCommand({
+              command,
+              actionType: 'DeleteEmployee',
+              targets: [emp.id],
+              metadata: {
+                employeeId: emp.id,
+                firstName: emp.firstName,
+                lastName: emp.lastName
+              },
+              successMessage: `Deleted ${emp.firstName} ${emp.lastName}`,
+              successColor: 'var(--warn)',
+              undoMessage: `Restored ${emp.firstName} ${emp.lastName}`,
+              refreshIcons: true
+            });
+            this.showEditEmployeeModal = false;
+            this.editingEmployee = {};
+            this.selectedEmployees = this.selectedEmployees.filter(id => id !== emp.id);
+          }catch(error){
+            console.error('Failed to delete employee', error);
+            this.notify('Failed to delete employee', 'var(--danger)');
           }
         },
         getStatusTooltip(empId, reqId){

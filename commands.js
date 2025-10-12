@@ -151,6 +151,51 @@ export class UpdateEmployee {
   }
 }
 
+export class DeleteEmployee {
+  constructor(db, { employeeId } = {}) {
+    this.db = db;
+    this.employeeId = employeeId;
+  }
+
+  async execute() {
+    if (!this.employeeId) {
+      throw new Error('Missing employeeId for DeleteEmployee command');
+    }
+
+    return this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async () => {
+      const employee = await this.db.employees.get(this.employeeId);
+      if (!employee) {
+        return { employee: null, employeeRequirements: [] };
+      }
+
+      const employeeRequirements = await this.db.employeeRequirements
+        .where('employeeId')
+        .equals(this.employeeId)
+        .toArray();
+
+      await this.db.employees.delete(this.employeeId);
+      if (employeeRequirements.length) {
+        await this.db.employeeRequirements.bulkDelete(employeeRequirements.map(er => er.id));
+      }
+
+      return {
+        employee: clone(employee),
+        employeeRequirements: employeeRequirements.map(clone)
+      };
+    });
+  }
+
+  async undo({ employee, employeeRequirements }) {
+    if (!employee) return;
+    await this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async () => {
+      await this.db.employees.put(employee);
+      if (employeeRequirements?.length) {
+        await this.db.employeeRequirements.bulkPut(employeeRequirements);
+      }
+    });
+  }
+}
+
 export class AddRequirement {
   constructor(db, { requirement } = {}) {
     this.db = db;
@@ -360,6 +405,112 @@ export class BulkUpdateStatus {
           await this.db.employeeRequirements.put(change.record);
         } else if (change.type === 'create' && change.record) {
           await this.db.employeeRequirements.delete(change.record.id);
+        }
+      }
+    });
+  }
+}
+
+export class ApplyTemplateToEmployees {
+  constructor(db, { template, employeeIds = [], requirements = [] } = {}) {
+    this.db = db;
+    this.template = template || null;
+    this.employeeIds = Array.isArray(employeeIds) ? employeeIds : [];
+    this.requirements = Array.isArray(requirements) ? requirements : [];
+  }
+
+  async execute() {
+    if (!this.template) {
+      throw new Error('Missing template data for ApplyTemplateToEmployees command');
+    }
+    if (!this.employeeIds.length) {
+      return { changes: [] };
+    }
+
+    const excludedSet = new Set(
+      (this.template.excludedRequirementIds || [])
+        .map(id => (id == null ? '' : String(id).trim()))
+        .filter(Boolean)
+    );
+    const requirementIds = this.requirements.map(req => req.id).filter(id => id != null);
+    if (!requirementIds.length) {
+      return { changes: [] };
+    }
+
+    const changes = [];
+    const timestamp = nowISO();
+
+    await this.db.transaction('rw', this.db.employeeRequirements, async () => {
+      const existingRecords = await this.db.employeeRequirements
+        .where('employeeId')
+        .anyOf(this.employeeIds)
+        .toArray();
+      const existingMap = new Map(
+        existingRecords.map(record => [`${record.employeeId}|${record.requirementId}`, record])
+      );
+
+      for (const employeeId of this.employeeIds) {
+        for (const requirementId of requirementIds) {
+          const key = `${employeeId}|${requirementId}`;
+          const existing = existingMap.get(key) || null;
+          const isExcluded = excludedSet.has((requirementId ?? '').toString().trim());
+
+          if (existing) {
+            if (isExcluded) {
+              if (
+                existing.status !== 'NotRequired' ||
+                existing.completedOn !== null ||
+                existing.expiresOn !== null
+              ) {
+                changes.push({ type: 'update', previous: clone(existing) });
+                await this.db.employeeRequirements.update(existing.id, {
+                  status: 'NotRequired',
+                  completedOn: null,
+                  expiresOn: null,
+                  updatedAt: timestamp
+                });
+              }
+            } else if (existing.status === 'NotRequired') {
+              changes.push({ type: 'update', previous: clone(existing) });
+              await this.db.employeeRequirements.update(existing.id, {
+                status: 'NotCompleted',
+                completedOn: null,
+                expiresOn: null,
+                updatedAt: timestamp
+              });
+            }
+          } else {
+            const record = {
+              id: generateId(),
+              employeeId,
+              requirementId,
+              status: isExcluded ? 'NotRequired' : 'NotCompleted',
+              completedOn: null,
+              expiresOn: null,
+              notes: null,
+              updatedAt: timestamp
+            };
+            await this.db.employeeRequirements.add(record);
+            changes.push({ type: 'create', record: clone(record) });
+          }
+        }
+      }
+    });
+
+    return { changes };
+  }
+
+  async undo({ changes = [] } = {}) {
+    if (!Array.isArray(changes) || !changes.length) {
+      return;
+    }
+
+    await this.db.transaction('rw', this.db.employeeRequirements, async () => {
+      for (const change of [...changes].reverse()) {
+        if (change.type === 'create' && change.record) {
+          await this.db.employeeRequirements.delete(change.record.id);
+        } else if (change.type === 'update' && change.previous) {
+          await this.db.employeeRequirements.put(change.previous);
         }
       }
     });
