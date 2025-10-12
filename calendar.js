@@ -1,5 +1,5 @@
 import { Calendar } from 'fullcalendar';
-import feather from 'feather-icons';
+import { safeFeatherReplace } from './feather-utils.js';
 import './fullcalendar.css';
 
 import { createDatabase } from './db.js';
@@ -90,7 +90,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   calendar.render();
 
-  if (typeof feather !== 'undefined' && typeof feather.replace === 'function') {
-    feather.replace();
-  }
+  safeFeatherReplace();
 });

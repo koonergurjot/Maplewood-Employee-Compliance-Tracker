@@ -181,6 +181,11 @@ function defineSchema(db) {
     roleRequirementProfiles: 'id, name'
   };
 
+  const v11Stores = {
+    ...v10Stores,
+    lookups: '++id,&[type+valueLower],type,value,valueLower,createdAt'
+  };
+
   db.version(8).stores(v8Stores);
   db.version(9).stores(v9Stores);
   db.version(10).stores(v10Stores).upgrade(async tx => {
@@ -192,6 +197,96 @@ function defineSchema(db) {
       }
     } catch (error) {
       console.warn('Failed to seed role requirement profile settings', error);
+    }
+  });
+
+  db.version(11).stores(v11Stores).upgrade(async tx => {
+    const lookupsTable = tx.table('lookups');
+    const employeesTable = tx.table('employees');
+
+    const ensureTypeSet = type => {
+      if (!typeSets.has(type)) {
+        typeSets.set(type, new Set());
+      }
+      return typeSets.get(type);
+    };
+
+    const normalizeValue = value => {
+      if (value == null) {
+        return { value: '', lower: '' };
+      }
+      const stringValue = typeof value === 'string' ? value.trim() : String(value).trim();
+      return {
+        value: stringValue,
+        lower: stringValue.toLocaleLowerCase()
+      };
+    };
+
+    const typeSets = new Map();
+    try {
+      const existingLookups = await lookupsTable.toArray();
+      existingLookups.forEach(lookup => {
+        const type = lookup?.type;
+        if (!type) {
+          return;
+        }
+        const lower = (lookup?.valueLower || '').toString();
+        if (!lower) {
+          return;
+        }
+        ensureTypeSet(type).add(lower);
+      });
+    } catch (error) {
+      console.warn('Failed to read existing lookup values during upgrade', error);
+    }
+
+    const valuesToInsert = [];
+    const typeMappings = [
+      { field: 'position', type: 'position' },
+      { field: 'status', type: 'status' },
+      { field: 'rank', type: 'rank' }
+    ];
+
+    await employeesTable.each(employee => {
+      typeMappings.forEach(({ field, type }) => {
+        const normalized = normalizeValue(employee?.[field]);
+        if (!normalized.value) {
+          return;
+        }
+        const set = ensureTypeSet(type);
+        if (set.has(normalized.lower)) {
+          return;
+        }
+        set.add(normalized.lower);
+        valuesToInsert.push({
+          type,
+          value: normalized.value,
+          valueLower: normalized.lower,
+          createdAt: new Date().toISOString()
+        });
+      });
+    });
+
+    if (!valuesToInsert.length) {
+      return;
+    }
+
+    try {
+      await lookupsTable.bulkAdd(valuesToInsert);
+    } catch (error) {
+      if (error?.name !== 'BulkError') {
+        throw error;
+      }
+
+      for (const entry of valuesToInsert) {
+        try {
+          await lookupsTable.add(entry);
+        } catch (addError) {
+          if (addError?.name !== 'ConstraintError') {
+            console.warn('Failed to add lookup entry during upgrade', addError);
+          }
+        }
+      }
     }
   });
 
@@ -244,5 +339,78 @@ export async function openDatabase() {
   const db = await createDatabase();
   await db.open();
   return db;
+}
+
+function normalizeLookupType(type) {
+  if (type == null) {
+    return '';
+  }
+  return String(type).trim();
+}
+
+function normalizeLookupValue(value) {
+  if (value == null) {
+    return { value: '', lower: '' };
+  }
+  const stringValue = typeof value === 'string' ? value.trim() : String(value).trim();
+  return {
+    value: stringValue,
+    lower: stringValue.toLocaleLowerCase()
+  };
+}
+
+export async function listLookups(type) {
+  const normalizedType = normalizeLookupType(type);
+  if (!normalizedType) {
+    return [];
+  }
+
+  const db = await openDatabase();
+  const records = await db.table('lookups').where('type').equals(normalizedType).sortBy('valueLower');
+  return records.map(record => record.value);
+}
+
+export async function addLookup(type, value) {
+  const normalizedType = normalizeLookupType(type);
+  const normalizedValue = normalizeLookupValue(value);
+
+  if (!normalizedType || !normalizedValue.value) {
+    return null;
+  }
+
+  const db = await openDatabase();
+  const table = db.table('lookups');
+  const compositeKey = [normalizedType, normalizedValue.lower];
+
+  const existing = await table
+    .where('[type+valueLower]')
+    .equals(compositeKey)
+    .first();
+
+  if (existing) {
+    return existing;
+  }
+
+  const createdAt = new Date().toISOString();
+
+  try {
+    const id = await table.add({
+      type: normalizedType,
+      value: normalizedValue.value,
+      valueLower: normalizedValue.lower,
+      createdAt
+    });
+
+    return table.get(id);
+  } catch (error) {
+    if (error?.name === 'ConstraintError') {
+      return table
+        .where('[type+valueLower]')
+        .equals(compositeKey)
+        .first();
+    }
+
+    throw error;
+  }
 }
 

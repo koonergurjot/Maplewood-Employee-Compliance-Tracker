@@ -2,43 +2,20 @@
 // Ensures bundler processes the entire dashboard logic.
 
 import Alpine from 'alpinejs';
+import AlpineCSP from '@alpinejs/csp';
 import Papa from 'papaparse';
 import Chart from 'chart.js/auto';
 import Sortable from 'sortablejs';
 import Fuse from 'fuse.js';
-import feather from 'feather-icons';
+import { safeFeatherReplace } from './feather-utils.js';
 
 import './styles.css';
 import './import-employees.js';
 import './onboarding.js';
-import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
+import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup } from './db.js';
 
 let cachedXlsx = (typeof window !== 'undefined' && (window.__xlsxModule || window.XLSX)) || null;
 let xlsxLoadPromise = null;
-let xlsxCdnPromise = null;
-
-const XLSX_CDN_TIMEOUT_MS = 15000;
-const XLSX_TIMEOUT_MESSAGE = 'We couldn\'t load Excel support from the CDN in time. Please try again later or use the CSV import option instead.';
-
-function withTimeout(promise, timeoutMs, timeoutMessage){
-  if(typeof timeoutMs !== 'number' || timeoutMs <= 0) return promise;
-
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      const error = new Error(timeoutMessage || 'Operation timed out.');
-      error.name = 'TimeoutError';
-      reject(error);
-    }, timeoutMs);
-
-    promise.then(value => {
-      clearTimeout(timer);
-      resolve(value);
-    }, error => {
-      clearTimeout(timer);
-      reject(error);
-    });
-  });
-}
 
 function resolveXlsxFromGlobals(){
   if(typeof window === 'undefined') return null;
@@ -57,53 +34,82 @@ function rememberXlsxModule(mod){
   return resolved;
 }
 
-function injectXlsxFromCdn(){
-  const existingGlobal = resolveXlsxFromGlobals();
-  if(existingGlobal) return Promise.resolve(existingGlobal);
+function createAppReadyState(){
+  let resolveReady;
+  let rejectReady;
+  let pending = false;
+  let lastError = null;
 
-  if(xlsxCdnPromise) return xlsxCdnPromise;
-
-  xlsxCdnPromise = new Promise((resolve, reject) => {
-    if(typeof document === 'undefined'){
-      reject(new Error('No document available to load XLSX script.'));
-      return;
-    }
-
-    const finalize = () => {
-      const module = resolveXlsxFromGlobals();
-      if(module){
-        resolve(module);
-      } else {
-        reject(new Error('XLSX still unavailable after loading CDN script.'));
-      }
-    };
-
-    const existing = document.querySelector('script[data-xlsx-loader]');
-    if(existing){
-      if(resolveXlsxFromGlobals()){
-        finalize();
+  const state = {
+    readyPromise: null,
+    markLoading(){
+      lastError = null;
+      if(pending){
         return;
       }
-      existing.addEventListener('load', finalize, { once: true });
-      existing.addEventListener('error', () => reject(new Error('Failed to load XLSX from CDN.')), { once: true });
-      return;
+      state.readyPromise = new Promise((resolve, reject) => {
+        pending = true;
+        resolveReady = () => {
+          pending = false;
+          resolve();
+        };
+        rejectReady = (error) => {
+          pending = false;
+          reject(error);
+        };
+      });
+    },
+    markReady(){
+      if(!pending){
+        state.markLoading();
+      }
+      lastError = null;
+      resolveReady();
+    },
+    fail(error){
+      const reason = error instanceof Error ? error : new Error(String(error || 'App failed to initialize.'));
+      lastError = reason;
+      if(!pending){
+        state.markLoading();
+      }
+      rejectReady(reason);
     }
+  };
 
-    const script = document.createElement('script');
-    script.type = 'text/javascript';
-    script.async = true;
-    script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-    script.dataset.xlsxLoader = 'true';
-    script.addEventListener('load', finalize, { once: true });
-    script.addEventListener('error', () => reject(new Error('Failed to load XLSX from CDN.')), { once: true });
-    document.head.appendChild(script);
-  }).finally(() => {
-    if(!resolveXlsxFromGlobals()){
-      xlsxCdnPromise = null;
+  Object.defineProperty(state, 'error', {
+    get(){
+      return lastError;
     }
   });
 
-  return xlsxCdnPromise;
+  state.markLoading();
+
+  return state;
+}
+
+const appState = createAppReadyState();
+
+export async function waitForReady(ms = 10000) {
+  if(appState.error){
+    throw appState.error;
+  }
+
+  let timeoutId;
+  const timeout = new Promise((_, rej) => {
+    timeoutId = setTimeout(() => rej(new Error('app init timeout')), ms);
+  });
+
+  try {
+    await Promise.race([appState.readyPromise, timeout]);
+  } finally {
+    if(timeoutId){
+      clearTimeout(timeoutId);
+    }
+  }
+
+  if(appState.error){
+    throw appState.error;
+  }
 }
 
 export async function loadXlsx(){
@@ -119,20 +125,8 @@ export async function loadXlsx(){
         const resolved = rememberXlsxModule(mod);
         if(resolved) return resolved;
       } catch (importError) {
-        console.warn('Dynamic XLSX import failed, attempting CDN fallback.', importError);
-        try {
-          const cdnModule = await withTimeout(injectXlsxFromCdn(), XLSX_CDN_TIMEOUT_MS, XLSX_TIMEOUT_MESSAGE);
-          const raceResolved = resolveXlsxFromGlobals();
-          if(raceResolved) return rememberXlsxModule(raceResolved);
-          const resolvedAfterCdn = rememberXlsxModule(cdnModule || resolveXlsxFromGlobals());
-          if(resolvedAfterCdn) return resolvedAfterCdn;
-          throw new Error('XLSX still unavailable');
-        } catch (cdnError) {
-          if(cdnError?.name === 'TimeoutError'){
-            xlsxCdnPromise = null;
-          }
-          throw cdnError;
-        }
+        console.error('Dynamic XLSX import failed.', importError);
+        throw new Error('Excel import support could not be loaded. Please refresh and try again or use CSV instead.');
       }
 
       const finalModule = rememberXlsxModule(resolveXlsxFromGlobals());
@@ -150,40 +144,28 @@ export async function loadXlsx(){
 }
 
 window.Alpine = Alpine;
+Alpine.plugin(AlpineCSP);
 
 const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev';
     function activityTimeline(){
       return {
         entries: [],
-        loadAttempts: 0,
-        maxLoadAttempts: 6,
-        retryTimer: null,
-        baseRetryDelay: 150,
-        scheduleRetry(){
-          if(this.retryTimer || this.loadAttempts >= this.maxLoadAttempts){
-            if(this.loadAttempts >= this.maxLoadAttempts){
-              console.warn('Activity timeline load aborted: app not ready after retries.');
-            }
-            return;
-          }
-
-          const delay = Math.min(this.baseRetryDelay * Math.pow(2, this.loadAttempts), 2000);
-          this.loadAttempts += 1;
-          this.retryTimer = setTimeout(() => {
-            this.retryTimer = null;
-            this.load();
-          }, delay);
-        },
         async load(){
-          if(!this?.$root?.appReady || !this?.$root?.db){
-            this.scheduleRetry();
+          if(!this?.$root){
+            console.warn('Activity timeline missing root context.');
             return;
           }
 
-          this.loadAttempts = 0;
-          if(this.retryTimer){
-            clearTimeout(this.retryTimer);
-            this.retryTimer = null;
+          try {
+            await waitForReady();
+          } catch (error) {
+            console.warn('Activity timeline wait for app readiness failed.', error);
+            return;
+          }
+
+          if(!this.$root.appReady || !this.$root.db){
+            console.warn('Activity timeline load aborted: app not ready after wait.');
+            return;
           }
 
           const { default: ActivityLog } = await import('./activity-log.js');
@@ -239,6 +221,288 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
       };
     }
 
+    function addEmployeeModal(){
+      return {
+        open: false,
+        saving: false,
+        name: '',
+        position: '',
+        status: '',
+        rank: '',
+        positions: [],
+        statuses: [],
+        ranks: [],
+        lastActiveElement: null,
+        db: null,
+        dbPromise: null,
+        async init(){
+          if(this?.$el){
+            Object.defineProperty(this.$el, '__api', {
+              configurable: true,
+              enumerable: false,
+              value: Object.freeze({
+                show: () => this.show(),
+                hide: () => this.hide()
+              })
+            });
+          }
+
+          this.$watch('open', value => {
+            if(!value){
+              this.reset();
+            }
+          });
+
+          await this.loadLookups();
+        },
+        async loadLookups(){
+          try {
+            const [positions, statuses, ranks] = await Promise.all([
+              listLookups('position'),
+              listLookups('status'),
+              listLookups('rank')
+            ]);
+            this.positions = Array.isArray(positions) ? positions : [];
+            this.statuses = Array.isArray(statuses) ? statuses : [];
+            this.ranks = Array.isArray(ranks) ? ranks : [];
+          } catch (error) {
+            console.warn('addEmployeeModal: failed to preload lookup values.', error);
+            this.positions = [];
+            this.statuses = [];
+            this.ranks = [];
+          }
+        },
+        reset(){
+          this.name = '';
+          this.position = '';
+          this.status = '';
+          this.rank = '';
+        },
+        show(){
+          this.lastActiveElement = null;
+          if(typeof document !== 'undefined'){
+            const activeElement = document.activeElement;
+            if(activeElement && activeElement !== document.body && typeof activeElement.focus === 'function'){
+              if(!this.$el || !this.$el.contains(activeElement)){
+                this.lastActiveElement = activeElement;
+              }
+            }
+          }
+
+          this.open = true;
+          return new Promise(resolve => {
+            this.$nextTick(() => {
+              const input = this.$refs?.name;
+              if(input && typeof input.focus === 'function'){
+                try {
+                  input.focus({ preventScroll: true });
+                } catch (error) {
+                  input.focus();
+                }
+                if(typeof input.select === 'function'){
+                  input.select();
+                }
+              }
+              resolve();
+            });
+          });
+        },
+        hide(){
+          this.open = false;
+          this.reset();
+          if(typeof window !== 'undefined'){
+            this.$nextTick(() => {
+              const target = this.lastActiveElement;
+              this.lastActiveElement = null;
+              if(!target || typeof target.focus !== 'function'){
+                return;
+              }
+
+              let isInDocument = true;
+              if(typeof document !== 'undefined'){
+                const docContains = typeof document.contains === 'function' ? document.contains(target) : false;
+                const bodyContains = document.body && typeof document.body.contains === 'function' ? document.body.contains(target) : false;
+                const rootContains = document.documentElement && typeof document.documentElement.contains === 'function' ? document.documentElement.contains(target) : false;
+                isInDocument = docContains || bodyContains || rootContains;
+              }
+
+              if(isInDocument){
+                try {
+                  target.focus({ preventScroll: true });
+                } catch (error) {
+                  target.focus();
+                }
+              }
+            });
+          }
+          return Promise.resolve();
+        },
+        close(){
+          const result = this.hide();
+          if(this?.$root){
+            this.$root.showAddEmployeeModal = false;
+          }
+          return result;
+        },
+        handleEscape(event){
+          if(event){
+            if(typeof event.preventDefault === 'function'){
+              event.preventDefault();
+            }
+            if(typeof event.stopPropagation === 'function'){
+              event.stopPropagation();
+            }
+          }
+          return this.close();
+        },
+        valid(){
+          const required = [this.name, this.position, this.status, this.rank];
+          return required.every(value => typeof value === 'string' && value.trim().length > 0);
+        },
+        async ensureDb(){
+          if(this.db && (typeof this.db.isOpen !== 'function' || this.db.isOpen())){
+            return this.db;
+          }
+
+          if(!this.dbPromise){
+            this.dbPromise = (async () => {
+              await ensureDexieLoaded();
+              const instance = await createDatabase();
+              if(typeof instance.open === 'function' && (!instance.isOpen || !instance.isOpen())){
+                try {
+                  await instance.open();
+                } catch (error) {
+                  console.warn('addEmployeeModal: failed to explicitly open database, continuing with lazy open.', error);
+                }
+              }
+              this.db = instance;
+              return instance;
+            })();
+          }
+
+          try {
+            this.db = await this.dbPromise;
+          } catch (error) {
+            this.dbPromise = null;
+            throw error;
+          }
+
+          return this.db;
+        },
+        async ensureLookupValue(type, value){
+          if(!value){
+            return null;
+          }
+
+          const trimmed = value.trim();
+          if(!trimmed){
+            return null;
+          }
+
+          try {
+            const record = await addLookup(type, trimmed);
+            const resolvedValue = record?.value || trimmed;
+            const key = type === 'status' ? 'statuses' : type === 'rank' ? 'ranks' : 'positions';
+            const current = Array.isArray(this[key]) ? this[key] : [];
+            if(!current.some(entry => entry.toLocaleLowerCase() === resolvedValue.toLocaleLowerCase())){
+              this[key] = [...current, resolvedValue].sort((a, b) => a.localeCompare(b));
+            }
+            return resolvedValue;
+          } catch (error) {
+            console.warn(`addEmployeeModal: failed to add lookup for ${type}`, error);
+            return trimmed;
+          }
+        },
+        async addNew(type){
+          const labels = {
+            position: 'position title',
+            status: 'status',
+            rank: 'rank'
+          };
+
+          const label = labels[type] || 'value';
+          const rawValue = typeof window !== 'undefined' ? window.prompt(`Enter new ${label}`) : null;
+          const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+          if(!value){
+            return;
+          }
+
+          const resolved = await this.ensureLookupValue(type, value);
+          if(!resolved){
+            return;
+          }
+
+          if(type === 'position'){
+            this.position = resolved;
+          } else if(type === 'status'){
+            this.status = resolved;
+          } else if(type === 'rank'){
+            this.rank = resolved;
+          }
+        },
+        async save(){
+          if(this.saving){
+            return;
+          }
+
+          if(!this.valid()){
+            if(typeof window !== 'undefined' && typeof window.alert === 'function'){
+              window.alert('Please fill out all required fields before saving.');
+            }
+
+            const input = this.$refs?.name;
+            if(input && typeof input.focus === 'function'){
+              input.focus();
+            }
+            return;
+          }
+
+          this.saving = true;
+
+          try {
+            const db = await this.ensureDb();
+            const timestamp = new Date().toISOString();
+            const baseEmployee = {
+              id: generateId(),
+              name: this.name.trim(),
+              position: this.position.trim(),
+              status: this.status ? this.status.trim() : '',
+              rank: this.rank ? this.rank.trim() : '',
+              createdAt: timestamp,
+              updatedAt: timestamp
+            };
+
+            const [positionValue, statusValue, rankValue] = await Promise.all([
+              this.ensureLookupValue('position', baseEmployee.position),
+              this.ensureLookupValue('status', baseEmployee.status),
+              this.ensureLookupValue('rank', baseEmployee.rank)
+            ]);
+
+            if(positionValue){
+              baseEmployee.position = positionValue;
+            }
+            if(statusValue){
+              baseEmployee.status = statusValue;
+            }
+            if(rankValue){
+              baseEmployee.rank = rankValue;
+            }
+
+            await db.employees.add(baseEmployee);
+
+            this.$dispatch('employee:added', { employee: baseEmployee });
+
+            await this.hide();
+          } catch (error) {
+            console.error('addEmployeeModal: failed to save employee', error);
+            this.$dispatch('employee:add-failed', { error });
+          } finally {
+            this.saving = false;
+          }
+        }
+      };
+    }
+
     const app = () => ({
         loadError:'',
         darkMode:false, showImportModal:false, showExportDropdown:false,
@@ -261,6 +525,9 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         importType:'excel', importMode:'employees', importData:[],
         importSheets:[], importSheetName:'', importWarning:'', importError:'', importLoading:false,
         importProgress:0, importErrors:[],
+        missingRequiredColumns:[], missingColumnsBannerDismissed:false,
+        duplicateHeaderGroups:[], duplicateHeaderNames:[], duplicateHeaderWarningDismissed:false, duplicateHeaderSignature:'',
+        mappingHighlightTimer:null, lastMissingColumnsSignature:'',
         nameFormat:'auto', previewEligible:0, dryRunDetails:[], dryRunSummary:{added:0,updated:0,skipped:0},
         fieldLabels:{ firstName:'First Name', lastName:'Last Name', payrollName:'Payroll/Employee Name', role:'Role / Job Title', employmentType:'Employment Type / Class', employeeId:'Employee ID / Position ID', status:'Position Status', seniorityHours:'Seniority Hours' },
         columnMap:{ firstName:'', lastName:'', payrollName:'', role:'', employmentType:'', employeeId:'', status:'', seniorityHours:'' },
@@ -510,11 +777,35 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
           if ('serviceWorker' in navigator) {
             const swUrl = `/sw.js?build=${encodeURIComponent(BUILD_HASH)}`;
-            try {
-              await navigator.serviceWorker.register(swUrl);
-            } catch (error) {
-              console.warn('Service worker registration failed', error);
-            }
+
+            const registerServiceWorker = async () => {
+              const needsClassicFallback = (error) => {
+                if (!error) return false;
+                if (error.name === 'TypeError') return true;
+                const message = String(error.message || '').toLowerCase();
+                if (!message) return false;
+                return message.includes('module') || message.includes('mime');
+              };
+
+              try {
+                await navigator.serviceWorker.register(swUrl, { type: 'module' });
+              } catch (moduleError) {
+                if (needsClassicFallback(moduleError)) {
+                  console.warn('Module service worker registration failed, retrying without module type', moduleError);
+                  try {
+                    await navigator.serviceWorker.register(swUrl);
+                  } catch (classicError) {
+                    console.warn('Service worker registration failed after module fallback', classicError);
+                  }
+                } else {
+                  console.warn('Service worker registration failed', moduleError);
+                }
+              }
+            };
+
+            registerServiceWorker().catch((error) => {
+              console.warn('Unexpected error during service worker registration', error);
+            });
           }
 
           const tourSetting = await this.db.settings.get('hasSeenTour');
@@ -608,6 +899,13 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
         setAppReady(isReady){
           this.appReady = Boolean(isReady);
+          if(this.appReady && this.db){
+            appState.markReady();
+          } else if(!this.appReady && this.loadError){
+            appState.fail(new Error(this.loadError));
+          } else if(!this.appReady){
+            appState.markLoading();
+          }
           if(this.appReady && this.pendingTimelineRefresh){
             this.pendingTimelineRefresh = false;
             this.$nextTick(() => {
@@ -1105,17 +1403,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
         initializeFeatherIcons() {
           try {
-            if (typeof feather === 'undefined') {
-              console.warn('Feather icons library not loaded');
-              return;
-            }
-
-            feather.replace();
+            safeFeatherReplace();
           } catch (error) {
             console.warn('Feather icons initialization error:', error);
           }
         },
-        refreshFeatherIcons(){ 
+        refreshFeatherIcons(){
           this.$nextTick(() => {
             this.initializeFeatherIcons();
           });
@@ -1130,6 +1423,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.backupPayload = null;
           this.backupSummary = null;
           this.backupValidationErrors = [];
+          this.duplicateHeaderGroups = [];
+          this.duplicateHeaderNames = [];
+          this.duplicateHeaderWarningDismissed = false;
+          this.duplicateHeaderSignature = '';
           this.importLoading=true;
           const file = event.target.files?.[0];
           if(!file) { this.importLoading=false; return; }
@@ -1198,6 +1495,11 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               return obj;
             });
             this.importHeaders = trimmed;
+            await this.handleDuplicateHeaders({
+              rawHeaders: res.meta?.fields || [],
+              displayHeaders: trimmed,
+              renamedHeaders: res.meta?.renamedHeaders || {}
+            });
             this.autoMapColumns(this.importHeaders);
             this.updateEligibilityPreview();
             await this.validateImportData();
@@ -1240,6 +1542,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
                 this.importSheetName = best.name;
                 this.importHeaders = best.headers;
                 this.importData = best.rows;
+                await this.handleDuplicateHeaders({ rawHeaders: best.headers, displayHeaders: best.headers });
                 this.autoMapColumns(this.importHeaders);
                 this.updateEligibilityPreview();
                 await this.validateImportData();
@@ -1298,6 +1601,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               const { headers, rows } = this.extractFromSheet(wb.Sheets[name], xlsx);
               this.importHeaders = headers;
               this.importData = rows;
+              this.duplicateHeaderSignature = '';
+              await this.handleDuplicateHeaders({ rawHeaders: headers, displayHeaders: headers });
               this.autoMapColumns(this.importHeaders);
               this.updateEligibilityPreview();
               await this.validateImportData();
@@ -1390,17 +1695,340 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             return { headers: [], rows: [], score: -1 };
           }
         },
+        computeDuplicateHeaderGroups(rawHeaders = [], displayHeaders = [], renamedHeaders = {}){
+          const raw = Array.isArray(rawHeaders) && rawHeaders.length ? rawHeaders : displayHeaders;
+          if (!Array.isArray(raw) || !raw.length) return [];
+
+          const display = Array.isArray(displayHeaders) && displayHeaders.length === raw.length
+            ? displayHeaders
+            : raw.map((value) => (value == null ? '' : String(value).trim()));
+
+          const renameMap = new Map();
+          if (renamedHeaders && typeof renamedHeaders === 'object') {
+            for (const [key, value] of Object.entries(renamedHeaders)) {
+              const normalizedKey = key == null ? '' : String(key).trim();
+              if (!normalizedKey) continue;
+              const normalizedValue = value == null ? '' : String(value).trim();
+              if (!normalizedValue) continue;
+              renameMap.set(normalizedKey, normalizedValue);
+            }
+          }
+
+          const groups = new Map();
+          raw.forEach((rawHeader, index) => {
+            const displayName = display[index] == null ? '' : String(display[index]).trim();
+            if (!displayName) return;
+
+            const trimmedRaw = rawHeader == null ? '' : String(rawHeader).trim();
+            const baseCandidate = renameMap.get(rawHeader)
+              ?? renameMap.get(trimmedRaw)
+              ?? renameMap.get(displayName)
+              ?? displayName;
+            const base = baseCandidate == null ? '' : String(baseCandidate).trim();
+            const key = base || displayName;
+
+            const entry = { label: displayName, raw: trimmedRaw || displayName, index };
+            const existing = groups.get(key) || [];
+            existing.push(entry);
+            groups.set(key, existing);
+          });
+
+          return Array.from(groups.entries())
+            .filter(([, entries]) => entries.length > 1)
+            .map(([base, entries]) => ({
+              base,
+              entries: entries.map((entry, idx) => ({
+                ...entry,
+                status: idx === 0 ? 'primary' : 'duplicate'
+              }))
+            }));
+        },
+        async handleDuplicateHeaders({ rawHeaders = [], displayHeaders = [], renamedHeaders = {} } = {}){
+          const groups = this.computeDuplicateHeaderGroups(rawHeaders, displayHeaders, renamedHeaders);
+
+          if (!groups.length){
+            this.duplicateHeaderGroups = [];
+            this.duplicateHeaderNames = [];
+            this.duplicateHeaderWarningDismissed = false;
+            this.duplicateHeaderSignature = '';
+            return;
+          }
+
+          this.duplicateHeaderGroups = groups;
+          this.duplicateHeaderNames = Array.from(new Set(groups.map(group => group.base).filter(Boolean)));
+          this.duplicateHeaderWarningDismissed = false;
+          this.highlightMappingSection();
+
+          const signature = groups
+            .map(group => `${group.base}::${group.entries.map(entry => entry.label).join('|')}`)
+            .sort()
+            .join('||');
+
+          if (signature !== this.duplicateHeaderSignature){
+            try {
+              if (!this.activityLog && typeof this.initActivityLog === 'function'){
+                await this.initActivityLog();
+              }
+              await this.recordActivity('ImportDuplicateHeadersDetected', [], {
+                importMode: this.importMode,
+                headerCount: Array.isArray(displayHeaders) && displayHeaders.length
+                  ? displayHeaders.length
+                  : (Array.isArray(rawHeaders) ? rawHeaders.length : 0),
+                duplicates: groups.map(group => ({
+                  header: group.base,
+                  columns: group.entries.map(entry => entry.label),
+                  primary: group.entries.find(entry => entry.status === 'primary')?.label || null
+                }))
+              }, null, { supportsUndo: false });
+            } catch (error) {
+              console.error('Failed to log duplicate header detection', error);
+            } finally {
+              this.duplicateHeaderSignature = signature;
+            }
+          }
+        },
         scoreHeaderRow(cols){
           const patterns=[/first/i,/last/i,/employee\\s*name/i,/payroll\\s*name/i,/job\\s*title|role/i,/employment\\s*type|class/i,/position\\s*id|employee\\s*id/i,/status/i,/seniority|total.*hours/i];
-          let score=0; for(const c of cols){ const s=String(c||''); for(const p of patterns) if(p.test(s)) score++; } return score;
+          let score=0;
+          for(const c of cols){
+            const s=String(c||'');
+            for(const p of patterns) if(p.test(s)) score++;
+          }
+          return score;
+        },
+        normalizeHeaderValue(value){
+          if (value == null) return '';
+          let normalized = String(value).toLowerCase();
+          normalized = normalized.replace(/[#]+/g, ' number ');
+          normalized = normalized.replace(/&/g, ' and ');
+          normalized = normalized.replace(/hrs?\\b/g, 'hours');
+          normalized = normalized.replace(/senor/gi, 'senior');
+          normalized = normalized.replace(/senority/gi, 'seniority');
+          normalized = normalized.replace(/emp\\b/g, 'employee');
+          normalized = normalized.replace(/[^a-z0-9\\s]+/g, ' ');
+          normalized = normalized.replace(/\\s+/g, ' ').trim();
+          return normalized;
+        },
+        tokenizeHeaderValue(normalized){
+          if (!normalized) return [];
+          return normalized.split(' ').filter(Boolean);
+        },
+        levenshteinDistance(a, b){
+          if (a === b) return 0;
+          const aLen = a.length;
+          const bLen = b.length;
+          if (!aLen) return bLen;
+          if (!bLen) return aLen;
+          const matrix = new Array(aLen + 1);
+          for (let i = 0; i <= aLen; i++){
+            matrix[i] = new Array(bLen + 1);
+            matrix[i][0] = i;
+          }
+          for (let j = 0; j <= bLen; j++){
+            matrix[0][j] = j;
+          }
+          for (let i = 1; i <= aLen; i++){
+            const aCode = a.charCodeAt(i - 1);
+            for (let j = 1; j <= bLen; j++){
+              const cost = aCode === b.charCodeAt(j - 1) ? 0 : 1;
+              matrix[i][j] = Math.min(
+                matrix[i - 1][j] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j - 1] + cost
+              );
+            }
+          }
+          return matrix[aLen][bLen];
+        },
+        detectHeaderColumn(headers, { variants = [], preferredTokens = [], minScore = 80 } = {}){
+          if (!Array.isArray(headers) || !headers.length) return null;
+
+          const processed = headers.map((orig) => {
+            const normalized = this.normalizeHeaderValue(orig);
+            return {
+              orig,
+              normalized,
+              tokens: this.tokenizeHeaderValue(normalized)
+            };
+          });
+
+          const normalizedVariants = variants.map((value) => {
+            const normalized = this.normalizeHeaderValue(value);
+            return {
+              normalized,
+              tokens: this.tokenizeHeaderValue(normalized)
+            };
+          });
+
+          let bestMatch = null;
+          let bestScore = -Infinity;
+
+          for (const col of processed){
+            if (!col.normalized) continue;
+            let score = 0;
+
+            for (const variant of normalizedVariants){
+              if (!variant.normalized) continue;
+
+              if (col.normalized === variant.normalized){
+                score = Math.max(score, 100);
+                continue;
+              }
+
+              if (
+                variant.tokens.length > 1 &&
+                variant.tokens.every((token) => col.tokens.includes(token))
+              ){
+                score = Math.max(score, 92);
+                continue;
+              }
+
+              if (
+                variant.normalized.length >= 4 &&
+                col.normalized.includes(variant.normalized)
+              ){
+                score = Math.max(score, 88);
+                continue;
+              }
+
+              if (
+                variant.tokens.length &&
+                variant.tokens.every((token) => col.tokens.some((ct) => ct.startsWith(token) || ct.endsWith(token)))
+              ){
+                score = Math.max(score, 85);
+                continue;
+              }
+
+              const threshold = Math.min(2, Math.ceil(Math.max(col.normalized.length, variant.normalized.length) * 0.25));
+              const distance = this.levenshteinDistance(col.normalized, variant.normalized);
+              if (distance && distance <= threshold){
+                score = Math.max(score, 75 - distance);
+              }
+            }
+
+            if (score > 0 && preferredTokens.length){
+              const bonus = preferredTokens.reduce((acc, token) => (
+                col.tokens.some((ct) => ct === token || ct.startsWith(token)) ? acc + 3 : acc
+              ), 0);
+              score += bonus;
+            }
+
+            if (score > bestScore){
+              bestScore = score;
+              bestMatch = col.orig;
+            }
+          }
+
+          if (bestScore >= minScore){
+            return bestMatch;
+          }
+          return null;
+        },
+        highlightMappingSection(){
+          this.$nextTick(() => {
+            const panel = this.$refs.employeeMappingPanel;
+            if (!panel) return;
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            panel.classList.add('ring-2', 'ring-red-400');
+            if (this.mappingHighlightTimer){
+              clearTimeout(this.mappingHighlightTimer);
+            }
+            this.mappingHighlightTimer = setTimeout(() => {
+              panel.classList.remove('ring-2', 'ring-red-400');
+              this.mappingHighlightTimer = null;
+            }, 1600);
+          });
+        },
+        updateMissingRequiredColumns(){
+          const missing = [];
+          const hasName = Boolean((this.columnMap.firstName && this.columnMap.lastName) || this.columnMap.payrollName);
+          if (!hasName) missing.push('Name');
+          if (!this.columnMap.employeeId) missing.push('Employee ID');
+          if (!this.columnMap.seniorityHours) missing.push('Seniority Hours');
+          const signature = missing.slice().sort().join('|');
+          const changed = signature !== this.lastMissingColumnsSignature;
+          this.lastMissingColumnsSignature = signature;
+          this.missingRequiredColumns = missing;
+          if (!missing.length){
+            this.missingColumnsBannerDismissed = false;
+            return;
+          }
+          if (changed){
+            this.missingColumnsBannerDismissed = false;
+            this.highlightMappingSection();
+          }
+        },
+        handleExternalMissingColumns(columns){
+          if (!Array.isArray(columns)) return;
+          const normalized = columns.filter(Boolean);
+          const signature = normalized.slice().sort().join('|');
+          const changed = signature !== this.lastMissingColumnsSignature;
+          this.lastMissingColumnsSignature = signature;
+          this.missingRequiredColumns = normalized;
+          if (!normalized.length){
+            this.missingColumnsBannerDismissed = false;
+            return;
+          }
+          this.missingColumnsBannerDismissed = false;
+          if (changed){
+            this.highlightMappingSection();
+          }
+        },
+        getEmployeeImportMappingSnapshot(){
+          const snapshot = {};
+          for (const key of Object.keys(this.fieldLabels)){
+            if (this.columnMap[key]){
+              snapshot[key] = this.columnMap[key];
+            }
+          }
+          return snapshot;
         },
         autoMapColumns(headers){
           const normalized = (headers||[]).map(h=>({orig:h, norm:String(h).toLowerCase().trim()}));
           for(const [key,label] of Object.entries(this.fieldLabels)){
             if(this.columnMap[key]) continue;
             const match = normalized.find(h=>h.norm === label.toLowerCase());
-            if(match) this.columnMap[key]=match.orig;
+            if(match){
+              this.columnMap[key]=match.orig;
+              continue;
+            }
+
+            const configMap = {
+              payrollName: {
+                variants: ['employee name','payroll name','full name','name','staff name','team member name','associate name'],
+                preferredTokens: ['employee','name'],
+                minScore: 82
+              },
+              firstName: {
+                variants: ['first name','first','given name','fname'],
+                preferredTokens: ['first','given'],
+                minScore: 84
+              },
+              lastName: {
+                variants: ['last name','surname','family name','lname'],
+                preferredTokens: ['last','surname','family'],
+                minScore: 84
+              },
+              employeeId: {
+                variants: ['employee id','employee number','employee #','employee code','position id','position number','personnel id','emp id','id number','id'],
+                preferredTokens: ['employee','id','number'],
+                minScore: 82
+              },
+              seniorityHours: {
+                variants: ['seniority hours','total seniority hours','seniority hrs','seniority hour','sen hours','seniority total','seniority time','seniority','hours'],
+                preferredTokens: ['seniority','senior','hours'],
+                minScore: 82
+              }
+            };
+
+            if (configMap[key]){
+              const detected = this.detectHeaderColumn(headers, configMap[key]);
+              if (detected){
+                this.columnMap[key] = detected;
+              }
+            }
           }
+          this.updateMissingRequiredColumns();
         },
 
         // Presets
@@ -1448,6 +2076,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           return { first, last, role: g('role'), type: g('employmentType'), empId: g('employeeId'), status: g('status'), hours: g('seniorityHours') };
         },
         updateEligibilityPreview(){
+          this.updateMissingRequiredColumns();
           let eligible=0, missing=0;
           for (const row of this.importData){
             const a = this.analyzeRow(row);
@@ -1554,7 +2183,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               await this.recordActivity('ImportEmployees', Array.from(targets), {
                 added,
                 updated,
-                skipped: skipped.length
+                skipped: skipped.length,
+                mapping: this.getEmployeeImportMappingSnapshot(),
+                missingColumns: [...this.missingRequiredColumns],
+                sourceHeaders: [...this.importHeaders]
               }, undoPayload);
             }
             return { added, updated, skipped: skipped.length };
@@ -2194,6 +2826,32 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.notify('Failed to add employee', 'var(--danger)');
           }
         },
+        async handleEmployeeAdded(employee){
+          this.showAddEmployeeModal = false;
+
+          if(employee && employee.id){
+            try {
+              await this.recordActivity('AddEmployee', [employee.id], { employee }, null, { supportsUndo: false });
+            } catch (error) {
+              console.warn('Failed to record employee addition activity', error);
+            }
+          }
+
+          await this.loadData();
+          this.refreshFeatherIcons();
+
+          const label = employee?.name && typeof employee.name === 'string' && employee.name.trim()
+            ? employee.name.trim()
+            : 'Employee';
+          this.notify(`${label} added successfully`);
+        },
+        handleEmployeeAddFailed(error){
+          this.showAddEmployeeModal = false;
+          if(error){
+            console.error('Employee add failed', error);
+          }
+          this.notify('Failed to add employee', 'var(--danger)');
+        },
         async addRequirement(){
           if (!this.newRequirement.name) {
             this.notify('Requirement name is required', 'var(--danger)');
@@ -2425,6 +3083,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
       });
 
     Alpine.data('activityTimeline', activityTimeline);
+    Alpine.data('addEmployeeModal', addEmployeeModal);
     Alpine.data('app', app);
 
     function showFallback() {
@@ -2469,13 +3128,48 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
       }, 1200);
     });
     const replaceFeatherIcons = () => {
-      if (typeof feather !== 'undefined' && typeof feather.replace === 'function') {
-        feather.replace();
-      }
+      safeFeatherReplace();
     };
 
     document.addEventListener('DOMContentLoaded', replaceFeatherIcons);
     document.addEventListener('alpine:init', replaceFeatherIcons);
+
+    document.addEventListener('employee:added', event => {
+      const root = document.querySelector('[x-data="app"]');
+      if (!root) {
+        return;
+      }
+
+      const target = event?.target ?? null;
+      if (target && target !== document && target !== window && root.contains(target)) {
+        return;
+      }
+
+      const component = root.__x?.$data;
+      if (!component || typeof component.loadData !== 'function') {
+        return;
+      }
+
+      Promise.resolve(component.loadData())
+        .then(() => {
+          if (typeof component.refreshFeatherIcons === 'function') {
+            component.refreshFeatherIcons();
+          }
+        })
+        .catch(error => {
+          console.error('Failed to refresh employees after external addition', error);
+        });
+    });
+
+    window.addEventListener('employee-import:missing-columns', (event) => {
+      const detail = event?.detail;
+      const columns = Array.isArray(detail?.columns) ? detail.columns : [];
+      const root = document.querySelector('[x-data="app"]');
+      const component = root && root.__x ? root.__x.$data : null;
+      if (component && typeof component.handleExternalMissingColumns === 'function'){
+        component.handleExternalMissingColumns(columns);
+      }
+    });
   window.addEventListener('DOMContentLoaded', ()=> {
     if (window.__initImportUI) window.__initImportUI();
   });

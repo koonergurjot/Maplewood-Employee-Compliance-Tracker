@@ -1,5 +1,25 @@
 const scopeUrl = self.registration.scope;
 
+const buildHashFromDefine = (() => {
+  try {
+    if (typeof __SW_BUILD_HASH__ !== 'undefined') return __SW_BUILD_HASH__;
+  } catch (error) {
+    // ignored
+  }
+
+  try {
+    if (typeof __BUILD_HASH__ !== 'undefined') return __BUILD_HASH__;
+  } catch (error) {
+    // ignored
+  }
+
+  return undefined;
+})();
+
+if (buildHashFromDefine && !self.__SW_BUILD_HASH__) {
+  self.__SW_BUILD_HASH__ = buildHashFromDefine;
+}
+
 const initialHash = (() => {
   if (self.__SW_BUILD_HASH__) return self.__SW_BUILD_HASH__;
   if (self.__BUILD_HASH__) return self.__BUILD_HASH__;

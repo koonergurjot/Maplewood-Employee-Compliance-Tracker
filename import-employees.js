@@ -80,21 +80,39 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
     return await createDatabase();
   }
 
-  function parseSeniority(val){
-    if (val == null) return null;
-    const s = String(val).trim();
-    // HH:MM
-    const m = s.match(/^\s*(\d+)\s*:\s*([0-5]?\d)\s*$/);
-    if (m) return Number(m[1]) + Number(m[2])/60;
-    const s2 = s.replace(/,/g,'');
-    const num = parseFloat(s2);
-    if (!isNaN(num)) return num;
-    const m2 = s2.match(/^\s*([\d\.]+)/);
-    if (m2) {
-      const n = parseFloat(m2[1]);
-      return isNaN(n) ? null : n;
+  function normalizeSeniorityHours(val){
+    if (typeof val === 'number' && Number.isFinite(val)) {
+      return val;
     }
-    return null;
+    if (val == null) return 0;
+    const s = String(val).trim();
+    if (!s) return 0;
+
+    // HH:MM format
+    const hhmmMatch = s.match(/^(\d+)\s*:\s*([0-5]?\d)$/);
+    if (hhmmMatch) {
+      const hours = Number(hhmmMatch[1]);
+      const minutes = Number(hhmmMatch[2]);
+      if (!Number.isNaN(hours) && !Number.isNaN(minutes)) {
+        return hours + minutes / 60;
+      }
+    }
+
+    const stripped = s.replace(/,/g, '').replace(/\s+/g, '');
+    let numericCandidate = Number(stripped);
+    if (!Number.isNaN(numericCandidate)) {
+      return numericCandidate;
+    }
+
+    const leadingNumeric = stripped.match(/^-?\d+(?:\.\d+)?/);
+    if (leadingNumeric) {
+      numericCandidate = Number(leadingNumeric[0]);
+      if (!Number.isNaN(numericCandidate)) {
+        return numericCandidate;
+      }
+    }
+
+    return 0;
   }
 
   function splitName(n){
@@ -109,11 +127,160 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
     return { firstName: parts.slice(0,-1).join(' '), lastName: parts.slice(-1)[0] };
   }
 
-  function detectColumn(cols, variants){
-    const lower = cols.map(c => c.toLowerCase());
-    for (const v of variants){
-      const i = lower.findIndex(c => c.includes(v));
-      if (i !== -1) return cols[i];
+  function normalizeHeader(value){
+    if (value == null) return '';
+    let normalized = String(value).toLowerCase();
+    normalized = normalized.replace(/[#]+/g, ' number ');
+    normalized = normalized.replace(/&/g, ' and ');
+    normalized = normalized.replace(/hrs?\b/g, 'hours');
+    normalized = normalized.replace(/senor/gi, 'senior');
+    normalized = normalized.replace(/senority/gi, 'seniority');
+    normalized = normalized.replace(/emp\b/g, 'employee');
+    normalized = normalized.replace(/[^a-z0-9\s]+/g, ' ');
+    normalized = normalized.replace(/\s+/g, ' ').trim();
+    return normalized;
+  }
+
+  function tokenize(normalized){
+    if (!normalized) return [];
+    return normalized.split(' ').filter(Boolean);
+  }
+
+  function levenshtein(a, b){
+    if (a === b) return 0;
+    const aLen = a.length;
+    const bLen = b.length;
+    if (!aLen) return bLen;
+    if (!bLen) return aLen;
+    const matrix = new Array(aLen + 1);
+    for (let i = 0; i <= aLen; i++){
+      matrix[i] = new Array(bLen + 1);
+      matrix[i][0] = i;
+    }
+    for (let j = 0; j <= bLen; j++){
+      matrix[0][j] = j;
+    }
+    for (let i = 1; i <= aLen; i++){
+      const aChar = a.charCodeAt(i - 1);
+      for (let j = 1; j <= bLen; j++){
+        const cost = aChar === b.charCodeAt(j - 1) ? 0 : 1;
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j - 1] + cost
+        );
+      }
+    }
+    return matrix[aLen][bLen];
+  }
+
+  const missingColumnEventName = 'employee-import:missing-columns';
+
+  function updateMissingColumnsBanner(columns){
+    try {
+      const event = new CustomEvent(missingColumnEventName, { detail: { columns } });
+      window.dispatchEvent(event);
+    } catch (err) {
+      console.warn('Failed to dispatch missing column event', err);
+    }
+
+    const banner = document.querySelector('[data-import-missing-columns]');
+    if (!banner) return;
+    if (banner.dataset && banner.dataset.managedBy === 'alpine') return;
+
+    if (!columns.length){
+      banner.style.display = 'none';
+      banner.textContent = '';
+      return;
+    }
+
+    banner.style.display = 'block';
+    const label = columns.join(', ');
+    banner.textContent = `Missing required columns: ${label}. Please review the field mapping.`;
+  }
+
+  function detectColumn(cols, { variants = [], preferredTokens = [], minScore = 80 } = {}){
+    if (!Array.isArray(cols) || !cols.length) return null;
+
+    const processed = cols.map((orig) => {
+      const normalized = normalizeHeader(orig);
+      return {
+        orig,
+        normalized,
+        tokens: tokenize(normalized)
+      };
+    });
+
+    const normalizedVariants = variants.map((value) => {
+      const normalized = normalizeHeader(value);
+      return {
+        value,
+        normalized,
+        tokens: tokenize(normalized)
+      };
+    });
+
+    let bestMatch = null;
+    let bestScore = -Infinity;
+
+    for (const col of processed){
+      if (!col.normalized) continue;
+      let scoreForColumn = 0;
+
+      for (const variant of normalizedVariants){
+        if (!variant.normalized) continue;
+
+        if (col.normalized === variant.normalized){
+          scoreForColumn = Math.max(scoreForColumn, 100);
+          continue;
+        }
+
+        if (
+          variant.tokens.length > 1 &&
+          variant.tokens.every((token) => col.tokens.includes(token))
+        ){
+          scoreForColumn = Math.max(scoreForColumn, 92);
+          continue;
+        }
+
+        if (
+          variant.normalized.length >= 4 &&
+          col.normalized.includes(variant.normalized)
+        ){
+          scoreForColumn = Math.max(scoreForColumn, 88);
+          continue;
+        }
+
+        if (
+          variant.tokens.length &&
+          variant.tokens.every((token) => col.tokens.some((ct) => ct.startsWith(token) || ct.endsWith(token)))
+        ){
+          scoreForColumn = Math.max(scoreForColumn, 85);
+          continue;
+        }
+
+        const threshold = Math.min(2, Math.ceil(Math.max(col.normalized.length, variant.normalized.length) * 0.25));
+        const distance = levenshtein(col.normalized, variant.normalized);
+        if (distance && distance <= threshold){
+          scoreForColumn = Math.max(scoreForColumn, 75 - distance);
+        }
+      }
+
+      if (scoreForColumn > 0 && preferredTokens.length){
+        const tokenBonus = preferredTokens.reduce((acc, token) => (
+          col.tokens.some((ct) => ct === token || ct.startsWith(token)) ? acc + 3 : acc
+        ), 0);
+        scoreForColumn += tokenBonus;
+      }
+
+      if (scoreForColumn > bestScore){
+        bestScore = scoreForColumn;
+        bestMatch = col.orig;
+      }
+    }
+
+    if (bestScore >= minScore){
+      return bestMatch;
     }
     return null;
   }
@@ -134,14 +301,68 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('No rows detected.');
 
     const header = Object.keys(rows[0]);
-    const nameCol      = detectColumn(header, ['name','employee name','emp name','employee']);
-    const seniorityCol = detectColumn(header, ['seniority hours','seniority','hours']);
-    const empidCol     = detectColumn(header, ['employee id','emp id','id']);
+    const nameCol = detectColumn(header, {
+      variants: [
+        'employee name',
+        'emp name',
+        'employee',
+        'staff name',
+        'team member name',
+        'associate name',
+        'payroll name',
+        'full name',
+        'name'
+      ],
+      preferredTokens: ['employee', 'name']
+    });
+    const seniorityCol = detectColumn(header, {
+      variants: [
+        'seniority hours',
+        'total seniority hours',
+        'seniority hrs',
+        'seniority hour',
+        'sen hours',
+        'seniority total',
+        'seniority time',
+        'seniority',
+        'hours'
+      ],
+      preferredTokens: ['seniority', 'senior', 'hours'],
+      minScore: 82
+    });
+    const empidCol = detectColumn(header, {
+      variants: [
+        'employee id',
+        'employee number',
+        'employee #',
+        'employee code',
+        'employee identifier',
+        'position id',
+        'position number',
+        'personnel id',
+        'emp id',
+        'id number',
+        'id'
+      ],
+      preferredTokens: ['employee', 'id', 'number'],
+      minScore: 82
+    });
     const statusCol    = detectColumn(header, ['status']);
     const roleCol      = detectColumn(header, ['role','position','title']);
     const etypeCol     = detectColumn(header, ['employment type','type','ft','pt','casual']);
     const wingCol      = detectColumn(header, ['wing','unit','department','dept']);
     const startCol     = detectColumn(header, ['start date','hire date','seniority date']);
+
+    updateMissingColumnsBanner([]);
+
+    const missingRequired = [];
+    if (!nameCol) missingRequired.push('Name');
+    if (!empidCol) missingRequired.push('Employee ID');
+    if (!seniorityCol) missingRequired.push('Seniority Hours');
+
+    if (missingRequired.length){
+      updateMissingColumnsBanner(missingRequired);
+    }
 
     const db = await ensureDb();
     await db.open();
@@ -171,12 +392,12 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
     for (const r of rows){
       const nameVal = nameCol ? r[nameCol] : (r['Name'] ?? r['Employee'] ?? '');
       const { firstName, lastName } = splitName(nameVal);
-      const sh = seniorityCol ? parseSeniority(r[seniorityCol]) : null;
 
       const idVal = empidCol ? r[empidCol] : null;
       const employeeIdValue = normalizeEmployeeId(idVal);
       const employeeIdKey = employeeIdValue ? employeeIdValue.toLowerCase() : '';
-      const compositeKey = normalizeComposite(lastName, firstName, roleCol ? (r[roleCol] ?? null) : null);
+      const roleRaw = roleCol ? (r[roleCol] ?? null) : null;
+      const compositeKey = normalizeComposite(lastName, firstName, roleRaw);
 
       let existingMatch = null;
       if (employeeIdKey && existingByEmployeeId.has(employeeIdKey)) {
@@ -185,10 +406,14 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
         existingMatch = existingByComposite.get(compositeKey);
       }
 
+      const shSource = seniorityCol ? r[seniorityCol] : existingMatch?.seniorityHours;
+      const sh = normalizeSeniorityHours(shSource);
+
       const isExisting = Boolean(existingMatch);
       const id = isExisting ? existingMatch.id : (employeeIdValue || localGenerateId());
-      const roleValue = roleCol ? (r[roleCol] ?? null) : null;
-      const employmentTypeValue = etypeCol ? String(r[etypeCol] ?? '').toUpperCase() || null : null;
+      const roleValue = roleRaw;
+      const rawEmploymentType = etypeCol ? r[etypeCol] : undefined;
+      const employmentTypeValue = rawEmploymentType == null ? null : String(rawEmploymentType).trim().toUpperCase();
       const statusValue = String(statusCol ? (r[statusCol] ?? 'ACTIVE') : 'ACTIVE').toUpperCase();
 
       const meta = { ...(existingMatch?.meta || {}) };
@@ -234,10 +459,8 @@ import { createDatabase, ensureDexieLoaded, generateId } from './db.js';
 
     // Sort by seniority desc
     employees.sort((a,b)=>{
-      const aa = a.seniorityHours; const bb = b.seniorityHours;
-      if (aa == null && bb == null) return (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||'');
-      if (aa == null) return 1;
-      if (bb == null) return -1;
+      const aa = normalizeSeniorityHours(a.seniorityHours);
+      const bb = normalizeSeniorityHours(b.seniorityHours);
       if (bb !== aa) return bb - aa;
       return (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||'');
     });

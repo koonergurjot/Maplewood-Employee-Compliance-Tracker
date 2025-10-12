@@ -3,15 +3,21 @@ import legacy from '@vitejs/plugin-legacy';
 import { resolve } from 'path';
 
 const buildHash = process.env.BUILD_HASH || Date.now().toString(36);
+// The legacy plugin relies on `new Function` which is blocked when the site is
+// served with a strict Content Security Policy (no `unsafe-eval`). Allow
+// enabling it explicitly when older browser support is required.
+const enableLegacy = String(process.env.ENABLE_LEGACY_BUILD).toLowerCase() === 'true';
 
 export default defineConfig({
   plugins: [
-    legacy({
-      targets: ['defaults', 'not IE 11', 'Edge 18', 'Safari 13'],
-      additionalLegacyPolyfills: ['regenerator-runtime/runtime']
-    })
-  ],
+    enableLegacy &&
+      legacy({
+        targets: ['defaults', 'not IE 11', 'Edge 18', 'Safari 13'],
+        additionalLegacyPolyfills: ['regenerator-runtime/runtime']
+      })
+  ].filter(Boolean),
   define: {
+    __SW_BUILD_HASH__: JSON.stringify(buildHash),
     __BUILD_HASH__: JSON.stringify(buildHash)
   },
   build: {
