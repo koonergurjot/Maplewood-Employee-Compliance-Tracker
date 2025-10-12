@@ -22,6 +22,15 @@ body {
   line-height: inherit;
 }
 
+.focus-ring:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
+}
+
+.dark .focus-ring:focus-visible {
+  outline-color: rgba(96, 165, 250, 0.6);
+}
+
 /* Container */
 .container {
   width: 100%;

@@ -1,6 +1,7 @@
 import Papa from 'papaparse';
 
 import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZE, chunkArray } from './db.js';
+import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
 
 /**
  * Client-side importer for Employees.
@@ -454,6 +455,10 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
 
   function renderMappingModal(headers, defaultMapping){
     return new Promise((resolve) => {
+      const previouslyFocused = typeof document !== 'undefined' ? document.activeElement : null;
+      let releaseFocusTrap = null;
+      let cleaned = false;
+
       const overlay = document.createElement('div');
       overlay.className = 'import-mapping-overlay';
       overlay.style.position = 'fixed';
@@ -476,6 +481,10 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
       modal.style.padding = '1.5rem';
       modal.style.maxHeight = '90vh';
       modal.style.overflowY = 'auto';
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-labelledby', 'import-mapping-title');
+      modal.setAttribute('aria-describedby', 'import-mapping-description');
 
       const mapping = { ...defaultMapping };
 
@@ -497,12 +506,16 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
       title.style.fontSize = '1.25rem';
       title.style.fontWeight = '600';
       title.style.marginBottom = '1rem';
+      title.id = 'import-mapping-title';
+      title.tabIndex = -1;
+      title.setAttribute('data-modal-initial-focus', 'true');
 
       const description = document.createElement('p');
       description.textContent = 'Review detected fields and adjust the mapping before importing.';
       description.style.fontSize = '0.95rem';
       description.style.marginBottom = '1.25rem';
       description.style.color = 'var(--muted, #6b7280)';
+      description.id = 'import-mapping-description';
 
       const table = document.createElement('div');
       table.style.display = 'grid';
@@ -643,9 +656,41 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
         }
       }
 
+      const handleKeydown = (event) => {
+        if(event.key === 'Escape'){
+          event.preventDefault();
+          cleanup();
+          resolve(null);
+        }
+      };
+
+      function restoreFocus(){
+        if(!previouslyFocused || typeof previouslyFocused.focus !== 'function'){
+          return;
+        }
+        if(typeof document !== 'undefined' && typeof document.contains === 'function' && !document.contains(previouslyFocused)){
+          return;
+        }
+        requestAnimationFrame(() => {
+          try {
+            previouslyFocused.focus({ preventScroll: true });
+          } catch (error) {
+            previouslyFocused.focus();
+          }
+        });
+      }
+
       function cleanup(){
+        if(cleaned) return;
+        cleaned = true;
+        if(releaseFocusTrap){
+          releaseFocusTrap();
+          releaseFocusTrap = null;
+        }
+        document.removeEventListener('keydown', handleKeydown);
         overlay.remove();
         document.body.style.overflow = '';
+        restoreFocus();
       }
 
       validateBtn.addEventListener('click', () => {
@@ -678,6 +723,17 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
       overlay.appendChild(modal);
       document.body.appendChild(overlay);
       document.body.style.overflow = 'hidden';
+      document.addEventListener('keydown', handleKeydown);
+
+      releaseFocusTrap = trapFocusWithin(modal);
+      const initialFocus = modal.querySelector('[data-modal-initial-focus]') || getFocusableElements(modal)[0] || modal;
+      if(initialFocus && typeof initialFocus.focus === 'function'){
+        try {
+          initialFocus.focus({ preventScroll: true });
+        } catch (error) {
+          initialFocus.focus();
+        }
+      }
     });
   }
 
