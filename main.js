@@ -13,6 +13,10 @@ import './import-employees.js';
 import './onboarding.js';
 import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup } from './db.js';
 
+const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Recreation', 'Reception', 'Rehab Assistant', 'Other'];
+const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
+const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
+
 let cachedXlsx = (typeof window !== 'undefined' && (window.__xlsxModule || window.XLSX)) || null;
 let xlsxLoadPromise = null;
 
@@ -148,8 +152,113 @@ window.Alpine = Alpine;
 Alpine.store('app', {
   showImportModal: false,
   toast: null,
+  lookupDialog: {
+    open: false,
+    type: '',
+    label: '',
+    value: '',
+    error: '',
+    loading: false,
+    initializing: false,
+    existing: [],
+    onResolve: null
+  },
   setToast(t){
     this.toast = t;
+  },
+  async openLookupDialog({ type, label, initialValue = '', onSuccess, existingValues = [] } = {}){
+    if(!type){
+      return;
+    }
+
+    const dialog = this.lookupDialog;
+    dialog.type = String(type);
+    dialog.label = label || 'Value';
+    dialog.value = typeof initialValue === 'string' ? initialValue : '';
+    dialog.error = '';
+    dialog.loading = false;
+    dialog.initializing = true;
+    dialog.open = true;
+    dialog.onResolve = typeof onSuccess === 'function' ? onSuccess : null;
+    dialog.existing = Array.isArray(existingValues)
+      ? existingValues
+          .map(entry => {
+            if(typeof entry === 'string') return entry.trim();
+            if(entry == null) return '';
+            return String(entry).trim();
+          })
+          .filter(Boolean)
+      : [];
+
+    try {
+      const values = await listLookups(type);
+      if(Array.isArray(values) && values.length){
+        const seen = new Set(dialog.existing.map(v => v.toLocaleLowerCase()));
+        for(const entry of values){
+          if(typeof entry !== 'string') continue;
+          const trimmed = entry.trim();
+          if(!trimmed) continue;
+          const key = trimmed.toLocaleLowerCase();
+          if(seen.has(key)) continue;
+          seen.add(key);
+          dialog.existing.push(trimmed);
+        }
+      }
+    } catch (error) {
+      console.warn('lookupDialog: failed to load existing values for', type, error);
+    } finally {
+      dialog.initializing = false;
+    }
+  },
+  closeLookupDialog(){
+    const dialog = this.lookupDialog;
+    dialog.open = false;
+    dialog.type = '';
+    dialog.label = '';
+    dialog.value = '';
+    dialog.error = '';
+    dialog.loading = false;
+    dialog.initializing = false;
+    dialog.existing = [];
+    dialog.onResolve = null;
+  },
+  async submitLookupDialog(){
+    const dialog = this.lookupDialog;
+    if(!dialog.open || dialog.loading || dialog.initializing){
+      return;
+    }
+
+    const rawValue = typeof dialog.value === 'string' ? dialog.value : '';
+    const trimmed = rawValue.trim();
+    if(!trimmed){
+      dialog.error = 'Enter a value to add.';
+      return;
+    }
+
+    const lower = trimmed.toLocaleLowerCase();
+    if(dialog.existing.some(entry => entry.toLocaleLowerCase() === lower)){
+      dialog.error = 'That value already exists.';
+      return;
+    }
+
+    dialog.loading = true;
+    dialog.error = '';
+
+    try {
+      const record = await addLookup(dialog.type, trimmed);
+      const resolved = record?.value || trimmed;
+      if(typeof dialog.onResolve === 'function'){
+        dialog.onResolve(resolved);
+      }
+      this.closeLookupDialog();
+    } catch (error) {
+      console.warn('lookupDialog: failed to add value for', dialog.type, error);
+      dialog.error = 'Unable to save this value. Try again.';
+    } finally {
+      if(dialog.open){
+        dialog.loading = false;
+      }
+    }
   }
 });
 
@@ -548,7 +657,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           searchQuery:'', roleFilter:'', statusFilter:'', reqStatusFilter:'', filteredEmployees:[], isFiltering:false, sortField:'firstName', sortDirection:'asc',
           globalSearch:'', searchResults:[],
           globalSearchIndex:null, globalSearchIndexVersion:-1, globalSearchDataVersion:0, globalSearchData:[],
-        newEmployee:{firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''},
+        roleOptions:[...DEFAULT_ROLE_LOOKUPS],
+        statusOptions:[...DEFAULT_STATUS_LOOKUPS],
+        employmentTypeOptions:[...DEFAULT_EMPLOYMENT_TYPE_LOOKUPS],
+        newEmployee:{firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:'', status:'Active'},
           newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
           editingEmployee:{}, editingRequirement:{},
         selectedEmployees:[], selectedRequirements:[], bulkAction:'',
@@ -567,6 +679,103 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             ctx.fillStyle = opts?.color || getComputedStyle(document.documentElement).getPropertyValue('--card') || '#fff';
             ctx.fillRect(0, 0, width, height);
             ctx.restore();
+          }
+        },
+
+        mergeLookupValues(...sources){
+          const seen = new Set();
+          const result = [];
+          for(const source of sources){
+            if(!Array.isArray(source)) continue;
+            for(const entry of source){
+              if(typeof entry !== 'string') continue;
+              const value = entry.trim();
+              if(!value) continue;
+              const key = value.toLocaleLowerCase();
+              if(seen.has(key)) continue;
+              seen.add(key);
+              result.push(value);
+            }
+          }
+          return result;
+        },
+
+        formatEmploymentTypeLabel(type){
+          if(type == null){
+            return '';
+          }
+          const value = String(type).trim();
+          if(!value){
+            return '';
+          }
+          const normalized = value.toUpperCase();
+          if(normalized === 'FT'){ return 'Full Time'; }
+          if(normalized === 'PT'){ return 'Part Time'; }
+          if(normalized === 'PRN'){ return 'PRN'; }
+          if(normalized === 'CASUAL'){ return 'Casual'; }
+          return value;
+        },
+
+        appendLookupValue(type, value){
+          if(!type) return;
+          const normalized = typeof value === 'string' ? value.trim() : '';
+          if(!normalized) return;
+          const key = normalized.toLocaleLowerCase();
+          const map = {
+            role: 'roleOptions',
+            status: 'statusOptions',
+            employmentType: 'employmentTypeOptions'
+          };
+          const targetKey = map[type];
+          if(!targetKey || !Array.isArray(this[targetKey])){
+            return;
+          }
+          if(this[targetKey].some(entry => entry.toLocaleLowerCase() === key)){
+            return;
+          }
+          this[targetKey] = [...this[targetKey], normalized];
+        },
+
+        ensureLookupValue(type, value){
+          if(!value) return;
+          this.appendLookupValue(type, value);
+        },
+
+        async loadEmployeeLookups(){
+          try{
+            const [roleValues, statusValues, typeValues] = await Promise.all([
+              listLookups('role'),
+              listLookups('status'),
+              listLookups('employmentType')
+            ]);
+
+            const employeeRoles = this.employees.map(emp => emp.role).filter(Boolean);
+            const employeeStatuses = this.employees.map(emp => emp.status).filter(Boolean);
+            const employeeTypes = this.employees.map(emp => emp.employmentType).filter(Boolean);
+
+            this.roleOptions = this.mergeLookupValues(
+              DEFAULT_ROLE_LOOKUPS,
+              Array.isArray(roleValues) ? roleValues : [],
+              employeeRoles
+            );
+            this.statusOptions = this.mergeLookupValues(
+              DEFAULT_STATUS_LOOKUPS,
+              Array.isArray(statusValues) ? statusValues : [],
+              employeeStatuses
+            );
+            this.employmentTypeOptions = this.mergeLookupValues(
+              DEFAULT_EMPLOYMENT_TYPE_LOOKUPS,
+              Array.isArray(typeValues) ? typeValues : [],
+              employeeTypes
+            );
+          }catch(error){
+            console.warn('Failed to load employee lookup values', error);
+            const employeeRoles = this.employees.map(emp => emp.role).filter(Boolean);
+            const employeeStatuses = this.employees.map(emp => emp.status).filter(Boolean);
+            const employeeTypes = this.employees.map(emp => emp.employmentType).filter(Boolean);
+            this.roleOptions = this.mergeLookupValues(DEFAULT_ROLE_LOOKUPS, employeeRoles);
+            this.statusOptions = this.mergeLookupValues(DEFAULT_STATUS_LOOKUPS, employeeStatuses);
+            this.employmentTypeOptions = this.mergeLookupValues(DEFAULT_EMPLOYMENT_TYPE_LOOKUPS, employeeTypes);
           }
         },
 
@@ -889,6 +1098,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.employees = employees;
           this.requirements = requirements;
           this.employeeRequirements = employeeRequirements;
+          await this.loadEmployeeLookups();
           this.erMap = new Map();
           for (const er of this.employeeRequirements){
             if(!this.erMap.has(er.employeeId)) this.erMap.set(er.employeeId,new Map());
@@ -2817,7 +3027,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           const emp = {
             id: generateId(),
             ...this.newEmployee,
-            status: 'Active',
+            status: this.newEmployee.status || 'Active',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
@@ -2826,7 +3036,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             const command = new AddEmployee(this.db, { employee: emp });
             const undoPayload = await command.execute();
             await this.recordActivity('AddEmployee', [emp.id], { employee: emp }, undoPayload);
-            this.newEmployee = {firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:''};
+            this.newEmployee = {firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:'', status:'Active'};
             this.showAddEmployeeModal = false;
             await this.loadData();
             this.refreshFeatherIcons();
@@ -2957,6 +3167,9 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
         async editEmployee(emp){
           this.editingEmployee = { ...emp, seniorityHours: emp.seniorityHours ?? '' };
+          this.ensureLookupValue('role', emp.role);
+          this.ensureLookupValue('employmentType', emp.employmentType);
+          this.ensureLookupValue('status', emp.status);
           this.showEditEmployeeModal = true;
         },
         async updateEmployee(){
@@ -2974,6 +3187,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             lastName: e.lastName,
             role: e.role,
             employmentType: e.employmentType,
+            status: e.status,
             employeeId: e.employeeId,
             seniorityHours: e.seniorityHours,
             updatedAt: new Date().toISOString()

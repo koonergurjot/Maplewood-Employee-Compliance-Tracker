@@ -700,23 +700,63 @@
               </div>
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Role</label>
+              <label class="flex items-center justify-between text-sm font-medium mb-1">
+                <span>Role</span>
+                <button
+                  type="button"
+                  class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
+                  style="border-color:var(--line); color:var(--accent);"
+                  @click="$store.app.openLookupDialog({ type: 'role', label: 'Role', existingValues: roleOptions, onSuccess(value){ appendLookupValue('role', value); editingEmployee.role = value; } })"
+                  aria-label="Add role option"
+                >
+                  <i data-feather="plus" class="w-3.5 h-3.5"></i>
+                </button>
+              </label>
               <select x-model="editingEmployee.role" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
                 <option value="">Select Role</option>
-                <option value="LPN">LPN</option>
-                <option value="RCA">RCA</option>
-                <option value="Recreation">Recreation</option>
-                <option value="Reception">Reception</option>
-                <option value="RehabAssistant">Rehab Assistant</option>
-                <option value="Other">Other</option>
+                <template x-for="role in roleOptions" :key="role">
+                  <option :value="role" x-text="role"></option>
+                </template>
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Employment Type</label>
+              <label class="flex items-center justify-between text-sm font-medium mb-1">
+                <span>Employment Type</span>
+                <button
+                  type="button"
+                  class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
+                  style="border-color:var(--line); color:var(--accent);"
+                  @click="$store.app.openLookupDialog({ type: 'employmentType', label: 'Employment Type', existingValues: employmentTypeOptions, onSuccess(value){ appendLookupValue('employmentType', value); editingEmployee.employmentType = value; } })"
+                  aria-label="Add employment type option"
+                >
+                  <i data-feather="plus" class="w-3.5 h-3.5"></i>
+                </button>
+              </label>
               <select x-model="editingEmployee.employmentType" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
-                <option value="FT">Full Time</option>
-                <option value="PT">Part Time</option>
-                <option value="Casual">Casual</option>
+                <option value="">Select Employment Type</option>
+                <template x-for="type in employmentTypeOptions" :key="type">
+                  <option :value="type" x-text="formatEmploymentTypeLabel(type)"></option>
+                </template>
+              </select>
+            </div>
+            <div>
+              <label class="flex items-center justify-between text-sm font-medium mb-1">
+                <span>Status</span>
+                <button
+                  type="button"
+                  class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
+                  style="border-color:var(--line); color:var(--accent);"
+                  @click="$store.app.openLookupDialog({ type: 'status', label: 'Status', existingValues: statusOptions, onSuccess(value){ appendLookupValue('status', value); editingEmployee.status = value; } })"
+                  aria-label="Add status option"
+                >
+                  <i data-feather="plus" class="w-3.5 h-3.5"></i>
+                </button>
+              </label>
+              <select x-model="editingEmployee.status" class="w-full border rounded px-3 py-2 bg-transparent" style="border-color:var(--line)">
+                <option value="">Select Status</option>
+                <template x-for="status in statusOptions" :key="status">
+                  <option :value="status" x-text="status"></option>
+                </template>
               </select>
             </div>
             <div>
@@ -1168,6 +1208,48 @@
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
           <button @click="showActivityLogModal=false" class="w-full sm:w-auto px-4 py-2 btn">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lookup Add Dialog -->
+  <div
+    x-data="{ focusInput(){ this.$nextTick(() => { const input = this.$refs.lookupInput; if(input){ try{ input.focus({ preventScroll: true }); } catch(e){ input.focus(); } if(typeof input.select === 'function'){ input.select(); } } }); } }"
+    x-show="$store.app.lookupDialog.open"
+    x-cloak
+    class="fixed inset-0 z-50"
+    @keydown.escape.window.prevent.stop="$store.app.closeLookupDialog()"
+  >
+    <div class="flex items-center justify-center min-h-screen px-4 py-6 text-center sm:block sm:p-0">
+      <div class="fixed inset-0 bg-black/40 z-40" @click="$store.app.closeLookupDialog()"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div
+        class="relative z-50 inline-block align-middle card rounded-lg overflow-hidden shadow-xl transform transition-all sm:my-8 sm:max-w-sm sm:w-full text-left"
+        x-effect="$store.app.lookupDialog.open && focusInput()"
+      >
+        <div class="px-4 py-3 border-b" style="border-color:var(--line)">
+          <h3 class="text-base font-semibold" x-text="'Add ' + ($store.app.lookupDialog.label || 'value')"></h3>
+        </div>
+        <div class="px-4 py-4 space-y-3">
+          <label class="block text-sm font-medium" x-text="$store.app.lookupDialog.label || 'Value'"></label>
+          <input
+            type="text"
+            x-model="$store.app.lookupDialog.value"
+            x-ref="lookupInput"
+            class="form-field w-full"
+            placeholder="Enter value"
+            :disabled="$store.app.lookupDialog.loading"
+          >
+          <p class="text-xs" style="color:var(--muted)" x-show="$store.app.lookupDialog.initializing">Loading existing values…</p>
+          <p class="text-sm" style="color:var(--danger)" x-show="$store.app.lookupDialog.error" x-text="$store.app.lookupDialog.error"></p>
+        </div>
+        <div class="px-4 py-3 bg-gray-50 dark:bg-gray-900 flex justify-end gap-2 border-t" style="border-color:var(--line)">
+          <button type="button" class="btn" @click="$store.app.closeLookupDialog()" :disabled="$store.app.lookupDialog.loading">Cancel</button>
+          <button type="button" class="btn btn-primary" @click="$store.app.submitLookupDialog()" :disabled="$store.app.lookupDialog.loading || $store.app.lookupDialog.initializing">
+            <span x-show="!$store.app.lookupDialog.loading">Save</span>
+            <span x-show="$store.app.lookupDialog.loading">Saving...</span>
+          </button>
         </div>
       </div>
     </div>
