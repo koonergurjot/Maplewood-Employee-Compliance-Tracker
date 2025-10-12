@@ -186,6 +186,11 @@ function defineSchema(db) {
     lookups: '++id,&[type+valueLower],type,value,valueLower,createdAt'
   };
 
+  const v12Stores = {
+    ...v11Stores,
+    employees: 'id, employeeId, lastName, firstName, role, employmentType, status, seniorityHours, [employeeId+lastName+firstName]'
+  };
+
   db.version(8).stores(v8Stores);
   db.version(9).stores(v9Stores);
   db.version(10).stores(v10Stores).upgrade(async tx => {
@@ -289,6 +294,8 @@ function defineSchema(db) {
       }
     }
   });
+
+  db.version(12).stores(v12Stores);
 
   db.on('populate', tx => {
     const now = new Date().toISOString();
