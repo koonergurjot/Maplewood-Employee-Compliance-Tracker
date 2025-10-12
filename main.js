@@ -330,6 +330,89 @@ Alpine.store('app', {
   showImportModal: false,
   showLookupModal: '',
   toast: null,
+  selectedEmployeeIds: [],
+  normalizeId(value){
+    if(value == null){
+      return '';
+    }
+    try{
+      return String(value);
+    }catch(error){
+      return '';
+    }
+  },
+  setSelectedEmployeeIds(ids){
+    if(!Array.isArray(ids)){
+      this.selectedEmployeeIds = [];
+      return;
+    }
+    const unique = [];
+    const seen = new Set();
+    for(const id of ids){
+      const key = this.normalizeId(id);
+      if(!key || seen.has(key)){
+        continue;
+      }
+      seen.add(key);
+      unique.push(id);
+    }
+    this.selectedEmployeeIds = unique;
+  },
+  isEmployeeSelected(id){
+    const key = this.normalizeId(id);
+    if(!key){
+      return false;
+    }
+    return (this.selectedEmployeeIds || []).some(existing => this.normalizeId(existing) === key);
+  },
+  toggleEmployeeSelection(id, force){
+    const key = this.normalizeId(id);
+    if(!key){
+      return;
+    }
+    const current = Array.isArray(this.selectedEmployeeIds) ? [...this.selectedEmployeeIds] : [];
+    const exists = current.some(existing => this.normalizeId(existing) === key);
+    let next = current;
+    if(force === true || (force == null && !exists)){
+      if(!exists){
+        next = [...current, id];
+      }
+    } else if(force === false || exists){
+      next = current.filter(existing => this.normalizeId(existing) !== key);
+    }
+    this.selectedEmployeeIds = next;
+  },
+  selectEmployees(ids = [], { merge = false } = {}){
+    const base = merge ? Array.isArray(this.selectedEmployeeIds) ? [...this.selectedEmployeeIds] : [] : [];
+    const seen = new Set(base.map(id => this.normalizeId(id)).filter(Boolean));
+    for(const id of Array.isArray(ids) ? ids : []){
+      const key = this.normalizeId(id);
+      if(!key || seen.has(key)){
+        continue;
+      }
+      seen.add(key);
+      base.push(id);
+    }
+    this.selectedEmployeeIds = base;
+  },
+  clearSelectedEmployees(){
+    if(this.selectedEmployeeIds.length){
+      this.selectedEmployeeIds = [];
+    }
+  },
+  pruneSelectedEmployees(validIds = []){
+    if(!Array.isArray(validIds) || !validIds.length){
+      if(this.selectedEmployeeIds.length){
+        this.selectedEmployeeIds = [];
+      }
+      return;
+    }
+    const valid = new Set(validIds.map(id => this.normalizeId(id)).filter(Boolean));
+    const filtered = (this.selectedEmployeeIds || []).filter(id => valid.has(this.normalizeId(id)));
+    if(filtered.length !== this.selectedEmployeeIds.length){
+      this.selectedEmployeeIds = filtered;
+    }
+  },
   lookupDialog: {
     open: false,
     type: '',
@@ -984,7 +1067,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         backupSummary:null,
         backupValidationErrors:[],
         // Admin panel state
-        showAddEmployeeModal:false, showAddRequirementModal:false, showBulkActionsModal:false,
+        showAddEmployeeModal:false, showAddRequirementModal:false,
         showEditEmployeeModal:false, showEditRequirementModal:false,
         columnOptions:[
           { key:'role', label:'Role' },
@@ -1005,7 +1088,28 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         newEmployee:{firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:'', status:'Active'},
           newRequirement:{name:'', defaultExpiryDays:'', color:'#e0e7ff'},
           editingEmployee:{}, editingRequirement:{},
-        selectedEmployees:[], selectedRequirements:[], bulkAction:'',
+        bulkTemplateId:'',
+        bulkTemplatePanelOpen:false,
+        bulkStatusPanelOpen:false,
+        bulkStatusAction:'',
+        bulkStatusRequirementIds:[],
+        bulkStatusCompletedOn:'',
+        bulkStatusSubmitting:false,
+        get selectedEmployees(){
+          const store = Alpine.store('app');
+          if(store && Array.isArray(store.selectedEmployeeIds)){
+            return store.selectedEmployeeIds;
+          }
+          return [];
+        },
+        set selectedEmployees(value){
+          const store = Alpine.store('app');
+          if(store && typeof store.setSelectedEmployeeIds === 'function'){
+            store.setSelectedEmployeeIds(value);
+          } else if(store){
+            store.selectedEmployeeIds = Array.isArray(value) ? [...value] : [];
+          }
+        },
         complianceChart:null,
         complianceTrendChart:null,
         complianceHistory:[],
@@ -1450,6 +1554,19 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               store.ensureColumnVisibility(Object.keys(defaults));
             }
           }
+          if(typeof this.$watch === 'function'){
+            this.$watch(() => this.selectedEmployees.length, (count) => {
+              if(count){
+                return;
+              }
+              this.bulkTemplatePanelOpen = false;
+              this.bulkStatusPanelOpen = false;
+              this.bulkTemplateId = '';
+              this.bulkStatusRequirementIds = [];
+              this.bulkStatusAction = '';
+              this.bulkStatusCompletedOn = '';
+            });
+          }
           await this.initDB();
           if (this.loadError || !this.db) {
             this.$nextTick(() => this.$root?.removeAttribute('x-cloak'));
@@ -1592,6 +1709,13 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             ]);
 
             this.employees = employees;
+            const store = Alpine.store('app');
+            if(store && typeof store.pruneSelectedEmployees === 'function'){
+              store.pruneSelectedEmployees(employees.map(emp => emp.id));
+            } else if(store && Array.isArray(store.selectedEmployeeIds)){
+              const valid = new Set(employees.map(emp => (emp?.id == null ? '' : String(emp.id))));
+              store.selectedEmployeeIds = store.selectedEmployeeIds.filter(id => valid.has(id == null ? '' : String(id)));
+            }
             this.requirements = requirements;
             this.employeeRequirements = employeeRequirements;
 
@@ -1620,6 +1744,13 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.requirements = [];
             this.employeeRequirements = [];
             this.erMap = new Map();
+
+            const store = Alpine.store('app');
+            if(store && typeof store.clearSelectedEmployees === 'function'){
+              store.clearSelectedEmployees();
+            } else if(store){
+              store.selectedEmployeeIds = [];
+            }
 
             const friendlyMessage = 'We couldn\'t access the local dashboard database. Private browsing or low device storage can block offline data. Reload in a standard window or free up space, then try again.';
             this.loadError = friendlyMessage;
@@ -3782,6 +3913,287 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           const { start, end } = this.syncVirtualPadding(sorted.length);
           return sorted.slice(start, end);
         },
+        visibleSelectionStats(){
+          const visible = this.visibleEmployees();
+          const total = visible.length;
+          if(!total){
+            return { total: 0, selected: 0 };
+          }
+          const store = Alpine.store('app');
+          const normalize = (value) => {
+            if(store && typeof store.normalizeId === 'function'){
+              return store.normalizeId(value);
+            }
+            return value == null ? '' : String(value);
+          };
+          let selected = 0;
+          for(const emp of visible){
+            if(!emp){
+              continue;
+            }
+            const key = normalize(emp.id);
+            if(!key){
+              continue;
+            }
+            const isSelected = store && typeof store.isEmployeeSelected === 'function'
+              ? store.isEmployeeSelected(emp.id)
+              : this.selectedEmployees.some(id => normalize(id) === key);
+            if(isSelected){
+              selected += 1;
+            }
+          }
+          return { total, selected };
+        },
+        areAllVisibleSelected(){
+          const { total, selected } = this.visibleSelectionStats();
+          return total > 0 && selected === total;
+        },
+        areSomeVisibleSelected(){
+          const { total, selected } = this.visibleSelectionStats();
+          return total > 0 && selected > 0;
+        },
+        isEmployeeSelected(empId){
+          const store = Alpine.store('app');
+          if(store && typeof store.isEmployeeSelected === 'function'){
+            return store.isEmployeeSelected(empId);
+          }
+          const key = empId == null ? '' : String(empId);
+          if(!key){
+            return false;
+          }
+          return this.selectedEmployees.some(id => (id == null ? '' : String(id)) === key);
+        },
+        toggleEmployeeSelection(empId, checked){
+          const store = Alpine.store('app');
+          if(store && typeof store.toggleEmployeeSelection === 'function'){
+            store.toggleEmployeeSelection(empId, checked);
+            return;
+          }
+          const key = empId == null ? '' : String(empId);
+          if(!key){
+            return;
+          }
+          const current = Array.isArray(this.selectedEmployees) ? [...this.selectedEmployees] : [];
+          const exists = current.some(id => (id == null ? '' : String(id)) === key);
+          if((checked === true || (checked == null && !exists)) && !exists){
+            this.selectedEmployees = [...current, empId];
+            return;
+          }
+          if((checked === false || (checked == null && exists)) && exists){
+            this.selectedEmployees = current.filter(id => (id == null ? '' : String(id)) !== key);
+          }
+        },
+        removeSelectedEmployee(empId){
+          const store = Alpine.store('app');
+          if(store && typeof store.toggleEmployeeSelection === 'function'){
+            store.toggleEmployeeSelection(empId, false);
+            return;
+          }
+          const key = empId == null ? '' : String(empId);
+          if(!key){
+            return;
+          }
+          this.selectedEmployees = this.selectedEmployees.filter(id => (id == null ? '' : String(id)) !== key);
+        },
+        toggleVisibleSelection(checked){
+          const visible = this.visibleEmployees();
+          if(!visible.length){
+            return;
+          }
+          const store = Alpine.store('app');
+          const ids = visible.filter(Boolean).map(emp => emp.id);
+          if(checked){
+            if(store && typeof store.selectEmployees === 'function'){
+              store.selectEmployees(ids, { merge: true });
+              return;
+            }
+            const current = Array.isArray(this.selectedEmployees) ? [...this.selectedEmployees] : [];
+            const seen = new Set(current.map(id => (id == null ? '' : String(id))));
+            for(const id of ids){
+              const key = id == null ? '' : String(id);
+              if(!key || seen.has(key)){
+                continue;
+              }
+              seen.add(key);
+              current.push(id);
+            }
+            this.selectedEmployees = current;
+          } else {
+            const toRemove = new Set(ids.map(id => (id == null ? '' : String(id))));
+            this.selectedEmployees = this.selectedEmployees.filter(id => !toRemove.has(id == null ? '' : String(id)));
+            if(store && typeof store.setSelectedEmployeeIds === 'function'){
+              store.setSelectedEmployeeIds(this.selectedEmployees);
+            }
+          }
+        },
+        clearSelectedEmployees(){
+          const store = Alpine.store('app');
+          if(store && typeof store.clearSelectedEmployees === 'function'){
+            store.clearSelectedEmployees();
+          } else {
+            this.selectedEmployees = [];
+          }
+          this.closeBulkPanels();
+          this.bulkTemplateId = '';
+          this.bulkStatusRequirementIds = [];
+          this.bulkStatusAction = '';
+          this.bulkStatusCompletedOn = '';
+        },
+        selectedEmployeeCount(){
+          return Array.isArray(this.selectedEmployees) ? this.selectedEmployees.length : 0;
+        },
+        toggleBulkTemplatePanel(){
+          this.bulkTemplatePanelOpen = !this.bulkTemplatePanelOpen;
+          if(this.bulkTemplatePanelOpen){
+            this.bulkStatusPanelOpen = false;
+            if(!this.bulkTemplateId && this.templates.length){
+              this.bulkTemplateId = this.templates[0].id;
+            }
+          }
+        },
+        toggleBulkStatusPanel(){
+          this.bulkStatusPanelOpen = !this.bulkStatusPanelOpen;
+          if(this.bulkStatusPanelOpen){
+            this.bulkTemplatePanelOpen = false;
+            if(!this.bulkStatusAction){
+              this.bulkStatusAction = 'completed';
+            }
+            if(!this.bulkStatusCompletedOn){
+              this.bulkStatusCompletedOn = new Date().toISOString().slice(0,10);
+            }
+          }
+        },
+        closeBulkPanels(){
+          this.bulkTemplatePanelOpen = false;
+          this.bulkStatusPanelOpen = false;
+        },
+        async bulkApplyTemplate(){
+          const ids = Array.from(new Set(this.selectedEmployees));
+          if(!ids.length){
+            this.notify('Select employees before applying a template.', 'var(--warn)');
+            return;
+          }
+          if(!this.bulkTemplateId){
+            this.notify('Choose a template to apply.', 'var(--warn)');
+            return;
+          }
+          const template = this.templates.find(t => t.id === this.bulkTemplateId);
+          if(!template){
+            this.notify('Template not found.', 'var(--danger)');
+            return;
+          }
+          await this.applyTemplateToEmployees(template, ids);
+          this.closeBulkPanels();
+        },
+        async bulkSetStatus(){
+          if(this.bulkStatusSubmitting){
+            return;
+          }
+          const ids = Array.from(new Set(this.selectedEmployees));
+          if(!ids.length){
+            this.notify('Select employees before updating status.', 'var(--warn)');
+            return;
+          }
+          const requirementIds = Array.from(new Set(this.bulkStatusRequirementIds));
+          if(!requirementIds.length){
+            this.notify('Select at least one requirement to update.', 'var(--warn)');
+            return;
+          }
+          let status = '';
+          if(this.bulkStatusAction === 'completed'){
+            status = 'Completed';
+          } else if(this.bulkStatusAction === 'notRequired'){
+            status = 'NotRequired';
+          } else if(this.bulkStatusAction === 'notCompleted'){
+            status = 'NotCompleted';
+          }
+          if(!status){
+            this.notify('Choose a status to apply.', 'var(--warn)');
+            return;
+          }
+          const completedOn = status === 'Completed'
+            ? (this.bulkStatusCompletedOn || new Date().toISOString().slice(0,10))
+            : null;
+          let expiresOn = null;
+          if(status === 'Completed'){
+            expiresOn = {};
+            for(const requirementId of requirementIds){
+              const req = this.requirements.find(r => r.id === requirementId);
+              if(!req){
+                continue;
+              }
+              const hasDefaultExpiry = req?.defaultExpiryDays != null && req.defaultExpiryDays !== '';
+              expiresOn[requirementId] = hasDefaultExpiry
+                ? this.addDays(completedOn, req.defaultExpiryDays)
+                : null;
+            }
+          }
+
+          try{
+            this.bulkStatusSubmitting = true;
+            const { BulkUpdateStatus } = await import('./commands.js');
+            const command = new BulkUpdateStatus(this.db, {
+              employeeIds: ids,
+              requirementIds,
+              status,
+              completedOn,
+              expiresOn
+            });
+            await this.runCommand({
+              command,
+              actionType: 'BulkUpdateStatus',
+              targets: [...ids],
+              metadata: {
+                employeeIds: [...ids],
+                requirementIds: [...requirementIds],
+                status,
+                completedOn,
+                expiresOn
+              },
+              successMessage: `Status updated for ${ids.length} employee${ids.length === 1 ? '' : 's'}.`,
+              undoMessage: `Reverted status for ${ids.length} employee${ids.length === 1 ? '' : 's'}.`,
+              refreshIcons: true
+            });
+            this.bulkStatusPanelOpen = false;
+          }catch(error){
+            console.error('Failed to apply bulk status update', error);
+            this.notify('Failed to update status', 'var(--danger)');
+          }finally{
+            this.bulkStatusSubmitting = false;
+          }
+        },
+        async bulkDeleteSelected(){
+          const ids = Array.from(new Set(this.selectedEmployees));
+          if(!ids.length){
+            this.notify('Select employees before deleting.', 'var(--warn)');
+            return;
+          }
+          if(!confirm(`Delete ${ids.length} employee${ids.length === 1 ? '' : 's'}? This cannot be undone without using undo.`)){
+            return;
+          }
+          try{
+            const { BulkDeleteEmployees } = await import('./commands.js');
+            const command = new BulkDeleteEmployees(this.db, { employeeIds: ids });
+            await this.runCommand({
+              command,
+              actionType: 'BulkDeleteEmployees',
+              targets: [...ids],
+              metadata: {
+                employeeIds: [...ids],
+                count: ids.length
+              },
+              successMessage: `${ids.length} employee${ids.length === 1 ? '' : 's'} deleted`,
+              successColor: 'var(--warn)',
+              undoMessage: `${ids.length} employee${ids.length === 1 ? '' : 's'} restored`,
+              undoColor: 'var(--accent)',
+              refreshIcons: true
+            });
+            this.clearSelectedEmployees();
+          }catch(error){
+            console.error('Failed to delete employees', error);
+            this.notify('Failed to delete employees', 'var(--danger)');
+          }
+        },
         visibleColumnCount(){
           const baseColumns = 1 + this.visibleBaseColumnCount();
           return baseColumns + this.orderedVisibleRequirements().length;
@@ -4072,7 +4484,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             });
             this.showEditEmployeeModal = false;
             this.editingEmployee = {};
-            this.selectedEmployees = this.selectedEmployees.filter(id => id !== emp.id);
+            this.removeSelectedEmployee(emp.id);
           }catch(error){
             console.error('Failed to delete employee', error);
             this.notify('Failed to delete employee', 'var(--danger)');
@@ -4096,86 +4508,6 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
           return 'Completed (no expiry)';
         },
-        async executeBulkAction(){
-          if (!this.bulkAction || !this.selectedEmployees.length) return;
-
-          if (this.bulkAction === 'complete' || this.bulkAction === 'incomplete') {
-            if (!this.selectedRequirements.length) {
-              this.notify('Please select at least one requirement', 'var(--danger)');
-              return;
-            }
-            const status = this.bulkAction === 'complete' ? 'Completed' : 'NotCompleted';
-            const completedOn = this.bulkAction === 'complete' ? new Date().toISOString().slice(0,10) : null;
-            let expiresOn = null;
-            if (status === 'Completed') {
-              expiresOn = {};
-              for (const requirementId of this.selectedRequirements) {
-                const req = this.requirements.find(r => r.id === requirementId);
-                if (!req) continue;
-                const hasDefaultExpiry = req.defaultExpiryDays !== undefined && req.defaultExpiryDays !== null;
-                expiresOn[requirementId] = hasDefaultExpiry ? this.addDays(completedOn, req.defaultExpiryDays) : null;
-              }
-            }
-            try{
-              const { BulkUpdateStatus } = await import('./commands.js');
-              const command = new BulkUpdateStatus(this.db, {
-                employeeIds: [...this.selectedEmployees],
-                requirementIds: [...this.selectedRequirements],
-                status,
-                completedOn,
-                expiresOn
-              });
-              const undoPayload = await command.execute();
-              if (undoPayload.changes?.length) {
-                await this.recordActivity('BulkUpdateStatus', [...this.selectedEmployees], {
-                  employeeIds: [...this.selectedEmployees],
-                  requirementIds: [...this.selectedRequirements],
-                  status,
-                  completedOn,
-                  expiresOn
-                }, undoPayload);
-              }
-              this.notify(`Bulk ${this.bulkAction} completed for ${this.selectedEmployees.length} employees`);
-            }catch(error){
-              console.error('Failed to apply bulk status update', error);
-              this.notify('Failed to apply bulk status update', 'var(--danger)');
-            }
-          } else if (this.bulkAction === 'export') {
-            const selectedEmps = this.employees.filter(emp => this.selectedEmployees.includes(emp.id));
-            const data = {
-              employees: selectedEmps,
-              requirements: this.requirements,
-              employeeRequirements: this.employeeRequirements.filter(er => this.selectedEmployees.includes(er.employeeId))
-            };
-            const jsonBlob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-            this.downloadBlob(jsonBlob, `selected-employees-${new Date().toISOString().split('T')[0]}.json`);
-            this.notify('Selected employees exported');
-          } else if (this.bulkAction === 'delete') {
-            if (confirm(`Are you sure you want to delete ${this.selectedEmployees.length} employees? This action cannot be undone.`)) {
-              try{
-                const { BulkDeleteEmployees } = await import('./commands.js');
-                const command = new BulkDeleteEmployees(this.db, { employeeIds: [...this.selectedEmployees] });
-                const undoPayload = await command.execute();
-                if ((undoPayload.employees?.length || undoPayload.employeeRequirements?.length)) {
-                  await this.recordActivity('BulkDeleteEmployees', [...this.selectedEmployees], {
-                    employeeIds: [...this.selectedEmployees],
-                    count: this.selectedEmployees.length
-                  }, undoPayload);
-                }
-                this.notify(`${this.selectedEmployees.length} employees deleted`);
-              }catch(error){
-                console.error('Failed to delete employees', error);
-                this.notify('Failed to delete employees', 'var(--danger)');
-              }
-            }
-          }
-
-          this.selectedEmployees = [];
-          this.selectedRequirements = [];
-          this.bulkAction = '';
-          this.showBulkActionsModal = false;
-          await this.loadData();
-        }
       });
 
     Alpine.data('activityTimeline', activityTimeline);
