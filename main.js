@@ -144,6 +144,15 @@ export async function loadXlsx(){
 
 window.Alpine = Alpine;
 
+// Global store for shared UI state
+Alpine.store('app', {
+  showImportModal: false,
+  toast: null,
+  setToast(t){
+    this.toast = t;
+  }
+});
+
 const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev';
     function activityTimeline(){
       return {
@@ -2127,6 +2136,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             const summary = await this.restoreBackup();
             if(!summary) return;
             this.showImportModal=false;
+            Alpine.store('app').showImportModal = false;
             await this.loadData();
             return;
           }
@@ -2138,6 +2148,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             const res = await this.importEmployees();
             if(!res) return;
             this.showImportModal=false;
+            Alpine.store('app').showImportModal = false;
             await this.loadData();
             this.notify(`Employees: ${res.added} added, ${res.updated} updated • Total now: ${this.employees.length}`);
           } else {
@@ -2146,6 +2157,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             const cnt = await this.importCompletions();
             if(cnt === null) return;
             this.showImportModal=false;
+            Alpine.store('app').showImportModal = false;
             await this.loadData();
             this.notify(`Completions updated: ${cnt}`);
           }
