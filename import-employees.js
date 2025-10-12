@@ -349,11 +349,22 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
     return '';
   }
 
-  async function importFromRows(rows, { onProgress } = {}){
-    if (!Array.isArray(rows) || rows.length === 0) throw new Error('No rows detected.');
+  function extractHeaders(rows){
+    if (!Array.isArray(rows) || !rows.length) return [];
+    const headerSet = new Set();
+    for (const row of rows){
+      if (row && typeof row === 'object'){
+        for (const key of Object.keys(row)){
+          headerSet.add(key);
+        }
+      }
+    }
+    return Array.from(headerSet);
+  }
 
-    const header = Object.keys(rows[0]);
-    const nameCol = detectColumn(header, {
+  function buildDefaultMapping(headers){
+    const mapping = {};
+    mapping.fullName = detectColumn(headers, {
       variants: [
         'employee name',
         'emp name',
@@ -367,22 +378,17 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
       ],
       preferredTokens: ['employee', 'name']
     });
-    const seniorityCol = detectColumn(header, {
-      variants: [
-        'seniority hours',
-        'total seniority hours',
-        'seniority hrs',
-        'seniority hour',
-        'sen hours',
-        'seniority total',
-        'seniority time',
-        'seniority',
-        'hours'
-      ],
-      preferredTokens: ['seniority', 'senior', 'hours'],
-      minScore: 82
+    mapping.firstName = detectColumn(headers, {
+      variants: ['first name', 'first', 'given name', 'fname'],
+      preferredTokens: ['first', 'given'],
+      minScore: 84
     });
-    const empidCol = detectColumn(header, {
+    mapping.lastName = detectColumn(headers, {
+      variants: ['last name', 'surname', 'family name', 'lname'],
+      preferredTokens: ['last', 'surname', 'family'],
+      minScore: 84
+    });
+    mapping.employeeId = detectColumn(headers, {
       variants: [
         'employee id',
         'employee number',
@@ -399,21 +405,288 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
       preferredTokens: ['employee', 'id', 'number'],
       minScore: 82
     });
-    const statusCol    = detectColumn(header, ['status']);
-    const roleCol      = detectColumn(header, ['role','position','title']);
-    const etypeCol     = detectColumn(header, ['employment type','type','ft','pt','casual']);
-    const wingCol      = detectColumn(header, ['wing','unit','department','dept']);
-    const startCol     = detectColumn(header, ['start date','hire date','seniority date']);
+    mapping.status = detectColumn(headers, ['status']);
+    mapping.role = detectColumn(headers, ['role', 'position', 'title']);
+    mapping.employmentType = detectColumn(headers, ['employment type', 'type', 'ft', 'pt', 'casual']);
+    mapping.wing = detectColumn(headers, ['wing', 'unit', 'department', 'dept']);
+    mapping.startDate = detectColumn(headers, ['start date', 'hire date', 'seniority date']);
+    mapping.seniorityHours = detectColumn(headers, {
+      variants: [
+        'seniority hours',
+        'total seniority hours',
+        'seniority hrs',
+        'seniority hour',
+        'sen hours',
+        'seniority total',
+        'seniority time',
+        'seniority',
+        'hours'
+      ],
+      preferredTokens: ['seniority', 'senior', 'hours'],
+      minScore: 82
+    });
+    return mapping;
+  }
 
-    updateMissingColumnsBanner([]);
+  function validateMappingSelection(mapping, headers){
+    const errors = [];
+    const headerSet = new Set(headers);
+    const hasEmployeeId = Boolean(mapping.employeeId);
+    const hasNamePair = Boolean(mapping.firstName && mapping.lastName);
 
-    const missingRequired = [];
-    if (!nameCol) missingRequired.push('Name');
-    if (!empidCol) missingRequired.push('Employee ID');
-    if (!seniorityCol) missingRequired.push('Seniority Hours');
+    if (!hasEmployeeId && !hasNamePair){
+      errors.push('Map Employee ID or both First Name and Last Name.');
+    }
 
-    if (missingRequired.length){
-      updateMissingColumnsBanner(missingRequired);
+    if (!mapping.status){
+      errors.push('Map a Status column.');
+    }
+
+    for (const [key, value] of Object.entries(mapping)){
+      if (!value) continue;
+      if (!headerSet.has(value)){
+        errors.push(`Column "${value}" is not present in the uploaded file.`);
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
+  function renderMappingModal(headers, defaultMapping){
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'import-mapping-overlay';
+      overlay.style.position = 'fixed';
+      overlay.style.inset = '0';
+      overlay.style.background = 'rgba(17, 24, 39, 0.6)';
+      overlay.style.zIndex = '9999';
+      overlay.style.display = 'flex';
+      overlay.style.alignItems = 'center';
+      overlay.style.justifyContent = 'center';
+
+      const modal = document.createElement('div');
+      modal.className = 'import-mapping-modal card';
+      modal.style.background = 'var(--card, #fff)';
+      modal.style.color = 'inherit';
+      modal.style.maxWidth = '640px';
+      modal.style.width = '100%';
+      modal.style.margin = '1.5rem';
+      modal.style.borderRadius = '0.75rem';
+      modal.style.boxShadow = '0 20px 50px rgba(15,23,42,0.25)';
+      modal.style.padding = '1.5rem';
+      modal.style.maxHeight = '90vh';
+      modal.style.overflowY = 'auto';
+
+      const mapping = { ...defaultMapping };
+
+      const fields = [
+        { key: 'employeeId', label: 'Employee ID', helper: 'Required unless First & Last Name are mapped.' },
+        { key: 'firstName', label: 'First Name', helper: 'Required when Last Name is mapped and Employee ID is missing.' },
+        { key: 'lastName', label: 'Last Name' },
+        { key: 'fullName', label: 'Full Name', helper: 'Used to split into First/Last when available.' },
+        { key: 'status', label: 'Status', helper: 'Required' },
+        { key: 'seniorityHours', label: 'Seniority Hours' },
+        { key: 'role', label: 'Role / Position' },
+        { key: 'employmentType', label: 'Employment Type' },
+        { key: 'wing', label: 'Wing / Unit' },
+        { key: 'startDate', label: 'Start / Hire Date' }
+      ];
+
+      const title = document.createElement('h2');
+      title.textContent = 'Step 1: Map Columns';
+      title.style.fontSize = '1.25rem';
+      title.style.fontWeight = '600';
+      title.style.marginBottom = '1rem';
+
+      const description = document.createElement('p');
+      description.textContent = 'Review detected fields and adjust the mapping before importing.';
+      description.style.fontSize = '0.95rem';
+      description.style.marginBottom = '1.25rem';
+      description.style.color = 'var(--muted, #6b7280)';
+
+      const table = document.createElement('div');
+      table.style.display = 'grid';
+      table.style.gridTemplateColumns = '1fr 1fr';
+      table.style.gap = '0.75rem 1rem';
+      table.style.marginBottom = '1.5rem';
+
+      for (const field of fields){
+        const label = document.createElement('div');
+        label.style.display = 'flex';
+        label.style.flexDirection = 'column';
+
+        const nameEl = document.createElement('span');
+        nameEl.textContent = field.label;
+        nameEl.style.fontWeight = '600';
+        nameEl.style.fontSize = '0.95rem';
+        label.appendChild(nameEl);
+
+        if (field.helper){
+          const helper = document.createElement('span');
+          helper.textContent = field.helper;
+          helper.style.fontSize = '0.75rem';
+          helper.style.color = 'var(--muted, #6b7280)';
+          label.appendChild(helper);
+        }
+
+        const selectWrapper = document.createElement('div');
+        selectWrapper.style.display = 'flex';
+        selectWrapper.style.alignItems = 'center';
+
+        const select = document.createElement('select');
+        select.setAttribute('data-field-key', field.key);
+        select.style.width = '100%';
+        select.style.padding = '0.5rem';
+        select.style.borderRadius = '0.5rem';
+        select.style.border = '1px solid var(--line, #d1d5db)';
+        select.style.background = 'var(--card, #fff)';
+        select.style.color = 'inherit';
+
+        const blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = '— Unmapped —';
+        select.appendChild(blank);
+
+        for (const header of headers){
+          const option = document.createElement('option');
+          option.value = header;
+          option.textContent = header;
+          select.appendChild(option);
+        }
+
+        if (mapping[field.key]){
+          select.value = mapping[field.key];
+        }
+
+        select.addEventListener('change', (event) => {
+          const key = event.target.getAttribute('data-field-key');
+          mapping[key] = event.target.value || '';
+        });
+
+        table.appendChild(label);
+        table.appendChild(selectWrapper);
+        selectWrapper.appendChild(select);
+      }
+
+      const errorsPanel = document.createElement('div');
+      errorsPanel.style.marginBottom = '1rem';
+      errorsPanel.style.padding = '0.75rem';
+      errorsPanel.style.borderRadius = '0.5rem';
+      errorsPanel.style.display = 'none';
+      errorsPanel.style.border = '1px solid var(--danger, #f87171)';
+      errorsPanel.style.background = 'rgba(248,113,113,0.12)';
+      errorsPanel.style.color = 'var(--danger, #b91c1c)';
+
+      const errorsList = document.createElement('ul');
+      errorsList.style.listStyle = 'disc';
+      errorsList.style.marginLeft = '1.5rem';
+      errorsList.style.fontSize = '0.85rem';
+      errorsPanel.appendChild(errorsList);
+
+      const successPanel = document.createElement('div');
+      successPanel.style.marginBottom = '1rem';
+      successPanel.style.padding = '0.75rem';
+      successPanel.style.borderRadius = '0.5rem';
+      successPanel.style.display = 'none';
+      successPanel.style.border = '1px solid var(--success, #34d399)';
+      successPanel.style.background = 'rgba(16,185,129,0.12)';
+      successPanel.style.color = 'var(--success, #047857)';
+      successPanel.textContent = 'All required fields are mapped. You can continue.';
+
+      const actions = document.createElement('div');
+      actions.style.display = 'flex';
+      actions.style.justifyContent = 'flex-end';
+      actions.style.gap = '0.75rem';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.className = 'btn';
+      cancelBtn.addEventListener('click', () => {
+        cleanup();
+        resolve(null);
+      });
+
+      const validateBtn = document.createElement('button');
+      validateBtn.type = 'button';
+      validateBtn.textContent = 'Validate';
+      validateBtn.className = 'btn';
+
+      const continueBtn = document.createElement('button');
+      continueBtn.type = 'button';
+      continueBtn.textContent = 'Continue';
+      continueBtn.className = 'btn btn-accent';
+      continueBtn.disabled = true;
+
+      function updatePanels(result){
+        if (!result){
+          errorsPanel.style.display = 'none';
+          successPanel.style.display = 'none';
+          continueBtn.disabled = true;
+          return;
+        }
+
+        if (result.valid){
+          errorsPanel.style.display = 'none';
+          successPanel.style.display = 'block';
+          continueBtn.disabled = false;
+        } else {
+          successPanel.style.display = 'none';
+          errorsPanel.style.display = 'block';
+          continueBtn.disabled = true;
+          errorsList.innerHTML = '';
+          for (const err of result.errors){
+            const li = document.createElement('li');
+            li.textContent = err;
+            errorsList.appendChild(li);
+          }
+        }
+      }
+
+      function cleanup(){
+        overlay.remove();
+        document.body.style.overflow = '';
+      }
+
+      validateBtn.addEventListener('click', () => {
+        const result = validateMappingSelection(mapping, headers);
+        updatePanels(result);
+        updateMissingColumnsBanner(result && !result.valid ? result.errors : []);
+      });
+
+      continueBtn.addEventListener('click', () => {
+        const result = validateMappingSelection(mapping, headers);
+        if (!result.valid){
+          updatePanels(result);
+          return;
+        }
+        cleanup();
+        resolve({ ...mapping });
+      });
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(validateBtn);
+      actions.appendChild(continueBtn);
+
+      modal.appendChild(title);
+      modal.appendChild(description);
+      modal.appendChild(table);
+      modal.appendChild(errorsPanel);
+      modal.appendChild(successPanel);
+      modal.appendChild(actions);
+
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      document.body.style.overflow = 'hidden';
+    });
+  }
+
+  async function importFromRows(rows, mapping, headers){
+    if (!Array.isArray(rows) || rows.length === 0) throw new Error('No rows detected.');
+
+    const validation = validateMappingSelection(mapping, headers);
+    if (!validation.valid){
+      throw new Error(validation.errors.join('\n'));
     }
 
     const db = await ensureDb();
@@ -441,23 +714,55 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
     const employees = [];
     const newEmployeeIds = new Set();
     const seenImportKeys = new Set();
+    const skippedRows = [];
 
-    for (const r of rows){
-      const nameVal = nameCol ? r[nameCol] : (r['Name'] ?? r['Employee'] ?? '');
-      const { firstName, lastName } = splitName(nameVal);
+    const getValue = (row, column) => {
+      if (!column) return '';
+      return row[column];
+    };
 
-      const idVal = empidCol ? r[empidCol] : null;
+    for (let index = 0; index < rows.length; index++){
+      const r = rows[index];
+      const rowNumber = index + 2; // approximate row number (header row + data)
+
+      let firstName = String(getValue(r, mapping.firstName) ?? '').trim();
+      let lastName = String(getValue(r, mapping.lastName) ?? '').trim();
+      const fullName = String(getValue(r, mapping.fullName) ?? '').trim();
+
+      if ((!firstName || !lastName) && fullName){
+        const split = splitName(fullName);
+        if (!firstName){
+          firstName = split.firstName;
+        }
+        if (!lastName){
+          lastName = split.lastName;
+        }
+      }
+
+      const idVal = getValue(r, mapping.employeeId);
       const employeeIdValue = normalizeEmployeeId(idVal);
       const employeeIdKey = employeeIdValue ? employeeIdValue.toLowerCase() : '';
-      const roleRaw = roleCol ? (r[roleCol] ?? null) : null;
+      const roleRaw = getValue(r, mapping.role) ?? null;
       const compositeKey = normalizeComposite(lastName, firstName);
 
       const importKey = buildEmployeeKey(employeeIdValue, lastName, firstName);
       if (importKey) {
         if (seenImportKeys.has(importKey)) {
+          skippedRows.push({ row: rowNumber, reasons: ['Duplicate employee detected in file'] });
           continue;
         }
         seenImportKeys.add(importKey);
+      }
+
+      const statusRaw = String(getValue(r, mapping.status) ?? '').trim();
+      if (!statusRaw){
+        skippedRows.push({ row: rowNumber, reasons: ['Missing status'] });
+        continue;
+      }
+
+      if (!employeeIdValue && (!firstName || !lastName)){
+        skippedRows.push({ row: rowNumber, reasons: ['Missing employee ID and name'] });
+        continue;
       }
 
       let existingMatch = null;
@@ -467,23 +772,23 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
         existingMatch = existingByName.get(compositeKey);
       }
 
-      const shSource = seniorityCol ? r[seniorityCol] : existingMatch?.seniorityHours;
+      const shSource = mapping.seniorityHours ? r[mapping.seniorityHours] : existingMatch?.seniorityHours;
       const sh = normalizeSeniorityHours(shSource);
 
       const isExisting = Boolean(existingMatch);
       const id = isExisting ? existingMatch.id : (employeeIdValue || localGenerateId());
       const roleValue = roleRaw;
-      const rawEmploymentType = etypeCol ? r[etypeCol] : undefined;
+      const rawEmploymentType = getValue(r, mapping.employmentType);
       const employmentTypeValue = rawEmploymentType == null ? null : String(rawEmploymentType).trim().toUpperCase();
-      const statusValue = String(statusCol ? (r[statusCol] ?? 'ACTIVE') : 'ACTIVE').toUpperCase();
+      const statusValue = statusRaw.toUpperCase();
 
       const meta = { ...(existingMatch?.meta || {}) };
-      meta.sourceName = nameVal ?? null;
-      if (wingCol) {
-        meta.wing = r[wingCol] ?? null;
+      meta.sourceName = fullName || `${firstName} ${lastName}`.trim() || null;
+      if (mapping.wing) {
+        meta.wing = r[mapping.wing] ?? null;
       }
-      if (startCol) {
-        meta.startDate = r[startCol] ?? null;
+      if (mapping.startDate) {
+        meta.startDate = r[mapping.startDate] ?? null;
       }
 
       const employee = {
@@ -617,9 +922,7 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
         }
       }
     });
-
-    progressCallback?.(100);
-    return employees.length;
+    return { importedCount: employees.length, skippedRows };
   }
 
   async function parseFile(file){
@@ -629,10 +932,10 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
       const payload = JSON.parse(text);
       if (Array.isArray(payload.employees)) {
         // Already in our shape
-        return payload.employees;
+        return { rows: payload.employees, headers: extractHeaders(payload.employees) };
       }
       if (Array.isArray(payload)){
-        return payload;
+        return { rows: payload, headers: extractHeaders(payload) };
       }
       throw new Error('JSON file must contain an array or {employees: []}');
     }
@@ -644,7 +947,10 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        complete: (res)=> resolve(res.data),
+        complete: (res)=> {
+          const headers = Array.isArray(res.meta?.fields) ? res.meta.fields : extractHeaders(res.data);
+          resolve({ rows: res.data, headers });
+        },
         error: (err)=> reject(err)
       });
     });
@@ -656,21 +962,32 @@ import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZ
     const progressReporter = !isAlpineReady() ? createLegacyProgressReporter() : null;
     let progressFinished = false;
     try {
-      if (progressReporter){
-        progressReporter.idle();
+      const { rows, headers } = await parseFile(file);
+      const defaultMapping = buildDefaultMapping(headers);
+      const mapping = await renderMappingModal(headers, defaultMapping);
+      if (!mapping){
+        return;
       }
-      const rows = await parseFile(file);
-      if (progressReporter){
-        progressReporter.start();
+
+      updateMissingColumnsBanner([]);
+
+      const result = await importFromRows(rows, mapping, headers);
+      const store = getAppStore();
+      const baseMessage = `Imported ${result.importedCount} employee${result.importedCount === 1 ? '' : 's'}.`;
+      const skippedCount = result.skippedRows.length;
+      let message = baseMessage;
+      if (skippedCount){
+        const details = result.skippedRows.slice(0, 5)
+          .map((entry) => `Row ${entry.row}: ${entry.reasons.join(', ')}`)
+          .join(' • ');
+        message += ` Skipped ${skippedCount} row${skippedCount === 1 ? '' : 's'} (${details}).`;
       }
-      const count = await importFromRows(rows, {
-        onProgress: progressReporter ? (value => progressReporter.update(value)) : undefined
-      });
-      if (progressReporter){
-        progressReporter.finish();
-        progressFinished = true;
+
+      if (store && typeof store.notify === 'function'){
+        store.notify(message, skippedCount ? 'var(--warning, #f59e0b)' : 'var(--success)');
+      } else {
+        alert(message);
       }
-      alert(`Imported ${count} employees.`);
       toggleImportModal(false);
     } catch (e) {
       console.error('Import failed:', e);
