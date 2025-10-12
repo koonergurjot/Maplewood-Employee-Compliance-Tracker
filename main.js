@@ -97,7 +97,26 @@ function createModalA11y(getter, setter){
   return {
     focusTrapCleanup: null,
     lastActiveElement: null,
+    __modalA11yLinked: false,
+    linkToRoot(){
+      if(this.__modalA11yLinked){
+        return;
+      }
+      const root = this?.$root;
+      if(!root){
+        return;
+      }
+      try {
+        if(Object.getPrototypeOf(this) !== root){
+          Object.setPrototypeOf(this, root);
+        }
+      } catch (error) {
+        // ignore if prototype cannot be reassigned
+      }
+      this.__modalA11yLinked = true;
+    },
     evaluateIsOpen(){
+      this.linkToRoot();
       try {
         if(typeof getter === 'function'){
           return Boolean(getter.call(this));
@@ -111,6 +130,7 @@ function createModalA11y(getter, setter){
       return false;
     },
     updateState(value){
+      this.linkToRoot();
       const next = typeof value === 'undefined' ? false : Boolean(value);
       if(typeof setter === 'function'){
         setter.call(this, next);
@@ -119,6 +139,7 @@ function createModalA11y(getter, setter){
       }
     },
     init(){
+      this.linkToRoot();
       this.$watch(() => this.evaluateIsOpen(), (isOpen) => this.handleToggle(isOpen));
       if(this.evaluateIsOpen()){
         this.handleToggle(true);
