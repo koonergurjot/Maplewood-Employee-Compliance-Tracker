@@ -1043,19 +1043,48 @@
           </div>
 
           <!-- Mapping -->
-          <div x-show="importMode !== 'backup' && importHeaders.length" class="grid grid-cols-1 md:grid-cols-2 gap-6" x-ref="employeeMappingPanel">
-            <div>
-              <h4 class="font-semibold mb-2">Field Mapping — Employees</h4>
-              <template x-for="(label, key) in fieldLabels" :key="key">
-                <div class="flex items-center gap-2 mb-2">
-                  <label class="w-52 text-sm" x-text="label"></label>
-                  <select class="flex-1 border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)"
-                          x-model="columnMap[key]" @change="updateEligibilityPreview()">
-                    <option value="">-- Not Mapped --</option>
-                    <template x-for="(h, idx) in importHeaders" :key="idx"><option :value="h" x-text="h"></option></template>
-                  </select>
+          <div x-show="importMode !== 'backup' && importHeaders.length" class="space-y-6" x-ref="employeeMappingPanel">
+            <div class="p-4 border rounded-lg" style="border-color:var(--line)" x-data="{ mappingValidated: false }">
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                <div>
+                  <h4 class="font-semibold text-base">Step 1: Map Columns</h4>
+                  <p class="text-xs mt-1" style="color:var(--muted)">Review each application field and confirm the detected column before continuing.</p>
                 </div>
-              </template>
+                <button type="button" class="btn" @click="mappingValidated = true; updateMissingRequiredColumns()">Validate</button>
+              </div>
+              <div class="grid gap-y-2 gap-x-4 sm:grid-cols-[200px_auto]" role="list">
+                <template x-for="(label, key) in fieldLabels" :key="key">
+                  <div class="sm:contents" role="listitem">
+                    <div class="text-sm font-medium sm:py-1" x-text="label"></div>
+                    <div class="mt-1 sm:mt-0">
+                      <select class="w-full border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)"
+                              x-model="columnMap[key]"
+                              @change="mappingValidated = false; updateEligibilityPreview()">
+                        <option value="">-- Not Mapped --</option>
+                        <template x-for="(h, idx) in importHeaders" :key="idx"><option :value="h" x-text="h"></option></template>
+                      </select>
+                    </div>
+                  </div>
+                </template>
+              </div>
+              <div x-show="mappingValidated" class="mt-4" x-cloak>
+                <template x-if="missingRequiredColumns.length">
+                  <div class="p-3 rounded border" style="border-color:var(--danger); background-color:rgba(248,113,113,0.12); color:var(--danger)">
+                    <div class="text-sm font-semibold mb-2">Finish mapping the required fields</div>
+                    <ul class="list-disc ml-5 space-y-1 text-xs">
+                      <template x-for="(col, idx) in missingRequiredColumns" :key="idx">
+                        <li x-text="col"></li>
+                      </template>
+                    </ul>
+                  </div>
+                </template>
+                <template x-if="!missingRequiredColumns.length">
+                  <div class="p-3 rounded border" style="border-color:var(--success); background-color:rgba(16,185,129,0.12); color:var(--success)">
+                    <div class="text-sm font-semibold">All required fields are mapped.</div>
+                    <p class="text-xs mt-1">You can continue to preview and import your data.</p>
+                  </div>
+                </template>
+              </div>
             </div>
             <div>
               <h4 class="font-semibold mb-2">Requirement Columns — Completions</h4>
