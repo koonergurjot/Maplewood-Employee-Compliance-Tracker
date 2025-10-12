@@ -50,7 +50,15 @@ const STATIC_URLS = STATIC_PATHS.map(path => new URL(path, scopeUrl).toString())
 const INDEX_URL = new URL('index.html', scopeUrl).toString();
 
 let manifestPromise;
-const VITE_MANIFEST_PATHS = ['/.vite/manifest.json', 'manifest.json'];
+// Prefer resolving the manifest relative to the service worker scope so subpath
+// deployments (e.g. https://example.com/app/) still locate their assets. Keep
+// absolute fallbacks for legacy root deployments as a safety net.
+const VITE_MANIFEST_PATHS = [
+  '.vite/manifest.json',
+  '/.vite/manifest.json',
+  'manifest.json',
+  '/manifest.json'
+];
 
 function extractHashFromAssets(assets) {
   for (const url of assets) {
