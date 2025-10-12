@@ -17,6 +17,75 @@ import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup }
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Recreation', 'Reception', 'Rehab Assistant', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
+const COLUMN_VISIBILITY_STORAGE_KEY = 'maplewood:employeeTable:visibleColumns';
+const DEFAULT_VISIBLE_COLUMNS = Object.freeze({
+  role: true,
+  employmentType: true,
+  status: true,
+  seniorityHours: true
+});
+
+function getColumnStorage(){
+  if(typeof window === 'undefined'){ return null; }
+  try {
+    return window.localStorage || null;
+  } catch (error) {
+    console.warn('Column visibility preferences: localStorage unavailable', error);
+    return null;
+  }
+}
+
+function loadStoredVisibleColumns(defaults = {}){
+  const storage = getColumnStorage();
+  const baseline = { ...defaults };
+  if(!storage){
+    return baseline;
+  }
+  try {
+    const raw = storage.getItem(COLUMN_VISIBILITY_STORAGE_KEY);
+    if(!raw){
+      return baseline;
+    }
+    const parsed = JSON.parse(raw);
+    if(!parsed || typeof parsed !== 'object' || Array.isArray(parsed)){
+      return baseline;
+    }
+
+    const normalized = { ...baseline };
+    for(const [key, defaultValue] of Object.entries(baseline)){
+      if(Object.prototype.hasOwnProperty.call(parsed, key)){
+        normalized[key] = parsed[key] !== false;
+      } else {
+        normalized[key] = defaultValue;
+      }
+    }
+    for(const [key, value] of Object.entries(parsed)){
+      if(!(key in normalized)){
+        normalized[key] = value !== false;
+      }
+    }
+    return normalized;
+  } catch (error) {
+    console.warn('Failed to load column visibility preferences', error);
+    return baseline;
+  }
+}
+
+function persistVisibleColumns(columns){
+  const storage = getColumnStorage();
+  if(!storage){
+    return;
+  }
+  try {
+    const payload = {};
+    for(const [key, value] of Object.entries(columns || {})){
+      payload[key] = value !== false;
+    }
+    storage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn('Failed to save column visibility preferences', error);
+  }
+}
 
 let cachedXlsx = (typeof window !== 'undefined' && (window.__xlsxModule || window.XLSX)) || null;
 let xlsxLoadPromise = null;
@@ -270,6 +339,60 @@ Alpine.store('app', {
     initializing: false,
     existing: [],
     onResolve: null
+  },
+  visibleColumns: loadStoredVisibleColumns(DEFAULT_VISIBLE_COLUMNS),
+  initColumnPreferences(defaults = DEFAULT_VISIBLE_COLUMNS){
+    const normalizedDefaults = { ...DEFAULT_VISIBLE_COLUMNS, ...(defaults || {}) };
+    this.visibleColumns = loadStoredVisibleColumns(normalizedDefaults);
+    this.persistColumnPreferences();
+  },
+  ensureColumnVisibility(columns){
+    if(!Array.isArray(columns)){
+      return;
+    }
+    const current = { ...(this.visibleColumns || {}) };
+    let changed = false;
+    for(const column of columns){
+      if(typeof column !== 'string' || !column){
+        continue;
+      }
+      if(!(column in current)){
+        current[column] = true;
+        changed = true;
+      }
+    }
+    if(changed){
+      this.visibleColumns = current;
+      this.persistColumnPreferences();
+    }
+  },
+  persistColumnPreferences(){
+    persistVisibleColumns(this.visibleColumns);
+  },
+  setColumnVisibility(column, visible){
+    if(!column){
+      return;
+    }
+    const next = { ...(this.visibleColumns || {}) };
+    next[column] = visible !== false;
+    this.visibleColumns = next;
+    this.persistColumnPreferences();
+  },
+  toggleColumn(column){
+    if(!column){
+      return;
+    }
+    this.setColumnVisibility(column, !this.isColumnVisible(column));
+  },
+  isColumnVisible(column){
+    if(!column){
+      return true;
+    }
+    const prefs = this.visibleColumns || {};
+    if(!(column in prefs)){
+      return true;
+    }
+    return prefs[column] !== false;
   },
   setToast(t){
     this.toast = t;
@@ -774,6 +897,13 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         // Admin panel state
         showAddEmployeeModal:false, showAddRequirementModal:false, showBulkActionsModal:false,
         showEditEmployeeModal:false, showEditRequirementModal:false,
+        columnOptions:[
+          { key:'role', label:'Role' },
+          { key:'employmentType', label:'Type' },
+          { key:'status', label:'Status' },
+          { key:'seniorityHours', label:'Seniority' }
+        ],
+        showColumnMenu:false,
           searchQuery:'', roleFilter:'', statusFilter:'', reqStatusFilter:'', filteredEmployees:[], isFiltering:false, sortField:'firstName', sortDirection:'asc',
           globalSearch:'', searchResults:[],
           globalSearchIndex:null, globalSearchIndexVersion:-1, globalSearchDataVersion:0, globalSearchData:[],
@@ -801,6 +931,26 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             ctx.fillRect(0, 0, width, height);
             ctx.restore();
           }
+        },
+
+        isColumnVisible(column){
+          const store = Alpine.store('app');
+          if(!store || typeof store.isColumnVisible !== 'function'){
+            return true;
+          }
+          return store.isColumnVisible(column);
+        },
+
+        visibleBaseColumnCount(){
+          if(!Array.isArray(this.columnOptions) || !this.columnOptions.length){
+            return Object.keys(DEFAULT_VISIBLE_COLUMNS).length;
+          }
+          return this.columnOptions.reduce((count, option) => {
+            if(!option || typeof option.key !== 'string'){
+              return count;
+            }
+            return count + (this.isColumnVisible(option.key) ? 1 : 0);
+          }, 0);
         },
 
         mergeLookupValues(...sources){
@@ -1079,6 +1229,18 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
 
         async init(){
+          const store = Alpine.store('app');
+          if(store){
+            const columnList = Array.isArray(this.columnOptions) ? this.columnOptions : [];
+            const defaults = columnList.length
+              ? Object.fromEntries(columnList.filter(option => option?.key).map(option => [option.key, true]))
+              : { ...DEFAULT_VISIBLE_COLUMNS };
+            if(typeof store.initColumnPreferences === 'function'){
+              store.initColumnPreferences(defaults);
+            } else if(typeof store.ensureColumnVisibility === 'function'){
+              store.ensureColumnVisibility(Object.keys(defaults));
+            }
+          }
           await this.initDB();
           if (this.loadError || !this.db) {
             this.$nextTick(() => this.$root?.removeAttribute('x-cloak'));
@@ -3265,7 +3427,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           return sorted.slice(start, end);
         },
         visibleColumnCount(){
-          return 4 + this.orderedVisibleRequirements().length;
+          const baseColumns = 1 + this.visibleBaseColumnCount();
+          return baseColumns + this.orderedVisibleRequirements().length;
         },
         measureVirtualRowHeight(){
           const container = this.$refs.virtualScroll;
