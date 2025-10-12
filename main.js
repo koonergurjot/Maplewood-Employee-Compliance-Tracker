@@ -1,8 +1,7 @@
 // Consolidated application initialization script extracted from index.html
 // Ensures bundler processes the entire dashboard logic.
 
-import Alpine from 'alpinejs';
-import AlpineCSP from '@alpinejs/csp';
+import Alpine from '@alpinejs/csp';
 import Papa from 'papaparse';
 import Chart from 'chart.js/auto';
 import Sortable from 'sortablejs';
@@ -144,7 +143,6 @@ export async function loadXlsx(){
 }
 
 window.Alpine = Alpine;
-Alpine.plugin(AlpineCSP);
 
 const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev';
     function activityTimeline(){
