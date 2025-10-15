@@ -970,6 +970,7 @@
   <div
     id="add-emp-modal"
     x-data="addEmployeeModal()"
+    x-trap.noscroll="open"
     x-init="
       $watch(() => $root.showAddEmployeeModal, value => {
         if(value){
@@ -987,7 +988,7 @@
     x-show="open"
     x-cloak
     class="fixed inset-0 z-50"
-    @keydown.escape.window.prevent.stop="handleEscape($event)"
+    x-on:keydown.escape.window.prevent.stop="close()"
   >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
       <div class="fixed inset-0 bg-black/40 z-40" @click="close()"></div>
@@ -999,7 +1000,7 @@
         aria-modal="true"
         aria-labelledby="add-emp-modal-title"
       >
-        <form @submit.prevent="save">
+        <form @submit.prevent="save" @keydown.enter.prevent="save()">
           <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <h3 id="add-emp-modal-title" class="text-lg font-semibold mb-4">Add Employee</h3>
             <div class="space-y-4">
@@ -1063,11 +1064,11 @@
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label for="add-emp-id" class="block text-sm font-medium mb-1">Employee ID (optional)</label>
-                  <input id="add-emp-id" type="text" x-model="employeeId" class="form-field w-full" placeholder="e.g., 12345" />
+                  <input id="add-emp-id" type="text" x-model="employeeId" class="form-field w-full" placeholder="e.g., 12345" tabindex="-1" />
                 </div>
                 <div>
                   <label for="add-emp-seniority" class="block text-sm font-medium mb-1">Seniority Hours (optional)</label>
-                  <input id="add-emp-seniority" type="number" min="0" step="0.25" x-model="seniorityHours" class="form-field w-full" placeholder="e.g., 1500" />
+                  <input id="add-emp-seniority" type="number" min="0" step="0.25" x-model="seniorityHours" class="form-field w-full" placeholder="e.g., 1500" tabindex="-1" />
                 </div>
               </div>
             </div>
