@@ -1054,6 +1054,24 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         roles: [],
         statuses: [],
         employmentTypes: [],
+        appComponent: null,
+        resolveAppComponent(force = false){
+          if(!force && this.appComponent && typeof this.appComponent === 'object'){
+            return this.appComponent;
+          }
+
+          const component = resolveParentComponentData(this);
+          if(component && typeof component === 'object'){
+            this.appComponent = component;
+            return component;
+          }
+
+          if(force){
+            this.appComponent = null;
+          }
+
+          return this.appComponent;
+        },
         lastActiveElement: null,
         db: null,
         dbPromise: null,
@@ -1069,11 +1087,11 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             });
           }
 
+          this.resolveAppComponent(true);
+
           this.$watch(() => {
-            if(!this?.$root){
-              return false;
-            }
-            return Boolean(this.$root.showAddEmployeeModal);
+            const appComponent = this.resolveAppComponent(true);
+            return appComponent ? Boolean(appComponent.showAddEmployeeModal) : false;
           }, value => {
             if(value){
               this.show();
@@ -1083,8 +1101,11 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           });
 
           this.$watch('open', value => {
-            if(!value && this?.$root){
-              this.$root.showAddEmployeeModal = false;
+            if(!value){
+              const appComponent = this.resolveAppComponent();
+              if(appComponent){
+                appComponent.showAddEmployeeModal = false;
+              }
             }
           });
 
@@ -1251,8 +1272,9 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
         close(){
           const result = this.hide();
-          if(this?.$root){
-            this.$root.showAddEmployeeModal = false;
+          const appComponent = this.resolveAppComponent();
+          if(appComponent){
+            appComponent.showAddEmployeeModal = false;
           }
           return result;
         },
