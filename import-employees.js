@@ -1422,6 +1422,16 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
 
     reportProgress();
 
+    let commandsModule = null;
+    if (newlyCreatedEmployees.length) {
+      try {
+        commandsModule = await import('./commands.js');
+      } catch (error) {
+        console.error('Failed to preload commands module for employee import.', error);
+        commandsModule = null;
+      }
+    }
+
     await db.transaction('rw', db.employees, db.employeeRequirements, db.requirements, db.roleRequirementProfiles, async () => {
       let requirements = [];
 
@@ -1450,12 +1460,16 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
         return;
       }
 
+      if (!commandsModule) {
+        throw new Error('Unable to load commands module for employee import.');
+      }
+
       const {
         fetchTemplateIndex,
         resolveTemplateForRole,
         determineStatusForTemplate,
         generateId
-      } = await import('./commands.js');
+      } = commandsModule;
       const { roleIndex } = await fetchTemplateIndex(db);
 
       const employeeRequirementRows = [];
