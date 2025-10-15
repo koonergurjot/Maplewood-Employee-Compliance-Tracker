@@ -1101,6 +1101,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         showActivityLogModal:false,
         appReady:false,
         pendingTimelineRefresh:false,
+        pendingActivityEntries:[],
         db:null, activityLog:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
         templates:[], templateRoleMap:new Map(), showTemplateForm:false,
         templateEditor:{ id:null, name:'', rolesInput:'', excludedRequirementIds:[] },
@@ -1734,6 +1735,16 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           try {
             const { default: ActivityLog } = await import('./activity-log.js');
             this.activityLog = await ActivityLog.init(this.db);
+            if(Array.isArray(this.pendingActivityEntries) && this.pendingActivityEntries.length){
+              const queued = this.pendingActivityEntries.slice();
+              this.pendingActivityEntries = [];
+              for (const entry of queued){
+                const result = await this.persistActivityEntry(entry);
+                if(!result){
+                  this.pendingActivityEntries.push(entry);
+                }
+              }
+            }
           } catch (error) {
             console.error('Failed to initialize activity log', error);
           }
@@ -2373,6 +2384,15 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
         },
         async recordActivity(actionType, targets = [], metadata = {}, undoPayload = null, options = {}){
+          const payload = { actionType, targets, metadata, undoPayload, options };
+          if(!this.activityLog){
+            this.pendingActivityEntries.push(payload);
+            return null;
+          }
+          return this.persistActivityEntry(payload);
+        },
+
+        async persistActivityEntry({ actionType, targets = [], metadata = {}, undoPayload = null, options = {} }){
           if(!this.activityLog) return null;
           try{
             const entry = await this.activityLog.record({
