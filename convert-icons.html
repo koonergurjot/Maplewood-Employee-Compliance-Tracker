@@ -114,7 +114,7 @@
             <li><strong>Upload once</strong> — the converter resizes and centers your artwork on a square artboard so you can replace <code>icon-192.svg</code> and <code>icon-512.svg</code>.</li>
             <li><strong>Dual formats</strong> — download PNGs for store submissions and matching SVG wrappers that align with the <code>type: "image/svg+xml"</code> entries already in <a href="manifest.webmanifest">manifest.webmanifest</a>.</li>
             <li><strong>Color presets</strong> — use the manifest theme color (<code>#111827</code>) or switch to a transparent background before exporting.</li>
-            <li><strong>Reminder</strong> — commit the generated files to <code>/icon-192.svg</code> and <code>/icon-512.svg</code> (and optionally PNG siblings) so the service worker can cache them.</li>
+            <li><strong>Reminder</strong> — commit the generated files to <code>icon-192.svg</code> and <code>icon-512.svg</code> (and optionally PNG siblings) so the service worker can cache them.</li>
           </ul>
           <p class="note mt-4">Tip: include ample padding in your source artwork. The converter keeps your image centered and scales it down to fit inside the icon frame.</p>
         </section>
@@ -122,6 +122,6 @@
     </div>
   </div>
 
-  <script type="module" src="/convert-icons.js"></script>
+  <script type="module" src="convert-icons.js"></script>
 </body>
 </html>
