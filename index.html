@@ -693,7 +693,7 @@
   </div>
 
   <div
-    x-show="$store.app.selectedEmployeeIds.length"
+    x-show="selectedEmployeeCount() > 0"
     x-cloak
     x-transition
     class="fixed bottom-6 left-1/2 z-50 w-full max-w-4xl px-4 -translate-x-1/2"
