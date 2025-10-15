@@ -8,29 +8,10 @@
   <link rel="icon" href="icon-192.svg"/>
   <link rel="apple-touch-icon" href="icon-512.svg"/>
   <link rel="manifest" href="manifest.webmanifest"/>
-  <script nonce="bWFwbGV3b29k">
-    (function(){
-      const storageKey = 'maplewood:theme';
-      const prefersDark = () => window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const applyTheme = (isDark) => {
-        document.documentElement.classList.toggle('dark', isDark);
-        document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
-      };
-      try{
-        const stored = window.localStorage.getItem(storageKey);
-        if(stored === 'dark' || stored === 'light'){
-          applyTheme(stored === 'dark');
-        }else{
-          applyTheme(prefersDark());
-        }
-      }catch(error){
-        applyTheme(prefersDark());
-      }
-    })();
-  </script>
+  <script src="js/fallback-modal.js" defer></script>
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'nonce-bWFwbGV3b29k'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+    content="default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
   />
   <style>
     :root{
@@ -1991,20 +1972,6 @@
   </div>
 
   <script type="module" src="main.js"></script>
-
-  <script nonce="bWFwbGV3b29k">
-  document.addEventListener('DOMContentLoaded', () => {
-    const btn=document.getElementById('btn-add-employee');
-    const modal=document.getElementById('add-employee-modal');
-    if(!btn||!modal) return;
-    const open=e=>{e&&e.preventDefault(); modal.classList.remove('hidden'); modal.setAttribute('aria-hidden','false');};
-    const close=()=>{modal.classList.add('hidden'); modal.setAttribute('aria-hidden','true');};
-    btn.addEventListener('click', open);
-    modal.addEventListener('click', e=>{ if(e.target===modal) close(); });
-    modal.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', close));
-    window.addEventListener('keydown', e=>{ if(e.key==='Escape' && !modal.classList.contains('hidden')) close(); });
-  });
-  </script>
 
 </body>
 </html>
