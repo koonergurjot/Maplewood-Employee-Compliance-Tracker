@@ -193,8 +193,8 @@
   x-init="init()"
   x-cloak
   :class="{'dark': darkMode}"
-  @employee:added.window="handleEmployeeAdded($event.detail?.employee)"
-  @employee:add-failed.window="handleEmployeeAddFailed($event.detail?.error)"
+  @employee:added.window="handleEmployeeAdded($event.detail && $event.detail.employee)"
+  @employee:add-failed.window="handleEmployeeAddFailed($event.detail && $event.detail.error)"
 >
   <template x-if="loadError">
     <div class="container mx-auto px-4 py-12">
@@ -265,11 +265,17 @@
                       <span class="block text-sm font-semibold" x-html="highlightText(result.item.label)"></span>
                       <template x-if="result.item.type === 'employee'">
                         <span class="block text-xs" style="color:var(--muted)">
-                          <span x-show="result.item.meta?.role" x-html="highlightText(result.item.meta?.role)"></span>
-                          <template x-if="result.item.meta?.role && result.item.meta?.employeeId">
+                          <span
+                            x-show="result.item.meta && result.item.meta.role"
+                            x-html="highlightText(result.item.meta && result.item.meta.role)"
+                          ></span>
+                          <template x-if="result.item.meta && result.item.meta.role && result.item.meta.employeeId">
                             <span class="mx-1">•</span>
                           </template>
-                          <span x-show="result.item.meta?.employeeId" x-html="highlightText(result.item.meta?.employeeId)"></span>
+                          <span
+                            x-show="result.item.meta && result.item.meta.employeeId"
+                            x-html="highlightText(result.item.meta && result.item.meta.employeeId)"
+                          ></span>
                         </span>
                       </template>
                     </span>
@@ -988,21 +994,6 @@
   <div
     id="add-employee-modal"
     x-data="addEmployeeModal()"
-    x-trap.noscroll="open"
-    x-init="
-      $watch(() => $root.showAddEmployeeModal, value => {
-        if(value){
-          show();
-        } else if(open) {
-          hide();
-        }
-      });
-      $watch('open', value => {
-        if(!value){
-          $root.showAddEmployeeModal = false;
-        }
-      });
-    "
     x-show="open"
     x-cloak
     class="fixed inset-0 z-50 hidden"
@@ -1115,7 +1106,7 @@
     x-show="showAddRequirementModal"
     x-cloak
     class="fixed inset-0 z-50"
-    x-data="modalA11y(() => showAddRequirementModal, value => showAddRequirementModal = value)"
+    x-data="modalStateBinding('showAddRequirementModal')"
     @keydown.escape.window.prevent.stop="handleEscape($event)"
   >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -1203,7 +1194,7 @@
     x-show="showEditRequirementModal"
     x-cloak
     class="fixed inset-0 z-50"
-    x-data="modalA11y(() => showEditRequirementModal, value => showEditRequirementModal = value)"
+    x-data="modalStateBinding('showEditRequirementModal')"
     @keydown.escape.window.prevent.stop="handleEscape($event)"
   >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -1292,7 +1283,7 @@
     x-show="showEditEmployeeModal"
     x-cloak
     class="fixed inset-0 z-50"
-    x-data="modalA11y(() => showEditEmployeeModal, value => showEditEmployeeModal = value)"
+    x-data="modalStateBinding('showEditEmployeeModal')"
     @keydown.escape.window.prevent.stop="handleEscape($event)"
   >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -1449,7 +1440,7 @@
     x-show="showSettingsModal"
     x-cloak
     class="fixed inset-0 z-50"
-    x-data="modalA11y(() => showSettingsModal, value => showSettingsModal = value)"
+    x-data="modalStateBinding('showSettingsModal')"
     @keydown.escape.window.prevent.stop="handleEscape($event)"
   >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -1568,7 +1559,7 @@
     x-show="$store.app.showImportModal"
     x-cloak
     class="fixed inset-0 z-50"
-    x-data="modalA11y(() => $store.app.showImportModal, value => { $store.app.showImportModal = value; })"
+    x-data="modalStoreBinding('app', 'showImportModal')"
     @keydown.escape.window.prevent.stop="handleEscape($event)"
   >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -1741,13 +1732,13 @@
 
           <!-- Mapping -->
           <div x-show="importMode !== 'backup' && importHeaders.length" class="space-y-6" x-ref="employeeMappingPanel">
-            <div class="p-4 border rounded-lg" style="border-color:var(--line)" x-data="{ mappingValidated: false }">
+            <div class="p-4 border rounded-lg" style="border-color:var(--line)" x-data="mappingPanel()">
               <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                 <div>
                   <h4 class="font-semibold text-base">Step 1: Map Columns</h4>
                   <p class="text-xs mt-1" style="color:var(--muted)">Review each application field and confirm the detected column before continuing.</p>
                 </div>
-                <button type="button" class="btn" @click="mappingValidated = true; updateMissingRequiredColumns()">Validate</button>
+                <button type="button" class="btn" @click="markValidated()">Validate</button>
               </div>
               <div class="grid gap-y-2 gap-x-4 sm:grid-cols-[200px_auto]" role="list">
                 <template x-for="(label, key) in fieldLabels" :key="key">
@@ -1756,7 +1747,7 @@
                     <div class="mt-1 sm:mt-0">
                       <select class="w-full border rounded px-2 py-1 bg-transparent" style="border-color:var(--line)"
                               x-model="columnMap[key]"
-                              @change="mappingValidated = false; updateEligibilityPreview()">
+                              @change="handleFieldChange()">
                         <option value="">-- Not Mapped --</option>
                         <template x-for="(h, idx) in importHeaders" :key="idx"><option :value="h" x-text="h"></option></template>
                       </select>
@@ -1877,7 +1868,7 @@
     x-show="showActivityLogModal"
     x-cloak
     class="fixed inset-0 z-50"
-    x-data="modalA11y(() => showActivityLogModal, value => showActivityLogModal = value)"
+    x-data="modalStateBinding('showActivityLogModal')"
     @keydown.escape.window.prevent.stop="handleEscape($event)"
   >
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -1915,7 +1906,7 @@
   <!-- Lookup Add Dialog -->
   <div
     id="lookup-dialog"
-    x-data="modalA11y(() => $store.app.lookupDialog.open, value => { if(!value){ $store.app.closeLookupDialog(); } })"
+    x-data="modalStoreBinding('app', 'lookupDialog.open', 'closeLookupDialog')"
     x-show="$store.app.lookupDialog.open"
     x-cloak
     class="fixed inset-0 z-50"
@@ -1966,25 +1957,6 @@
   </div>
 
   <div
-    x-data="{
-      async runToastAction(){
-        const action = this.$store.app.toast?.action;
-        if(!action || typeof action.handler !== 'function') return;
-        try {
-          await action.handler();
-        } catch (error) {
-          console.error('Toast action failed', error);
-        } finally {
-          if(action.dismiss !== false){
-            if(typeof this.$store.app.hideToast === 'function'){
-              this.$store.app.hideToast();
-            } else {
-              this.$store.app.toast = null;
-            }
-          }
-        }
-      }
-    }"
     x-show="$store.app.toast"
     x-cloak
     class="fixed bottom-4 left-1/2 -translate-x-1/2 w-[min(92vw,480px)]"
@@ -1993,23 +1965,23 @@
     aria-atomic="true"
   >
     <div class="rounded-xl shadow-lg bg-neutral-900/90 text-white p-3 flex items-center gap-3">
-      <template x-if="$store.app.toast?.type==='progress'">
+      <template x-if="$store.app.toast && $store.app.isProgressToast()">
         <div class="w-full">
           <div class="text-sm mb-1" x-text="$store.app.toast.message"></div>
           <div class="h-2 bg-white/10 rounded">
-            <div class="h-2 rounded bg-white/70" :style="{ width: ($store.app.toast.percent || 0) + '%' }"></div>
+            <div class="h-2 rounded bg-white/70" :style="{ width: $store.app.toastProgressPercent() + '%' }"></div>
           </div>
         </div>
       </template>
-      <template x-if="$store.app.toast?.type!=='progress'">
+      <template x-if="$store.app.toast && !$store.app.isProgressToast()">
         <div class="flex w-full items-center justify-between gap-3">
           <div class="text-sm flex-1" x-text="$store.app.toast.message"></div>
-          <template x-if="$store.app.toast?.action">
+          <template x-if="$store.app.hasToastAction()">
             <button
               type="button"
               class="text-xs font-semibold underline focus-ring shrink-0"
-              @click="runToastAction()"
-              x-text="$store.app.toast.action.label || 'Undo'"
+              @click="$store.app.runToastAction()"
+              x-text="$store.app.toastActionLabel()"
             ></button>
           </template>
         </div>
@@ -2019,7 +1991,7 @@
 
   <script type="module" src="main.js"></script>
 
-  <script>
+  <script nonce="bWFwbGV3b29k">
   document.addEventListener('DOMContentLoaded', () => {
     const btn=document.getElementById('btn-add-employee');
     const modal=document.getElementById('add-employee-modal');
