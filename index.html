@@ -1592,6 +1592,74 @@
                 </div>
               </div>
             </div>
+            <div class="mt-4">
+              <button type="button" class="text-sm font-medium text-blue-600 hover:underline" @click="toggleImportDiagnosticsPanel()">
+                <span x-text="importDiagnosticsPanelOpen ? 'Hide import troubleshooting' : 'Show import troubleshooting'"></span>
+              </button>
+              <div x-show="importDiagnosticsPanelOpen" x-transition class="mt-2 border rounded-lg" style="border-color:var(--line); background-color:rgba(148,163,184,0.08)">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 pb-0">
+                  <h4 class="text-sm font-semibold">Import troubleshooting</h4>
+                  <div class="flex items-center gap-2">
+                    <button type="button" class="text-xs px-3 py-1 rounded border" style="border-color:var(--line); background:transparent" @click="refreshImportDiagnostics()" :disabled="importDiagnosticsLoading">
+                      <span x-text="importDiagnosticsLoading ? 'Refreshing…' : 'Refresh status'"></span>
+                    </button>
+                    <button type="button" class="text-xs px-3 py-1 rounded border" style="border-color:var(--line); background:transparent" @click="copyImportLogs()" :disabled="!importDiagnostics.logs.length">
+                      Copy import logs
+                    </button>
+                  </div>
+                </div>
+                <div class="p-3 pt-0 text-sm space-y-4">
+                  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                    <div>
+                      <dt class="text-xs uppercase tracking-wide" style="color:var(--muted)">IndexedDB status</dt>
+                      <dd class="font-medium" x-text="importDiagnostics.indexedDbStatus"></dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs uppercase tracking-wide" style="color:var(--muted)">Dexie version</dt>
+                      <dd class="font-medium" x-text="importDiagnostics.dexieVersion"></dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs uppercase tracking-wide" style="color:var(--muted)">Last import</dt>
+                      <dd class="font-medium" x-text="formatImportTimestamp(importDiagnostics.lastImportTime)"></dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs uppercase tracking-wide" style="color:var(--muted)">Last result</dt>
+                      <dd class="font-medium" :style="importDiagnostics.lastImportStatus === 'error' ? 'color:var(--danger)' : ''" x-text="importDiagnostics.lastImportResult || 'No imports yet.'"></dd>
+                    </div>
+                  </dl>
+                  <div>
+                    <div class="text-xs uppercase tracking-wide" style="color:var(--muted)">Store counts</div>
+                    <template x-if="!importDiagnostics.storeCounts.length">
+                      <p class="text-xs mt-1" style="color:var(--muted)">No store data available. Click Refresh to try again.</p>
+                    </template>
+                    <ul class="mt-1 space-y-1 text-sm max-h-32 overflow-auto">
+                      <template x-for="store in importDiagnostics.storeCounts" :key="store.name">
+                        <li class="rounded border border-transparent px-2 py-1" :style="store.error ? 'background-color:rgba(248,113,113,0.1);border-color:rgba(248,113,113,0.2)' : 'background-color:rgba(148,163,184,0.1)'">
+                          <div class="flex justify-between gap-4">
+                            <span x-text="store.name"></span>
+                            <span x-text="store.error ? '—' : store.count"></span>
+                          </div>
+                          <div class="text-xs mt-1" style="color:var(--danger)" x-show="store.error" x-text="store.error"></div>
+                        </li>
+                      </template>
+                    </ul>
+                  </div>
+                  <div>
+                    <div class="flex items-center justify-between">
+                      <div class="text-xs uppercase tracking-wide" style="color:var(--muted)">Recent import logs</div>
+                    </div>
+                    <template x-if="!recentImportLogs().length">
+                      <p class="text-xs mt-1" style="color:var(--muted)">Logs will appear here after you start an import.</p>
+                    </template>
+                    <ul class="mt-1 space-y-1 max-h-40 overflow-auto">
+                      <template x-for="(entry, idx) in recentImportLogs()" :key="entry.timestamp + '-' + idx">
+                        <li class="text-xs font-mono bg-black/5 rounded px-2 py-1" x-text="formatImportLogEntry(entry)"></li>
+                      </template>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <template x-if="duplicateHeaderGroups.length && !duplicateHeaderWarningDismissed">
             <div class="mt-3 p-3 rounded border" style="border-color:var(--danger); background-color:rgba(248,113,113,0.12); color:var(--danger)" data-import-duplicate-headers>
