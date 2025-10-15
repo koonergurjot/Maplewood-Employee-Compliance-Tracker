@@ -133,6 +133,7 @@
     }
     .tour-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000}
     .tour-tooltip{position:absolute;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:.5rem;padding:1rem;max-width:18rem;z-index:1001}
+    .modal-panel{display:block;margin-left:auto;margin-right:auto}
       .tour-highlight{position:relative;z-index:1002;box-shadow:0 0 0 4px var(--accent);border-radius:.25rem}
       .help-highlight{position:relative;animation:tour-pulse 1.5s ease-in-out infinite;box-shadow:0 0 0 4px rgba(37,99,235,0.45)}
       .status-overlay,
@@ -983,7 +984,7 @@
       <div class="fixed inset-0 bg-black/40 z-40" @click="close()" data-close></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
       <div
-        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        class="relative z-50 inline-block align-bottom card modal-panel rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
         x-ref="dialog"
         role="dialog"
         aria-modal="true"
@@ -1090,7 +1091,7 @@
         <div @click="close()" class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
       <div
-        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        class="relative z-50 inline-block align-bottom card modal-panel rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
         x-ref="dialog"
         role="dialog"
         aria-modal="true"
@@ -1178,7 +1179,7 @@
       <div @click="close()" class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
       <div
-        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        class="relative z-50 inline-block align-bottom card modal-panel rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
         x-ref="dialog"
         role="dialog"
         aria-modal="true"
@@ -1267,7 +1268,7 @@
       <div @click="close()" class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
       <div
-        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        class="relative z-50 inline-block align-bottom card modal-panel rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
         x-ref="dialog"
         role="dialog"
         aria-modal="true"
@@ -1424,7 +1425,7 @@
       <div @click="close()" class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
       <div
-        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full"
+        class="relative z-50 inline-block align-bottom card modal-panel rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full"
         x-ref="dialog"
         role="dialog"
         aria-modal="true"
@@ -1543,7 +1544,7 @@
       <div @click="close()" data-close-import-modal class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
       <div
-        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
+        class="relative z-50 inline-block align-bottom card modal-panel rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
         x-ref="dialog"
         role="dialog"
         aria-modal="true"
@@ -1921,7 +1922,7 @@
       <div @click="close()" class="fixed inset-0 bg-black/40 z-40"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
       <div
-        class="relative z-50 inline-block align-bottom card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-xl sm:w-full"
+        class="relative z-50 inline-block align-bottom card modal-panel rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-xl sm:w-full"
         x-ref="dialog"
         role="dialog"
         aria-modal="true"
