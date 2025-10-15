@@ -34,20 +34,9 @@ const initialHash = (() => {
 
 let currentCacheName = `cmatrix-${initialHash}`;
 
-const STATIC_PATHS = [
-  './',
-  'index.html',
-  'calendar.html',
-  'convert-icons.html',
-  'clear-cache.html',
-  'timeline-component.html',
-  'manifest.webmanifest',
-  'icon-192.svg',
-  'icon-512.svg'
-];
-
-const STATIC_URLS = STATIC_PATHS.map(path => new URL(path, scopeUrl).toString());
-const INDEX_URL = new URL('index.html', scopeUrl).toString();
+const PRECACHE_URLS = ['/', 'manifest.webmanifest', 'icon-192.svg', 'icon-512.svg', 'main.js'];
+const PRECACHE_URLS_ABSOLUTE = PRECACHE_URLS.map((path) => new URL(path, scopeUrl).toString());
+const INDEX_URL = new URL('/', scopeUrl).toString();
 
 let manifestPromise;
 const VITE_MANIFEST_PATHS = ['/.vite/manifest.json', 'manifest.json'];
@@ -65,7 +54,7 @@ function extractHashFromAssets(assets) {
 async function loadManifestAssets() {
   if (!manifestPromise) {
     manifestPromise = (async () => {
-      const assets = new Set(STATIC_URLS);
+      const assets = new Set(PRECACHE_URLS_ABSOLUTE);
       let manifestUrl;
 
       for (const path of VITE_MANIFEST_PATHS) {
@@ -151,6 +140,12 @@ self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const { cacheName, urls } = await loadManifestAssets();
     const cache = await caches.open(cacheName);
+    const coreResults = await Promise.allSettled(PRECACHE_URLS.map((url) => cache.add(url)));
+    coreResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.warn(`Failed to precache asset: ${PRECACHE_URLS[index]}`, result.reason);
+      }
+    });
     const validUrls = urls.filter(Boolean);
     const results = await Promise.allSettled(validUrls.map((url) => cache.add(url)));
     results.forEach((result, index) => {
