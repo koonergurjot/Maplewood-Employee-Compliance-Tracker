@@ -276,7 +276,11 @@ function normalizeLookupType(type) {
   if (type == null) {
     return '';
   }
-  return String(type).trim();
+  const stringValue = typeof type === 'string' ? type.trim() : String(type).trim();
+  if (!stringValue) {
+    return '';
+  }
+  return stringValue.toLocaleLowerCase();
 }
 
 function normalizeLookupValue(value) {
@@ -297,8 +301,41 @@ export async function listLookups(type) {
   }
 
   const db = await openDatabase();
-  const records = await db.table('lookups').where('type').equals(normalizedType).sortBy('valueLower');
-  return records.map(record => record.value);
+  const table = db.table('lookups');
+
+  const canonicalRecords = await table.where('type').equals(normalizedType).sortBy('valueLower');
+  const legacyRecords = await table
+    .filter(record => normalizeLookupType(record?.type) === normalizedType && record?.type !== normalizedType)
+    .toArray();
+
+  if (legacyRecords.length) {
+    legacyRecords.sort((a, b) => {
+      const aKey = (a?.valueLower || '').toString();
+      const bKey = (b?.valueLower || '').toString();
+      return aKey.localeCompare(bKey);
+    });
+  }
+
+  const combined = [...canonicalRecords, ...legacyRecords];
+  const seen = new Set();
+  const values = [];
+
+  for (const record of combined) {
+    if (!record) {
+      continue;
+    }
+    const normalizedValue = normalizeLookupValue(record.value);
+    if (!normalizedValue.value) {
+      continue;
+    }
+    if (seen.has(normalizedValue.lower)) {
+      continue;
+    }
+    seen.add(normalizedValue.lower);
+    values.push(normalizedValue.value);
+  }
+
+  return values;
 }
 
 export async function addLookup(type, value) {
@@ -313,12 +350,44 @@ export async function addLookup(type, value) {
   const table = db.table('lookups');
   const compositeKey = [normalizedType, normalizedValue.lower];
 
-  const existing = await table
-    .where('[type+valueLower]')
-    .equals(compositeKey)
-    .first();
+  const findExisting = async () => {
+    const canonical = await table
+      .where('[type+valueLower]')
+      .equals(compositeKey)
+      .first();
+    if (canonical) {
+      return canonical;
+    }
+
+    return table
+      .where('valueLower')
+      .equals(normalizedValue.lower)
+      .and(record => normalizeLookupType(record?.type) === normalizedType)
+      .first();
+  };
+
+  let existing = await findExisting();
 
   if (existing) {
+    if (existing.type !== normalizedType && existing.id != null) {
+      try {
+        await table.update(existing.id, { type: normalizedType });
+        existing = { ...existing, type: normalizedType };
+      } catch (updateError) {
+        if (updateError?.name === 'ConstraintError') {
+          const canonical = await table
+            .where('[type+valueLower]')
+            .equals(compositeKey)
+            .first();
+          if (canonical) {
+            existing = canonical;
+          }
+        } else {
+          console.warn('Failed to normalize lookup type casing', updateError);
+        }
+      }
+    }
+
     return existing;
   }
 
@@ -335,10 +404,10 @@ export async function addLookup(type, value) {
     return table.get(id);
   } catch (error) {
     if (error?.name === 'ConstraintError') {
-      return table
-        .where('[type+valueLower]')
-        .equals(compositeKey)
-        .first();
+      const fallback = await findExisting();
+      if (fallback) {
+        return fallback;
+      }
     }
 
     throw error;
