@@ -2032,7 +2032,6 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           await this.loadData();
           this.loadSavedViewsFromStorage();
           if (this.loadError || !this.db) return;
-          this.setAppReady(true);
           this.applyDarkMode(this.darkMode);
           this.setupThemeWatcher();
 
@@ -2121,9 +2120,6 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           await this.initDB();
           await this.initActivityLog();
           await this.loadData();
-          if(!this.loadError && this.db){
-            this.setAppReady(true);
-          }
           this.notify('All data cleared');
         },
 
@@ -2131,6 +2127,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           if (this.loadError || !this.db) return;
 
           try {
+            this.loadError = '';
             const [employees, requirements, employeeRequirements] = await Promise.all([
               this.db.employees.toArray(),
               this.db.requirements.toArray(),
@@ -2165,6 +2162,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             if (!this.loadError) {
               hideFallback();
               this.filterEmployees();
+            }
+
+            if(!this.appReady && !this.loadError && this.db){
+              this.setAppReady(true);
             }
           } catch (error) {
             console.error('Failed to load dashboard data from IndexedDB', error);
