@@ -1050,6 +1050,21 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             return;
           }
 
+          const appRoot = this?.$root;
+          if(appRoot && (!appRoot.appReady || !appRoot.db)){
+            const message = 'The database is still initializing. Please try again in a moment.';
+            console.warn('addEmployeeModal: attempted to save before database ready.');
+            if(typeof Alpine !== 'undefined' && typeof Alpine.store === 'function'){
+              const store = Alpine.store('app');
+              if(store && typeof store.showToast === 'function'){
+                store.showToast({ type: 'warning', message });
+              }
+            } else if(typeof window !== 'undefined' && typeof window.alert === 'function'){
+              window.alert(message);
+            }
+            return;
+          }
+
           this.saving = true;
 
           try {
