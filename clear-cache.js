@@ -88,10 +88,19 @@ export function deleteComplianceIndexedDB() {
   }
 }
 
-globalThis.clearServiceWorkerCache = clearServiceWorkerCache;
-globalThis.clearBrowserCache = clearBrowserCache;
-globalThis.reloadApp = reloadApp;
-globalThis.deleteComplianceIndexedDB = deleteComplianceIndexedDB;
+const bindings = [
+  ['clear-service-worker', clearServiceWorkerCache],
+  ['clear-browser', clearBrowserCache],
+  ['delete-indexeddb', deleteComplianceIndexedDB],
+  ['reload-app', reloadApp],
+];
+
+for (const [id, handler] of bindings) {
+  const button = document.getElementById(id);
+  if (button) {
+    button.addEventListener('click', handler);
+  }
+}
 
 window.addEventListener('load', () => {
   setTimeout(() => {

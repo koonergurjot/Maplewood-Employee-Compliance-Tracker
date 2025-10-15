@@ -19,10 +19,10 @@
             <p class="mb-6">This page helps clear browser cache and service worker cache for the Compliance Matrix app.</p>
 
             <div class="flex flex-wrap gap-3 mb-4">
-                <button onclick="clearServiceWorkerCache()" class="btn btn-primary">Clear Service Worker Cache</button>
-                <button onclick="clearBrowserCache()" class="btn btn-primary">Clear Browser Cache</button>
-                <button onclick="deleteComplianceIndexedDB()" class="btn btn-primary">Also delete IndexedDB</button>
-                <button onclick="reloadApp()" class="btn">Reload App</button>
+                <button id="clear-service-worker" class="btn btn-primary">Clear Service Worker Cache</button>
+                <button id="clear-browser" class="btn btn-primary">Clear Browser Cache</button>
+                <button id="delete-indexeddb" class="btn btn-primary">Also delete IndexedDB</button>
+                <button id="reload-app" class="btn">Reload App</button>
             </div>
 
             <div id="status" class="hidden"></div>
