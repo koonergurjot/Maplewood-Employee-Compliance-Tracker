@@ -637,11 +637,11 @@ Alpine.store('app', {
 });
 
 const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev';
-    const TIMELINE_READY_RETRY_ATTEMPTS = 3;
+    const TIMELINE_READY_MAX_RETRIES = 3;
     const TIMELINE_READY_RETRY_DELAY = 500;
-    let timelineReadyInfoLogged = false;
+    let timelineReadyGiveUpLogged = false;
 
-    async function waitForTimelineAppReady(root, maxAttempts = TIMELINE_READY_RETRY_ATTEMPTS){
+    async function waitForTimelineAppReady(root, maxAttempts = TIMELINE_READY_MAX_RETRIES){
       if(!root) return false;
 
       const attempts = Math.max(1, maxAttempts);
@@ -650,18 +650,17 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           return true;
         }
 
-        if(attempt === 0 && !timelineReadyInfoLogged){
-          console.info('Activity timeline waiting for app readiness; will retry shortly.');
-          timelineReadyInfoLogged = true;
-        }
-
         if(attempt < attempts - 1){
-          const waitTime = TIMELINE_READY_RETRY_DELAY * (attempt + 1);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
+          await new Promise(resolve => setTimeout(resolve, TIMELINE_READY_RETRY_DELAY));
         }
       }
 
-      return Boolean(root?.appReady && root?.db);
+      if(!timelineReadyGiveUpLogged){
+        console.info('Activity timeline idle: app not ready after retries; rendering fallback skeleton.');
+        timelineReadyGiveUpLogged = true;
+      }
+
+      return false;
     }
 
     function activityTimeline(){
