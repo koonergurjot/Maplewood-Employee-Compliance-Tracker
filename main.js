@@ -19,12 +19,73 @@ const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
 const THEME_STORAGE_KEY = 'maplewood:theme';
 const COLUMN_VISIBILITY_STORAGE_KEY = 'maplewood:employeeTable:visibleColumns';
+const DEFAULT_SORT_FIELD = 'seniorityHours';
+const DEFAULT_SORT_DIRECTION = 'desc';
+const EMPLOYEE_SORT_STORAGE_KEY = 'maplewood:employeeTable:sort';
+
 const DEFAULT_VISIBLE_COLUMNS = Object.freeze({
   role: true,
   employmentType: true,
   status: true,
   seniorityHours: true
 });
+
+function getSortStorage(){
+  if(typeof window === 'undefined') return null;
+  try {
+    return window.localStorage || null;
+  } catch (error) {
+    console.warn('Sort preference: localStorage unavailable', error);
+    return null;
+  }
+}
+
+function readStoredEmployeeSort(){
+  const storage = getSortStorage();
+  if(!storage){
+    return null;
+  }
+  try {
+    const raw = storage.getItem(EMPLOYEE_SORT_STORAGE_KEY);
+    if(!raw){
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if(!parsed || typeof parsed !== 'object' || Array.isArray(parsed)){
+      return null;
+    }
+    const field = typeof parsed.field === 'string' && parsed.field.trim() ? parsed.field.trim() : '';
+    const direction = parsed.direction === 'asc' || parsed.direction === 'desc' ? parsed.direction : '';
+    if(!field || !direction){
+      return null;
+    }
+    return { field, direction };
+  } catch (error) {
+    console.warn('Sort preference: failed to read preference', error);
+    return null;
+  }
+}
+
+function writeStoredEmployeeSort(field, direction){
+  const storage = getSortStorage();
+  if(!storage){
+    return;
+  }
+  if(typeof field !== 'string' || !field.trim()){
+    try {
+      storage.removeItem(EMPLOYEE_SORT_STORAGE_KEY);
+    } catch (error) {
+      console.warn('Sort preference: failed to clear preference', error);
+    }
+    return;
+  }
+  const normalizedDirection = direction === 'desc' ? 'desc' : 'asc';
+  try {
+    storage.setItem(EMPLOYEE_SORT_STORAGE_KEY, JSON.stringify({ field: field.trim(), direction: normalizedDirection }));
+  } catch (error) {
+    console.warn('Sort preference: failed to persist preference', error);
+  }
+}
 
 function getColumnStorage(){
   if(typeof window === 'undefined'){ return null; }
@@ -1348,7 +1409,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           { key:'seniorityHours', label:'Seniority' }
         ],
         showColumnMenu:false,
-          searchQuery:'', roleFilter:'', statusFilter:'', reqStatusFilter:'', filteredEmployees:[], isFiltering:false, sortField:'firstName', sortDirection:'asc',
+          searchQuery:'', roleFilter:'', statusFilter:'', reqStatusFilter:'', filteredEmployees:[], isFiltering:false, sortField:DEFAULT_SORT_FIELD, sortDirection:DEFAULT_SORT_DIRECTION,
           savedViews:[], selectedViewName:'',
           globalSearch:'', searchResults:[],
           globalSearchIndex:null, globalSearchIndexVersion:-1, globalSearchDataVersion:0, globalSearchData:[],
@@ -1868,6 +1929,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           window.addEventListener('tour:started', markTourSeenHandler);
           window.addEventListener('tour:ended', markTourSeenHandler);
 
+          this.loadSortPreferences();
           await this.initActivityLog();
           await this.loadData();
           this.loadSavedViewsFromStorage();
@@ -4136,6 +4198,25 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
           return segments.join('');
         },
+        applyDefaultSort(shouldPersist = false){
+          this.sortField = DEFAULT_SORT_FIELD;
+          this.sortDirection = DEFAULT_SORT_DIRECTION;
+          if(shouldPersist){
+            this.persistSortPreference();
+          }
+        },
+        loadSortPreferences(){
+          const stored = readStoredEmployeeSort();
+          if(stored){
+            this.sortField = stored.field;
+            this.sortDirection = stored.direction;
+          } else {
+            this.applyDefaultSort(true);
+          }
+        },
+        persistSortPreference(){
+          writeStoredEmployeeSort(this.sortField, this.sortDirection);
+        },
         sortEmployees(field){
           if (this.sortField === field) {
             this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
@@ -4143,6 +4224,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.sortField = field;
             this.sortDirection = 'asc';
           }
+          this.persistSortPreference();
           this.resetVirtualWindow();
         },
         sortedEmployees(){
