@@ -1580,8 +1580,9 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="import-modal-title"
+        style="max-height:min(90vh, 960px);display:flex;flex-direction:column;"
       >
-        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+        <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4" style="flex:1 1 auto;overflow-y:auto;">
           <div class="flex items-center justify-between">
             <h3 id="import-modal-title" class="text-lg font-semibold mb-3" tabindex="-1" data-modal-initial-focus>Import Data</h3>
             <div class="text-xs" :style="'color:var(--muted)'">
