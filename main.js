@@ -150,6 +150,7 @@ function persistVisibleColumns(columns){
 }
 
 let cachedXlsx = (typeof window !== 'undefined' && (window.__xlsxModule || window.XLSX)) || null;
+const DEFAULT_IMPORT_TYPE = cachedXlsx ? 'excel' : 'csv';
 let xlsxLoadPromise = null;
 
 function resolveXlsxFromGlobals(){
@@ -1494,7 +1495,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         tourMarkedSeen:false,
         tourPromptActive:false,
         // Import UI state
-        importType:'excel', importMode:'employees', importData:[],
+        importType:DEFAULT_IMPORT_TYPE, importMode:'employees', importData:[],
         importSheets:[], importSheetName:'', importWarning:'', importError:'', importLoading:false,
         importProgress:0, importErrors:[],
         missingRequiredColumns:[], missingColumnsBannerDismissed:false,
@@ -3146,6 +3147,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               console.error('Failed to load XLSX library:', loaderError);
               this.importError = 'XLSX still unavailable. Please check your connection and try again.';
               this.importLoading = false;
+              if (this.importType === 'excel') {
+                this.importType = 'csv';
+                this.recordImportLog('Excel import disabled: XLSX library unavailable. Falling back to CSV mode.', 'warn');
+              }
               this.recordImportLog(`Failed to load XLSX library: ${loaderError?.message || loaderError}`, 'error');
               return;
             }
@@ -3222,6 +3227,10 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           } catch (loaderError) {
             console.error('Failed to load XLSX library:', loaderError);
             this.importError = 'XLSX still unavailable. Please check your connection and try again.';
+            if (this.importType === 'excel') {
+              this.importType = 'csv';
+              this.recordImportLog('Excel import disabled while switching sheets: XLSX library unavailable. Falling back to CSV mode.', 'warn');
+            }
             this.recordImportLog(`Failed to load XLSX library while switching sheet: ${loaderError?.message || loaderError}`, 'error');
             return;
           }
