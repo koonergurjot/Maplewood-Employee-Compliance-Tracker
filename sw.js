@@ -32,92 +32,10 @@ const initialHash = (() => {
   }
 })();
 
-let currentCacheName = `cmatrix-${initialHash}`;
+const currentCacheName = `cmatrix-${initialHash}`;
 
-const PRECACHE_URLS = ['/', 'manifest.webmanifest', 'icon-192.svg', 'icon-512.svg', 'main.js'];
-const PRECACHE_URLS_ABSOLUTE = PRECACHE_URLS.map((path) => new URL(path, scopeUrl).toString());
+const PRECACHE_URLS = ['/', 'manifest.webmanifest', 'icon-192.svg', 'icon-512.svg'];
 const INDEX_URL = new URL('/', scopeUrl).toString();
-
-let manifestPromise;
-const VITE_MANIFEST_PATHS = ['/.vite/manifest.json', 'manifest.json'];
-
-function extractHashFromAssets(assets) {
-  for (const url of assets) {
-    const match = url.match(/[-.]([a-f0-9]{8,})(?:\.(?:js|css|mjs))$/i);
-    if (match) {
-      return match[1];
-    }
-  }
-  return null;
-}
-
-async function loadManifestAssets() {
-  if (!manifestPromise) {
-    manifestPromise = (async () => {
-      const assets = new Set(PRECACHE_URLS_ABSOLUTE);
-      let manifestUrl;
-
-      for (const path of VITE_MANIFEST_PATHS) {
-        const candidateUrl = new URL(path, scopeUrl);
-        try {
-          const response = await fetch(candidateUrl, { cache: 'no-store' });
-          if (!response || !response.ok) {
-            continue;
-          }
-
-          const manifest = await response.json();
-          manifestUrl = candidateUrl;
-          assets.add(manifestUrl.toString());
-          const visited = new Set();
-
-          const addEntry = (key) => {
-            if (visited.has(key)) return;
-            visited.add(key);
-            const entry = manifest[key];
-            if (!entry) return;
-
-            if (entry.file) {
-              assets.add(new URL(entry.file, scopeUrl).toString());
-            }
-
-            if (Array.isArray(entry.css)) {
-              entry.css.forEach(file => assets.add(new URL(file, scopeUrl).toString()));
-            }
-
-            if (Array.isArray(entry.assets)) {
-              entry.assets.forEach(file => assets.add(new URL(file, scopeUrl).toString()));
-            }
-
-            if (Array.isArray(entry.imports)) {
-              entry.imports.forEach(addEntry);
-            }
-          };
-
-          Object.keys(manifest).forEach(addEntry);
-
-          const derivedHash = extractHashFromAssets(assets);
-          if (derivedHash) {
-            currentCacheName = `cmatrix-${derivedHash}`;
-          }
-
-          break;
-        } catch (error) {
-          console.warn(`Failed to load Vite manifest for precache from ${candidateUrl}`, error);
-        }
-      }
-
-      if (!manifestUrl) {
-        console.warn('Unable to locate a Vite manifest for precache.');
-      }
-
-      return { cacheName: currentCacheName, urls: Array.from(assets) };
-    })();
-  }
-
-  return manifestPromise;
-}
-
-loadManifestAssets().catch(() => {});
 
 const cacheFirst = async (request) => {
   const cache = await caches.open(currentCacheName);
@@ -138,19 +56,11 @@ const isVersionedAsset = (url) => {
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
-    const { cacheName, urls } = await loadManifestAssets();
-    const cache = await caches.open(cacheName);
-    const coreResults = await Promise.allSettled(PRECACHE_URLS.map((url) => cache.add(url)));
-    coreResults.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        console.warn(`Failed to precache asset: ${PRECACHE_URLS[index]}`, result.reason);
-      }
-    });
-    const validUrls = urls.filter(Boolean);
-    const results = await Promise.allSettled(validUrls.map((url) => cache.add(url)));
+    const cache = await caches.open(currentCacheName);
+    const results = await Promise.allSettled(PRECACHE_URLS.map((url) => cache.add(url)));
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
-        console.warn(`Failed to precache asset: ${validUrls[index]}`, result.reason);
+        console.warn(`Failed to precache asset: ${PRECACHE_URLS[index]}`, result.reason);
       }
     });
     self.skipWaiting();
@@ -159,9 +69,8 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
-    const { cacheName } = await loadManifestAssets();
     const keys = await caches.keys();
-    await Promise.all(keys.filter(key => key !== cacheName).map(key => caches.delete(key)));
+    await Promise.all(keys.filter((key) => key !== currentCacheName).map((key) => caches.delete(key)));
     await self.clients.claim();
   })());
 });
@@ -171,8 +80,6 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   event.respondWith((async () => {
-    await loadManifestAssets().catch(() => {});
-
     const acceptHeader = request.headers.get('Accept') || '';
     const url = new URL(request.url);
 
