@@ -12,7 +12,7 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
 import './styles.css';
 import './import-employees.js';
 import './onboarding.js';
-import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup, putEmployeeRecord } from './db.js';
+import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup, putEmployeeRecord, getDexie, openDatabase } from './db.js';
 
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
@@ -1438,6 +1438,18 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         backupPayload:null,
         backupSummary:null,
         backupValidationErrors:[],
+        importDiagnosticsPanelOpen:false,
+        importDiagnosticsLoading:false,
+        importDiagnostics:{
+          indexedDbStatus:'Not checked',
+          dexieVersion:'Unknown',
+          storeCounts:[],
+          lastImportTime:null,
+          lastImportResult:'',
+          lastImportStatus:'idle',
+          lastImportDetails:null,
+          logs:[],
+        },
         // Admin panel state
         showAddEmployeeModal:false, showAddRequirementModal:false,
         showEditEmployeeModal:false, showEditRequirementModal:false,
@@ -2756,6 +2768,202 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           });
         },
 
+        recordImportLog(message, level = 'info', meta = null){
+          const logs = Array.isArray(this.importDiagnostics.logs) ? [...this.importDiagnostics.logs] : [];
+          const timestamp = new Date().toISOString();
+          let text;
+          if (typeof message === 'string') {
+            text = message;
+          } else {
+            try {
+              text = JSON.stringify(message);
+            } catch (_) {
+              text = String(message ?? '');
+            }
+          }
+          logs.push({ timestamp, level: level || 'info', message: text, meta: meta ?? null });
+          const maxLogs = 200;
+          const trimmed = logs.slice(Math.max(0, logs.length - maxLogs));
+          this.importDiagnostics = { ...this.importDiagnostics, logs: trimmed };
+        },
+
+        formatImportTimestamp(value){
+          if(!value){
+            return 'Never';
+          }
+          try {
+            const date = new Date(value);
+            if(Number.isNaN(date.getTime())){
+              return String(value);
+            }
+            return date.toLocaleString();
+          } catch (_) {
+            return String(value);
+          }
+        },
+
+        formatImportTime(value){
+          if(!value){
+            return '—';
+          }
+          try {
+            const date = new Date(value);
+            if(Number.isNaN(date.getTime())){
+              return String(value);
+            }
+            return date.toLocaleTimeString();
+          } catch (_) {
+            return String(value);
+          }
+        },
+
+        formatImportLogEntry(entry){
+          if(!entry){
+            return '';
+          }
+          const timestamp = this.formatImportTime(entry.timestamp);
+          const level = (entry.level || 'info').toUpperCase();
+          const message = entry.message || '';
+          return `[${timestamp}] ${level}: ${message}`;
+        },
+
+        recentImportLogs(){
+          const logs = Array.isArray(this.importDiagnostics.logs) ? this.importDiagnostics.logs : [];
+          return logs.slice(-10).reverse();
+        },
+
+        captureImportOutcome({ status = 'success', summary = '', details = null, logMessage = null, level = null } = {}){
+          const timestamp = new Date().toISOString();
+          const normalizedStatus = status || 'success';
+          const nextState = {
+            ...this.importDiagnostics,
+            lastImportTime: timestamp,
+            lastImportStatus: normalizedStatus,
+            lastImportResult: summary || '',
+            lastImportDetails: details ?? null
+          };
+          this.importDiagnostics = nextState;
+          const logLevel = level || (normalizedStatus === 'error' ? 'error' : 'info');
+          const message = logMessage || summary || (normalizedStatus === 'error' ? 'Import failed' : 'Import completed');
+          this.recordImportLog(message, logLevel, details ?? null);
+        },
+
+        toggleImportDiagnosticsPanel(){
+          this.importDiagnosticsPanelOpen = !this.importDiagnosticsPanelOpen;
+          if(this.importDiagnosticsPanelOpen){
+            this.refreshImportDiagnostics();
+          }
+        },
+
+        async refreshImportDiagnostics(){
+          if(this.importDiagnosticsLoading){
+            return;
+          }
+          this.importDiagnosticsLoading = true;
+          const nextState = { ...this.importDiagnostics, storeCounts: [] };
+          const logQueue = [];
+
+          try {
+            await ensureDexieLoaded();
+            const DexieCtor = getDexie();
+            if(DexieCtor && typeof DexieCtor.semVer === 'string' && DexieCtor.semVer){
+              nextState.dexieVersion = DexieCtor.semVer;
+            } else if (DexieCtor && typeof DexieCtor.version === 'string' && DexieCtor.version) {
+              nextState.dexieVersion = DexieCtor.version;
+            } else {
+              nextState.dexieVersion = 'Unknown';
+            }
+          } catch (dexieError) {
+            nextState.dexieVersion = 'Unavailable';
+            logQueue.push({ message: `Dexie load failed: ${dexieError?.message || dexieError}`, level: 'error' });
+          }
+
+          let db = this.db;
+          let closeWhenDone = false;
+          try {
+            if(!db){
+              db = await openDatabase();
+              closeWhenDone = true;
+            } else if(!db.isOpen()) {
+              await db.open();
+            }
+
+            if(db){
+              nextState.indexedDbStatus = db.isOpen() ? 'Open' : 'Closed';
+              if(Array.isArray(db.tables)){
+                const counts = [];
+                for(const table of db.tables){
+                  if(!table || !table.name){
+                    continue;
+                  }
+                  try {
+                    const count = await table.count();
+                    counts.push({ name: table.name, count, error: '' });
+                  } catch (countError) {
+                    counts.push({ name: table.name, count: null, error: countError?.message || String(countError) });
+                  }
+                }
+                counts.sort((a, b) => a.name.localeCompare(b.name));
+                nextState.storeCounts = counts;
+              }
+            } else {
+              nextState.indexedDbStatus = 'Unavailable';
+            }
+          } catch (dbError) {
+            nextState.indexedDbStatus = `Error: ${dbError?.message || dbError}`;
+            nextState.storeCounts = [];
+            logQueue.push({ message: `IndexedDB check failed: ${dbError?.message || dbError}`, level: 'error' });
+          } finally {
+            if(closeWhenDone && db){
+              try {
+                db.close();
+              } catch (_) {
+                // Ignore close errors
+              }
+            }
+            nextState.logs = Array.isArray(this.importDiagnostics.logs) ? [...this.importDiagnostics.logs] : [];
+            this.importDiagnostics = nextState;
+            this.importDiagnosticsLoading = false;
+            if(logQueue.length){
+              for(const entry of logQueue){
+                if(entry && entry.message){
+                  this.recordImportLog(entry.message, entry.level || 'info');
+                }
+              }
+            }
+          }
+        },
+
+        async copyImportLogs(){
+          const logs = Array.isArray(this.importDiagnostics.logs) ? this.importDiagnostics.logs : [];
+          if(!logs.length){
+            this.notify('No import logs available to copy.', 'var(--warn)');
+            return;
+          }
+          const text = logs.map(entry => this.formatImportLogEntry(entry)).join('\n');
+          try {
+            if(typeof navigator !== 'undefined' && navigator?.clipboard?.writeText){
+              await navigator.clipboard.writeText(text);
+            } else {
+              const textarea = document.createElement('textarea');
+              textarea.value = text;
+              textarea.setAttribute('readonly', '');
+              textarea.style.position = 'fixed';
+              textarea.style.opacity = '0';
+              document.body.appendChild(textarea);
+              textarea.select();
+              document.execCommand('copy');
+              document.body.removeChild(textarea);
+            }
+            this.notify('Import logs copied to clipboard.');
+            this.recordImportLog('Import logs copied to clipboard.');
+          } catch (error) {
+            console.error('Failed to copy import logs', error);
+            this.notify('Failed to copy import logs. See console for details.', 'var(--danger)');
+            this.recordImportLog(`Failed to copy import logs: ${error?.message || error}`, 'error');
+          }
+        },
+
         // ---------- Import ----------
         async handleFileUpload(event){
           this.importError=''; this.importWarning=''; this.importData=[]; this.importHeaders=[]; this.importSheets=[]; this.importSheetName=''; this.previewEligible=0; this.dryRunDetails=[]; this.importProgress=0; this.importErrors=[];
@@ -2770,14 +2978,19 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.duplicateHeaderWarningDismissed = false;
           this.duplicateHeaderSignature = '';
           this.importLoading=true;
+          this.recordImportLog('Import session initialized.');
           const file = event.target.files?.[0];
-          if(!file) { this.importLoading=false; return; }
+          if(!file) { this.importLoading=false; this.recordImportLog('Import cancelled: no file selected.', 'warn'); return; }
+
+          const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+          this.recordImportLog(`File selected: ${file.name} (${sizeMb} MB) [mode: ${this.importMode}]`);
 
           // File validation
           const maxSize = 10 * 1024 * 1024; // 10MB
           if (file.size > maxSize) {
             this.importError = 'File size exceeds 10MB limit. Please choose a smaller file.';
             this.importLoading = false;
+            this.recordImportLog(`File rejected: ${file.name} exceeds 10MB limit.`, 'warn');
             return;
           }
 
@@ -2787,12 +3000,15 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             if (fileExtension !== '.json') {
               this.importError = 'Backups must be uploaded as JSON (.json).';
               this.importLoading = false;
+              this.recordImportLog('Backup import failed: file must be JSON.', 'warn');
               return;
             }
             try {
+              this.recordImportLog(`Loading backup file: ${file.name}`);
               await this.loadBackupFromFile(file);
             } finally {
               this.importLoading = false;
+              this.recordImportLog('Backup file processed.');
             }
             return;
           }
@@ -2801,6 +3017,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           if (!allowedTypes.includes(fileExtension)) {
             this.importError = 'Invalid file type. Please upload a CSV or Excel file (.csv, .xlsx, .xls).';
             this.importLoading = false;
+            this.recordImportLog(`File rejected: unsupported type ${fileExtension}`, 'warn');
             return;
           }
 
@@ -2815,6 +3032,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             if (typeof Papa === 'undefined') {
               this.importError = 'CSV parsing library is unavailable. Check your internet connection and try again.';
               this.importLoading = false;
+              this.recordImportLog('CSV parsing library unavailable.', 'error');
               return;
             }
             const text = await file.text();
@@ -2827,6 +3045,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               console.error('Failed to parse CSV file', parseError);
               this.importError = 'We could not read the CSV file. Ensure it is properly formatted and try again.';
               this.importLoading = false;
+              this.recordImportLog(`CSV parse failed for ${file.name}: ${parseError?.message || parseError}`, 'error');
               return;
             }
             this.importData = res.data; this.importHeaders = res.meta.fields || [];
@@ -2847,6 +3066,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             await this.validateImportData();
             if (!this.importHeaders.length) this.importError = 'No headers detected — check the CSV file.';
             this.importLoading = false;
+            this.recordImportLog(`CSV loaded: ${file.name} (${this.importData.length} rows, ${this.importHeaders.length} headers)`);
           } else {
             let xlsx;
             try {
@@ -2855,6 +3075,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               console.error('Failed to load XLSX library:', loaderError);
               this.importError = 'XLSX still unavailable. Please check your connection and try again.';
               this.importLoading = false;
+              this.recordImportLog(`Failed to load XLSX library: ${loaderError?.message || loaderError}`, 'error');
               return;
             }
             const reader = new FileReader();
@@ -2895,14 +3116,17 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
                   this.importError = 'No data rows found in the selected worksheet.';
                 }
                 this.importLoading = false;
+                this.recordImportLog(`Excel loaded: ${file.name} • Sheet ${this.importSheetName} (${this.importData.length} rows, ${this.importHeaders.length} headers)`);
               }catch(err){
                 console.error('Excel processing error:', err);
                 this.importError = `Failed to read Excel file: ${err.message || 'Unknown error'}. Ensure it is .xlsx or .xls format and not password protected.`;
                 this.importLoading = false;
+                this.recordImportLog(`Excel processing error for ${file.name}: ${err?.message || err}`, 'error');
               }
             };
             reader.onerror = () => {
               this.importError = 'Failed to read the file. Please try again.';
+              this.recordImportLog(`File read failed for ${file.name}.`, 'error');
               this.importLoading = false;
             };
             reader.readAsArrayBuffer(file);
@@ -2927,16 +3151,19 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           } catch (loaderError) {
             console.error('Failed to load XLSX library:', loaderError);
             this.importError = 'XLSX still unavailable. Please check your connection and try again.';
+            this.recordImportLog(`Failed to load XLSX library while switching sheet: ${loaderError?.message || loaderError}`, 'error');
             return;
           }
           const reader = new FileReader();
           reader.onload = async (e) => {
             try {
+              this.recordImportLog(`Switching Excel sheet to ${name}`);
               const data = new Uint8Array(e.target.result);
               const wb = xlsx.read(data, { type:'array', cellDates: true, cellNF: false, cellText: false });
 
               if (!wb.Sheets[name]) {
                 this.importError = `Worksheet "${name}" not found in the file.`;
+                this.recordImportLog(`Worksheet ${name} not found in workbook.`, 'warn');
                 return;
               }
 
@@ -2951,16 +3178,22 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
               if (!this.importHeaders.length) {
                 this.importError = `No headers detected in worksheet "${name}".`;
+                this.recordImportLog(`No headers detected when switching to sheet ${name}.`, 'warn');
               } else if (this.importData.length === 0) {
                 this.importError = `No data rows found in worksheet "${name}".`;
+                this.recordImportLog(`No data rows found when switching to sheet ${name}.`, 'warn');
+              } else {
+                this.recordImportLog(`Excel sheet "${name}" loaded (${this.importData.length} rows, ${this.importHeaders.length} headers).`);
               }
             } catch (err) {
               console.error('Error selecting Excel sheet:', err);
               this.importError = `Failed to process worksheet "${name}": ${err.message || 'Unknown error'}`;
+              this.recordImportLog(`Failed to process worksheet ${name}: ${err?.message || err}`, 'error');
             }
           };
           reader.onerror = () => {
             this.importError = 'Failed to read the file. Please try again.';
+            this.recordImportLog('Failed to read file while switching sheets.', 'error');
           };
           reader.readAsArrayBuffer(file);
         },
@@ -2979,12 +3212,16 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
         },
         downloadImportErrors(){
-          if(!this.importErrors.length) return;
+          if(!this.importErrors.length){
+            this.recordImportLog('Download import errors requested, but there are no errors.', 'warn');
+            return;
+          }
           const rows = [['Row','Error'], ...this.importErrors.map(e=>[e.row, e.message])];
           const newline = '\n';
           const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join(newline);
           const blob = new Blob([csv], {type:'text/csv'});
           this.downloadBlob(blob, 'import-errors.csv');
+          this.recordImportLog('Import errors downloaded.');
         },
         stripTitleLines(lines){
           let bestIdx=0, bestScore=-1;
@@ -3468,38 +3705,78 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
           this.dryRunSummary = { added, updated, skipped };
           this.dryRunDetails = details;
+          this.recordImportLog(`Dry run completed: ${added} added, ${updated} updated, ${skipped} skipped.`);
         },
 
         async processImport(){
           this.importError='';
+          this.recordImportLog(`Process import triggered (mode: ${this.importMode})`);
           if (this.importMode === 'backup'){
             const summary = await this.restoreBackup();
             if(!summary) return;
+            this.recordImportLog('Backup restore completed successfully.');
             this.showImportModal=false;
             Alpine.store('app').showImportModal = false;
             await this.loadData();
             return;
           }
-          if (!this.importData.length || !this.importHeaders.length){ this.importError='Nothing to import'; return; }
+          if (!this.importData.length || !this.importHeaders.length){ this.importError='Nothing to import'; this.recordImportLog('Import aborted: no data or headers available.', 'warn'); return; }
           if (this.importMode==='employees'){
             if (!(this.columnMap.firstName || this.columnMap.lastName || this.columnMap.payrollName)){
-              this.importError='Map at least First/Last or Payroll Name before importing.'; return;
+              this.importError='Map at least First/Last or Payroll Name before importing.'; this.recordImportLog('Import aborted: required name mappings missing.', 'warn'); return;
             }
+            this.recordImportLog(`Starting employees import (${this.importData.length} rows).`);
             const res = await this.importEmployees();
             if(!res) return;
             this.showImportModal=false;
             Alpine.store('app').showImportModal = false;
             await this.loadData();
             this.notify(`Employees: ${res.added} added, ${res.updated} updated • Total now: ${this.employees.length}`);
+            this.captureImportOutcome({
+              status: 'success',
+              summary: `Employees import: ${res.added} added, ${res.updated} updated, ${res.skipped} skipped`,
+              details: {
+                mode: 'employees',
+                added: res.added,
+                updated: res.updated,
+                skipped: res.skipped,
+                attemptedRows: this.importData.length
+              },
+              logMessage: `Employees import completed (${res.added} added, ${res.updated} updated, ${res.skipped} skipped).`
+            });
+            try {
+              await this.refreshImportDiagnostics();
+            } catch (diagError) {
+              console.warn('Failed to refresh import diagnostics', diagError);
+              this.recordImportLog(`Import diagnostics refresh failed: ${diagError?.message || diagError}`, 'warn');
+            }
           } else {
             const hasAny = Object.values(this.completionMap).some(Boolean);
-            if (!hasAny){ this.importError='Select at least one requirement column on the right to import completions.'; return; }
+            if (!hasAny){ this.importError='Select at least one requirement column on the right to import completions.'; this.recordImportLog('Import aborted: no completion columns selected.', 'warn'); return; }
+            this.recordImportLog(`Starting completions import (${this.importData.length} rows).`);
             const cnt = await this.importCompletions();
             if(cnt === null) return;
             this.showImportModal=false;
             Alpine.store('app').showImportModal = false;
             await this.loadData();
             this.notify(`Completions updated: ${cnt}`);
+            this.captureImportOutcome({
+              status: 'success',
+              summary: `Completions import: ${cnt} updates applied`,
+              details: {
+                mode: 'completions',
+                updates: cnt,
+                selectedRequirements: Object.values(this.completionMap).filter(Boolean).length,
+                attemptedRows: this.importData.length
+              },
+              logMessage: `Completions import completed (${cnt} updates).`
+            });
+            try {
+              await this.refreshImportDiagnostics();
+            } catch (diagError) {
+              console.warn('Failed to refresh import diagnostics', diagError);
+              this.recordImportLog(`Import diagnostics refresh failed: ${diagError?.message || diagError}`, 'warn');
+            }
           }
         },
 
@@ -3572,6 +3849,17 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               console.error('Failed to show import error toast', toastError);
               this.notify(toastMessage, 'var(--danger)');
             }
+            this.captureImportOutcome({
+              status: 'error',
+              summary: `Employees import failed during ${stageLabel}`,
+              details: {
+                mode: 'employees',
+                stage,
+                error: messageText
+              },
+              logMessage: `Employees import failed during ${stageLabel}: ${messageText}`,
+              level: 'error'
+            });
             return null;
           }
         },
@@ -3623,6 +3911,17 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }catch(error){
             console.error('Failed to import completions', error);
             this.notify('Failed to import completions', 'var(--danger)');
+            const message = error && error.message ? String(error.message) : String(error ?? 'Unknown error');
+            this.captureImportOutcome({
+              status: 'error',
+              summary: 'Completions import failed',
+              details: {
+                mode: 'completions',
+                error: message
+              },
+              logMessage: `Completions import failed: ${message}`,
+              level: 'error'
+            });
             return null;
           }
         },
