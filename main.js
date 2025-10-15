@@ -1675,7 +1675,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           });
 
           if ('serviceWorker' in navigator) {
-            const swUrl = `/sw.js?build=${BUILD_HASH}`;
+            const swUrl = `sw.js?build=${BUILD_HASH}`;
 
             const registerServiceWorker = async () => {
               const needsClassicFallback = (error) => {
