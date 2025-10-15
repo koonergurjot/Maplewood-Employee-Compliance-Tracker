@@ -360,6 +360,115 @@ function createModalA11y(getter, setter){
   };
 }
 
+function parsePath(path){
+  if(Array.isArray(path)){
+    return path.filter(segment => typeof segment === 'string' && segment.length);
+  }
+  if(typeof path === 'string'){
+    return path.split('.').map(segment => segment.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function getNestedValue(target, path){
+  if(!target){
+    return undefined;
+  }
+  return path.reduce((current, segment) => {
+    if(current && typeof current === 'object' && segment in current){
+      return current[segment];
+    }
+    return undefined;
+  }, target);
+}
+
+function setNestedValue(target, path, value){
+  if(!target || !path.length){
+    return;
+  }
+  let current = target;
+  for(let index = 0; index < path.length - 1; index += 1){
+    const segment = path[index];
+    if(typeof current[segment] !== 'object' || current[segment] === null){
+      current[segment] = {};
+    }
+    current = current[segment];
+  }
+  current[path[path.length - 1]] = value;
+}
+
+function modalStateBinding(stateKey){
+  if(typeof stateKey !== 'string' || !stateKey.length){
+    return createModalA11y(() => false);
+  }
+  return createModalA11y(stateKey);
+}
+
+function modalStoreBinding(storeName, statePath, closeMethodName){
+  const path = parsePath(statePath);
+  function resolveStore(){
+    if(typeof storeName !== 'string' || !storeName.length){
+      return null;
+    }
+    try {
+      return Alpine.store(storeName) || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  return createModalA11y(
+    function(){
+      const store = resolveStore();
+      if(!store){
+        return false;
+      }
+      if(!path.length){
+        return false;
+      }
+      return Boolean(getNestedValue(store, path));
+    },
+    function(value){
+      const store = resolveStore();
+      if(!store){
+        return;
+      }
+      const normalized = Boolean(value);
+      if(normalized){
+        if(path.length){
+          setNestedValue(store, path, true);
+        }
+        return;
+      }
+      if(typeof closeMethodName === 'string' && closeMethodName.length && typeof store[closeMethodName] === 'function'){
+        store[closeMethodName]();
+        return;
+      }
+      if(path.length){
+        setNestedValue(store, path, false);
+      }
+    }
+  );
+}
+
+function mappingPanel(){
+  return {
+    mappingValidated: false,
+    markValidated(){
+      this.mappingValidated = true;
+      if(this?.$root && typeof this.$root.updateMissingRequiredColumns === 'function'){
+        this.$root.updateMissingRequiredColumns();
+      }
+    },
+    handleFieldChange(){
+      this.mappingValidated = false;
+      if(this?.$root && typeof this.$root.updateEligibilityPreview === 'function'){
+        this.$root.updateEligibilityPreview();
+      }
+    }
+  };
+}
+
 if(typeof window !== 'undefined'){
   window.modalA11y = function(getter, setter){
     return createModalA11y(getter, setter);
@@ -461,6 +570,59 @@ Alpine.store('app', {
       this._toastTimer = null;
     }
     this.toast = null;
+  },
+  hasToastAction(){
+    const toast = this.toast;
+    if(!toast || !toast.action){
+      return false;
+    }
+    return typeof toast.action.handler === 'function';
+  },
+  toastActionLabel(){
+    const toast = this.toast;
+    if(!toast || !toast.action){
+      return 'Undo';
+    }
+    const label = toast.action.label;
+    if(typeof label === 'string' && label.trim().length){
+      return label;
+    }
+    return 'Undo';
+  },
+  isProgressToast(){
+    const toast = this.toast;
+    return Boolean(toast && toast.type === 'progress');
+  },
+  toastProgressPercent(){
+    const toast = this.toast;
+    if(!toast){
+      return 0;
+    }
+    const value = typeof toast.percent === 'number' && Number.isFinite(toast.percent)
+      ? toast.percent
+      : 0;
+    const clamped = Math.max(0, Math.min(100, Math.round(value)));
+    return clamped;
+  },
+  async runToastAction(){
+    const toast = this.toast;
+    if(!toast || !toast.action || typeof toast.action.handler !== 'function'){
+      return;
+    }
+    const action = toast.action;
+    try {
+      await action.handler();
+    } catch (error) {
+      console.error('Toast action failed', error);
+    } finally {
+      if(action.dismiss !== false){
+        if(typeof this.hideToast === 'function'){
+          this.hideToast();
+        } else {
+          this.toast = null;
+        }
+      }
+    }
   },
   setProgress(p){
     if(this._toastTimer){
@@ -760,6 +922,25 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               })
             });
           }
+
+          this.$watch(() => {
+            if(!this?.$root){
+              return false;
+            }
+            return Boolean(this.$root.showAddEmployeeModal);
+          }, value => {
+            if(value){
+              this.show();
+            } else if(this.open){
+              this.hide();
+            }
+          });
+
+          this.$watch('open', value => {
+            if(!value && this?.$root){
+              this.$root.showAddEmployeeModal = false;
+            }
+          });
 
           this.$watch('open', value => {
             if(!value){
@@ -4687,6 +4868,9 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
       });
 
+    Alpine.data('modalStateBinding', modalStateBinding);
+    Alpine.data('modalStoreBinding', modalStoreBinding);
+    Alpine.data('mappingPanel', mappingPanel);
     Alpine.data('activityTimeline', activityTimeline);
     Alpine.data('addEmployeeModal', addEmployeeModal);
     Alpine.data('app', app);
