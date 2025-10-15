@@ -320,6 +320,47 @@ function createAppReadyState(){
 
 const appState = createAppReadyState();
 
+function resolveComponentData(element){
+  if(!element){
+    return null;
+  }
+
+  if(typeof Alpine !== 'undefined' && typeof Alpine.$data === 'function'){
+    try {
+      return Alpine.$data(element) || null;
+    } catch (error) {
+      // Fall through to the manual resolution below.
+    }
+  }
+
+  if(element.__x && element.__x.$data){
+    return element.__x.$data;
+  }
+
+  if(Array.isArray(element._x_dataStack) && element._x_dataStack.length){
+    return element._x_dataStack[element._x_dataStack.length - 1] || null;
+  }
+
+  return null;
+}
+
+function resolveParentComponentData(context){
+  if(!context || !context.$el){
+    return null;
+  }
+
+  let parent = context.$el.parentElement;
+  while(parent){
+    const data = resolveComponentData(parent);
+    if(data){
+      return data;
+    }
+    parent = parent.parentElement;
+  }
+
+  return null;
+}
+
 function createModalA11y(getter, setter){
   return {
     focusTrapCleanup: null,
@@ -329,8 +370,11 @@ function createModalA11y(getter, setter){
         if(typeof getter === 'function'){
           return Boolean(getter.call(this));
         }
-        if(typeof getter === 'string' && this?.$root){
-          return Boolean(this.$root[getter]);
+        if(typeof getter === 'string'){
+          const parentData = resolveParentComponentData(this);
+          if(parentData && getter in parentData){
+            return Boolean(parentData[getter]);
+          }
         }
       } catch (error) {
         return false;
@@ -341,8 +385,11 @@ function createModalA11y(getter, setter){
       const next = typeof value === 'undefined' ? false : Boolean(value);
       if(typeof setter === 'function'){
         setter.call(this, next);
-      } else if(typeof getter === 'string' && this?.$root){
-        this.$root[getter] = next;
+      } else if(typeof getter === 'string'){
+        const parentData = resolveParentComponentData(this);
+        if(parentData && getter in parentData){
+          parentData[getter] = next;
+        }
       }
     },
     init(){
