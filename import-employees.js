@@ -247,8 +247,25 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     banner.textContent = `Missing required columns: ${label}. Please review the field mapping.`;
   }
 
-  function detectColumn(cols, { variants = [], preferredTokens = [], minScore = 80 } = {}){
+  function detectColumn(cols, options = {}){
     if (!Array.isArray(cols) || !cols.length) return null;
+
+    let config;
+    if (Array.isArray(options)){
+      config = { variants: options };
+    } else if (typeof options === 'string' && options){
+      config = { variants: [options] };
+    } else if (options && typeof options === 'object'){
+      config = options;
+    } else {
+      config = {};
+    }
+
+    const {
+      variants = [],
+      preferredTokens = [],
+      minScore = 80
+    } = config;
 
     const processed = cols.map((orig) => {
       const normalized = normalizeHeader(orig);
