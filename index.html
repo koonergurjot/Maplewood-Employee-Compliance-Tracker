@@ -1003,27 +1003,21 @@
           <div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <h3 id="add-emp-modal-title" class="text-lg font-semibold mb-4">Add Employee</h3>
             <div class="space-y-4">
-              <div>
-                <label for="add-emp-name" class="block text-sm font-medium mb-1">Name</label>
-                <input
-                  id="add-emp-name"
-                  type="text"
-                  x-model="name"
-                  x-ref="name"
-                  class="form-field w-full"
-                  placeholder="Enter full name"
-                />
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label for="add-emp-first" class="block text-sm font-medium mb-1">First Name</label>
+                  <input id="add-emp-first" type="text" x-model="firstName" x-ref="firstName" class="form-field w-full" placeholder="Enter first name" />
+                </div>
+                <div>
+                  <label for="add-emp-last" class="block text-sm font-medium mb-1">Last Name</label>
+                  <input id="add-emp-last" type="text" x-model="lastName" class="form-field w-full" placeholder="Enter last name" />
+                </div>
               </div>
+
               <div>
                 <div class="flex items-center justify-between text-sm font-medium mb-1">
                   <label for="add-emp-role">Role</label>
-                  <button
-                    type="button"
-                    class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
-                    style="border-color:var(--line); color:var(--accent);"
-                    @click="addNew('role')"
-                    aria-label="Add new role"
-                  >
+                  <button type="button" class="inline-flex items-center justify-center w-6 h-6 rounded-full border" style="border-color:var(--line); color:var(--accent);" @click="addNew('role')" aria-label="Add new role">
                     <i data-feather="plus" class="w-3.5 h-3.5"></i>
                   </button>
                 </div>
@@ -1034,16 +1028,11 @@
                   </template>
                 </select>
               </div>
+
               <div>
                 <div class="flex items-center justify-between text-sm font-medium mb-1">
                   <label for="add-emp-employment-type">Employment Type</label>
-                  <button
-                    type="button"
-                    class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
-                    style="border-color:var(--line); color:var(--accent);"
-                    @click="addNew('employmentType')"
-                    aria-label="Add new employment type"
-                  >
+                  <button type="button" class="inline-flex items-center justify-center w-6 h-6 rounded-full border" style="border-color:var(--line); color:var(--accent);" @click="addNew('employmentType')" aria-label="Add new employment type">
                     <i data-feather="plus" class="w-3.5 h-3.5"></i>
                   </button>
                 </div>
@@ -1054,16 +1043,11 @@
                   </template>
                 </select>
               </div>
+
               <div>
                 <div class="flex items-center justify-between text-sm font-medium mb-1">
                   <label for="add-emp-status">Status</label>
-                  <button
-                    type="button"
-                    class="inline-flex items-center justify-center w-6 h-6 rounded-full border"
-                    style="border-color:var(--line); color:var(--accent);"
-                    @click="addNew('status')"
-                    aria-label="Add new status"
-                  >
+                  <button type="button" class="inline-flex items-center justify-center w-6 h-6 rounded-full border" style="border-color:var(--line); color:var(--accent);" @click="addNew('status')" aria-label="Add new status">
                     <i data-feather="plus" class="w-3.5 h-3.5"></i>
                   </button>
                 </div>
@@ -1074,21 +1058,30 @@
                   </template>
                 </select>
               </div>
+
+              <!-- Optional extras you’ll likely want to track from day one -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label for="add-emp-id" class="block text-sm font-medium mb-1">Employee ID (optional)</label>
+                  <input id="add-emp-id" type="text" x-model="employeeId" class="form-field w-full" placeholder="e.g., 12345" />
+                </div>
+                <div>
+                  <label for="add-emp-seniority" class="block text-sm font-medium mb-1">Seniority Hours (optional)</label>
+                  <input id="add-emp-seniority" type="number" min="0" step="0.25" x-model="seniorityHours" class="form-field w-full" placeholder="e.g., 1500" />
+                </div>
+              </div>
             </div>
           </div>
-          <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button type="submit" class="w-full sm:w-auto px-4 py-2 btn btn-primary" :disabled="!valid() || saving">
-              <span x-show="!saving">Save</span>
-              <span x-show="saving">Saving...</span>
-            </button>
-            <button
-              type="button"
-              @click="close()"
-              class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn"
-            >
-              Cancel
-            </button>
+          <div class="bg-gray-50 dark:bg-gray-900 px-4 py-3 sm:px-6">
+            <div class="mt-5 sm:mt-6 sm:flex sm:flex-row-reverse sm:space-x-3 sm:space-x-reverse">
+              <button type="submit" class="w-full sm:w-auto px-4 py-2 btn-primary" :disabled="saving">
+                <span x-show="!saving">Save Employee</span>
+                <span x-show="saving">Saving...</span>
+              </button>
+              <button type="button" @click="close()" class="mt-3 sm:mt-0 sm:ml-3 w-full sm:w-auto px-4 py-2 btn">Cancel</button>
+            </div>
           </div>
+
         </form>
       </div>
     </div>
