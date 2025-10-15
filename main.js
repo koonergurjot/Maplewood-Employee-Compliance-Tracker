@@ -802,6 +802,21 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
     const TIMELINE_READY_MAX_RETRIES = 3;
     const TIMELINE_READY_RETRY_DELAY = 500;
     let timelineReadyGiveUpLogged = false;
+    const timelineReadyWaits = new Set();
+
+    function flushTimelineReadyWaits(){
+      if(!timelineReadyWaits.size){
+        return;
+      }
+
+      const waits = Array.from(timelineReadyWaits);
+      timelineReadyWaits.clear();
+      for(const wait of waits){
+        if(typeof wait.finish === 'function'){
+          wait.finish();
+        }
+      }
+    }
 
     async function waitForTimelineAppReady(root, maxAttempts = TIMELINE_READY_MAX_RETRIES){
       if(!root) return false;
@@ -813,7 +828,27 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         }
 
         if(attempt < attempts - 1){
-          await new Promise(resolve => setTimeout(resolve, TIMELINE_READY_RETRY_DELAY));
+          await new Promise(resolve => {
+            const wait = {
+              timerId: null,
+              finish(){
+                if(wait.timerId !== null){
+                  clearTimeout(wait.timerId);
+                  wait.timerId = null;
+                }
+                timelineReadyWaits.delete(wait);
+                resolve();
+              }
+            };
+
+            wait.timerId = setTimeout(() => {
+              wait.timerId = null;
+              timelineReadyWaits.delete(wait);
+              resolve();
+            }, TIMELINE_READY_RETRY_DELAY);
+
+            timelineReadyWaits.add(wait);
+          });
         }
       }
 
@@ -836,6 +871,9 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
 
           const ready = await waitForTimelineAppReady(this.$root);
           if(!ready){
+            if(this.$root){
+              this.$root.pendingTimelineRefresh = true;
+            }
             return;
           }
 
@@ -1314,6 +1352,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         showSettingsModal:false, settingsSortable:null,
         showActivityLogModal:false,
         appReady:false,
+        initialReadyDispatched:false,
         pendingTimelineRefresh:false,
         db:null, activityLog:null, employees:[], requirements:[], employeeRequirements:[], erMap:new Map(), visibleRequirements:[],
         templates:[], templateRoleMap:new Map(), showTemplateForm:false,
@@ -2034,14 +2073,28 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
 
         setAppReady(isReady){
-          this.appReady = Boolean(isReady);
+          const nextReady = Boolean(isReady);
+          const previous = this.appReady;
+          this.appReady = nextReady;
+
+          if(previous !== nextReady){
+            flushTimelineReadyWaits();
+          }
+
           if(this.appReady && this.db){
-            appState.markReady();
+            if(!this.initialReadyDispatched){
+              this.initialReadyDispatched = true;
+              appState.markReady();
+            }
+            timelineReadyGiveUpLogged = false;
           } else if(!this.appReady && this.loadError){
+            this.initialReadyDispatched = false;
             appState.fail(new Error(this.loadError));
           } else if(!this.appReady){
+            this.initialReadyDispatched = false;
             appState.markLoading();
           }
+
           if(this.appReady && this.pendingTimelineRefresh){
             this.pendingTimelineRefresh = false;
             this.$nextTick(() => {
