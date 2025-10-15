@@ -9,11 +9,15 @@ test('user can add an employee from the quick add modal', async ({ page }) => {
   await expect(addEmployeeButton).toBeEnabled({ timeout: 20000 });
   await addEmployeeButton.click();
 
-  const nameInput = page.locator('#add-emp-name');
-  await expect(nameInput).toBeVisible();
+  const firstNameInput = page.locator('#add-emp-first');
+  const lastNameInput = page.locator('#add-emp-last');
+  await expect(firstNameInput).toBeVisible();
+  await expect(lastNameInput).toBeVisible();
 
-  const employeeName = withTimestamp('Test Employee');
-  await nameInput.fill(employeeName);
+  const employeeFirstName = withTimestamp('Test First');
+  const employeeLastName = withTimestamp('Test Last');
+  await firstNameInput.fill(employeeFirstName);
+  await lastNameInput.fill(employeeLastName);
 
   const addLookupValue = async (trigger: string, value: string) => {
     const dialog = page.locator('#lookup-dialog');
@@ -42,6 +46,7 @@ test('user can add an employee from the quick add modal', async ({ page }) => {
 
   const newRow = page.locator('#employee-table tbody tr').filter({ hasText: newRole });
   await expect(newRow).toBeVisible();
-  await expect(newRow).toContainText(employeeName);
+  await expect(newRow).toContainText(employeeFirstName);
+  await expect(newRow).toContainText(employeeLastName);
   await expect(newRow).toContainText(newStatus);
 });
