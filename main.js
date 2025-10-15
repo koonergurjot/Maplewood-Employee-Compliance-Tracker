@@ -19,7 +19,6 @@ const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
 const THEME_STORAGE_KEY = 'maplewood:theme';
 const COLUMN_VISIBILITY_STORAGE_KEY = 'maplewood:employeeTable:visibleColumns';
-const FILTER_VIEWS_STORAGE_KEY = 'maplewood:employeeFilters:savedViews';
 const DEFAULT_VISIBLE_COLUMNS = Object.freeze({
   role: true,
   employmentType: true,
@@ -429,6 +428,9 @@ Alpine.store('app', {
   showLookupModal: null,
   toast: null,
   _toastTimer: null,
+  storageKeys: Object.freeze({
+    filterViews: 'maplewood:employeeFilters:savedViews'
+  }),
   showToast(msg){
     if(this._toastTimer){
       clearTimeout(this._toastTimer);
@@ -3755,8 +3757,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           if(typeof window === 'undefined' || !window.localStorage){
             return;
           }
+          const storageKey = this.storageKeys?.filterViews;
+          if(!storageKey){
+            return;
+          }
           try {
-            const raw = window.localStorage.getItem(FILTER_VIEWS_STORAGE_KEY);
+            const raw = window.localStorage.getItem(storageKey);
             if(!raw){
               return;
             }
@@ -3784,8 +3790,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           if(typeof window === 'undefined' || !window.localStorage){
             return;
           }
+          const storageKey = this.storageKeys?.filterViews;
+          if(!storageKey){
+            return;
+          }
           try {
-            window.localStorage.setItem(FILTER_VIEWS_STORAGE_KEY, JSON.stringify(this.savedViews));
+            window.localStorage.setItem(storageKey, JSON.stringify(this.savedViews));
           } catch (error) {
             console.warn('Failed to persist saved views', error);
           }

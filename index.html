@@ -240,7 +240,7 @@
                 class="search-results-panel"
                 @click.outside="dismissSearchResults()"
               >
-                <template x-for="result in searchResults" :key="`${result.item.id}-${result.item.type}`">
+                <template x-for="result in searchResults" :key="result.item.id + '-' + result.item.type">
                   <button
                     type="button"
                     class="search-result-item"
@@ -299,11 +299,11 @@
                 Show Columns
               </p>
               <template x-for="option in columnOptions" :key="option.key">
-                <label :for="`column-toggle-${option.key}`">
+                <label :for="'column-toggle-' + option.key">
                   <input
                     type="checkbox"
                     class="checkbox"
-                    :id="`column-toggle-${option.key}`"
+                    :id="'column-toggle-' + option.key"
                     x-bind:checked="$store.app.isColumnVisible(option.key)"
                     x-bind:aria-checked="$store.app.isColumnVisible(option.key)"
                     @change="$store.app.setColumnVisibility(option.key, $event.target.checked)"
@@ -501,14 +501,18 @@
                       <button
                         @click="editRequirement(req)"
                         class="opacity-50 hover:opacity-100 transition-opacity"
-                        :aria-label="`Edit requirement ${req.name}`"
+                        :aria-label="'Edit requirement ' + req.name"
                         :aria-expanded="showEditRequirementModal"
                         aria-controls="edit-requirement-modal"
                         aria-haspopup="dialog"
                       >
                         <i data-feather="edit-2" class="icon-sm"></i>
                       </button>
-                      <button @click="confirmDeleteRequirement(req)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Delete requirement ${req.name}`">
+                      <button
+                        @click="confirmDeleteRequirement(req)"
+                        class="opacity-50 hover:opacity-100 transition-opacity"
+                        :aria-label="'Delete requirement ' + req.name"
+                      >
                         <i data-feather="trash-2" class="w-3 h-3"></i>
                       </button>
                     </div>
@@ -519,7 +523,7 @@
           </thead>
           <tbody class="divide-y">
             <template x-if="!appReady && !loadError">
-              <template x-for="index in 6" :key="`loading-${index}`">
+              <template x-for="index in 6" :key="'loading-' + index">
                 <tr>
                   <td :colspan="visibleColumnCount()" class="px-6 py-4">
                     <div class="flex flex-wrap items-center gap-4">
@@ -580,7 +584,7 @@
                       <input
                         type="checkbox"
                         class="checkbox mt-1"
-                        :aria-label="`Select ${emp.firstName} ${emp.lastName}`"
+                        :aria-label="'Select ' + emp.firstName + ' ' + emp.lastName"
                         :checked="isEmployeeSelected(emp.id)"
                         @change="toggleEmployeeSelection(emp.id, $event.target.checked)"
                         @click.stop
@@ -595,14 +599,19 @@
                       <button
                         @click="editEmployee(emp)"
                         class="opacity-50 hover:opacity-100 transition-opacity"
-                        :aria-label="`Edit employee ${emp.firstName} ${emp.lastName}`"
+                        :aria-label="'Edit employee ' + emp.firstName + ' ' + emp.lastName"
                         :aria-expanded="showEditEmployeeModal"
                         aria-controls="edit-employee-modal"
                         aria-haspopup="dialog"
                       >
                         <i data-feather="edit-2" class="icon-sm"></i>
                       </button>
-                      <button @click="confirmDeleteEmployee(emp)" class="opacity-50 hover:opacity-100 transition-opacity" :aria-label="`Delete employee ${emp.firstName} ${emp.lastName}`" style="color:var(--danger)">
+                      <button
+                        @click="confirmDeleteEmployee(emp)"
+                        class="opacity-50 hover:opacity-100 transition-opacity"
+                        :aria-label="'Delete employee ' + emp.firstName + ' ' + emp.lastName"
+                        style="color:var(--danger)"
+                      >
                         <i data-feather="trash-2" class="icon-sm"></i>
                       </button>
                     </div>
@@ -614,7 +623,7 @@
                     x-model="emp.role"
                     @focus="trackInlineEdit(emp, 'role')"
                     @change="handleInlineEmployeeUpdate(emp, 'role', $event.target.value)"
-                    :aria-label="`Role for ${emp.firstName} ${emp.lastName}`"
+                    :aria-label="'Role for ' + emp.firstName + ' ' + emp.lastName"
                   >
                     <option value="">Select Role</option>
                     <template x-for="role in roleOptions" :key="role">
@@ -628,7 +637,7 @@
                     x-model="emp.employmentType"
                     @focus="trackInlineEdit(emp, 'employmentType')"
                     @change="handleInlineEmployeeUpdate(emp, 'employmentType', $event.target.value)"
-                    :aria-label="`Employment type for ${emp.firstName} ${emp.lastName}`"
+                    :aria-label="'Employment type for ' + emp.firstName + ' ' + emp.lastName"
                   >
                     <option value="">Select Employment Type</option>
                     <template x-for="type in employmentTypeOptions" :key="type">
@@ -644,7 +653,7 @@
                     x-model="emp.status"
                     @focus="trackInlineEdit(emp, 'status')"
                     @change="handleInlineEmployeeUpdate(emp, 'status', $event.target.value)"
-                    :aria-label="`Status for ${emp.firstName} ${emp.lastName}`"
+                    :aria-label="'Status for ' + emp.firstName + ' ' + emp.lastName"
                   >
                     <option value="">Select Status</option>
                     <template x-for="status in statusOptions" :key="status">
@@ -664,7 +673,7 @@
                         class="status-chip focus-ring"
                         @click="toggleStatus(emp, req)"
                         :title="getStatusTooltip(emp.id, req.id)"
-                        :aria-label="`${req.name} requirement for ${emp.firstName} ${emp.lastName}: ${getStatusTooltip(emp.id, req.id)}`"
+                        :aria-label="req.name + ' requirement for ' + emp.firstName + ' ' + emp.lastName + ': ' + getStatusTooltip(emp.id, req.id)"
                         x-text="{
                           compliant: '✔ Complete',
                           expiring: '⚠ Due Soon',
@@ -934,12 +943,12 @@
         <div class="flex flex-wrap items-center gap-2" x-show="activeFilterChips.length" x-transition>
           <template x-for="chip in activeFilterChips" :key="chip.key">
             <span class="badge" style="gap:0.35rem;">
-              <span x-text="`${chip.label}: ${chip.value}`"></span>
+              <span x-text="chip.label + ': ' + chip.value"></span>
               <button
                 type="button"
                 class="inline-flex items-center justify-center w-5 h-5 rounded-full focus-ring"
                 style="background:transparent;border:none;color:inherit;font-size:0.75rem;line-height:1;"
-                :aria-label="`Remove ${chip.label} filter`"
+                :aria-label="'Remove ' + chip.label + ' filter'"
                 @click="clearFilterChip(chip.key)"
               >
                 ×
@@ -1473,7 +1482,7 @@
                           <span x-text="template.roles.length ? template.roles.join(', ') : 'No roles assigned'"></span>
                         </div>
                         <div class="text-xs" style="color:var(--muted)">
-                          <span x-text="`Required: ${templateRequirementCount(template)} of ${requirements.length}`"></span>
+                          <span x-text="'Required: ' + templateRequirementCount(template) + ' of ' + requirements.length"></span>
                         </div>
                       </div>
                       <div class="flex flex-wrap gap-2 justify-end">
