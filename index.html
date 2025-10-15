@@ -2015,7 +2015,13 @@
     const btn=document.getElementById('btn-add-employee');
     const modal=document.getElementById('add-employee-modal');
     if(!btn||!modal) return;
-    const open=e=>{e&&e.preventDefault(); modal.classList.remove('hidden'); modal.setAttribute('aria-hidden','false');};
+    const open=e=>{
+      e&&e.preventDefault();
+      modal.removeAttribute('x-cloak');
+      modal.style.removeProperty('display');
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden','false');
+    };
     const close=()=>{modal.classList.add('hidden'); modal.setAttribute('aria-hidden','true');};
     btn.addEventListener('click', open);
     modal.addEventListener('click', e=>{ if(e.target===modal) close(); });
