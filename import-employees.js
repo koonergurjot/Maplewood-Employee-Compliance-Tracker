@@ -40,6 +40,75 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     }
   }
 
+  function formatImportStageLabel(stage){
+    switch((stage || '').toString().toLowerCase()){
+      case 'parse':
+        return 'Parse';
+      case 'write':
+        return 'Write';
+      case 'transform':
+      default:
+        return 'Transform';
+    }
+  }
+
+  function attachImportStage(error, stage){
+    const normalizedStage = (stage || '').toString().toLowerCase();
+    let target = error;
+    if(!(target instanceof Error)){
+      const message = typeof target === 'string' ? target : String(target ?? 'Unknown error');
+      target = new Error(message);
+    }
+    try {
+      target.importStage = normalizedStage;
+    } catch (_) {
+      // Ignore assignment failure – best effort only.
+    }
+    return target;
+  }
+
+  function extractErrorMessage(error){
+    if(!error){
+      return 'Unknown error';
+    }
+    if(typeof error.message === 'string' && error.message.trim().length){
+      return error.message;
+    }
+    if(typeof error === 'string' && error.trim().length){
+      return error;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch (_) {
+      return String(error);
+    }
+  }
+
+  function reportImportFailure(stage, error){
+    const annotatedError = attachImportStage(error, stage);
+    const stageLabel = formatImportStageLabel(annotatedError.importStage);
+    const message = extractErrorMessage(annotatedError);
+    console.error(`Import failed during ${stageLabel.toLowerCase()}:`, annotatedError);
+    showToastMessage(
+      `Import failed during ${stageLabel}: ${message}. See console for details.`,
+      'error',
+      {
+        duration: 8000,
+        action: {
+          label: 'See details',
+          dismiss: false,
+          handler(){
+            console.log(`Import failure details (${stageLabel} stage):`, annotatedError);
+            if(annotatedError && annotatedError.stack){
+              console.error(annotatedError.stack);
+            }
+          }
+        }
+      }
+    );
+    return annotatedError;
+  }
+
   function toggleImportModal(open){
     const store = getAppStore();
     if (store){
@@ -987,7 +1056,25 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
   }
 
   async function importFromRows(rows, mapping, headers, options = {}){
-    if (!Array.isArray(rows) || rows.length === 0) throw new Error('No rows detected.');
+    let transformed;
+    try {
+      transformed = await transformRows(rows, mapping, headers);
+    } catch (error) {
+      throw attachImportStage(error, 'transform');
+    }
+
+    try {
+      const result = await writeTransformedRows(transformed, options);
+      return result;
+    } catch (error) {
+      throw attachImportStage(error, 'write');
+    }
+  }
+
+  async function transformRows(rows, mapping, headers){
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new Error('No rows detected.');
+    }
 
     const validation = validateMappingSelection(mapping, headers);
     if (!validation.valid){
@@ -1128,7 +1215,6 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
       }
     }
 
-    // Sort by seniority desc
     employees.sort((a,b)=>{
       const aa = normalizeSeniorityHours(a.seniorityHours);
       const bb = normalizeSeniorityHours(b.seniorityHours);
@@ -1136,9 +1222,18 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
       return (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||'');
     });
 
-    // Write to DB
     const newlyCreatedEmployees = employees.filter(emp => newEmployeeIds.has(emp.id));
 
+    return {
+      db,
+      employees,
+      newlyCreatedEmployees,
+      skippedRows,
+      timestamp
+    };
+  }
+
+  async function writeTransformedRows({ db, employees, newlyCreatedEmployees, skippedRows, timestamp }, options){
     const progressCallback = typeof options.onProgress === 'function' ? options.onProgress : null;
     const progressState = {
       processed: 0,
@@ -1227,6 +1322,7 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
         }
       }
     });
+
     return { importedCount: employees.length, skippedRows };
   }
 
@@ -1267,36 +1363,51 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     const store = getAppStore();
     const usingStoreProgress = Boolean(store && typeof store.setProgress === 'function' && typeof store.showToast === 'function');
     const progressReporter = usingStoreProgress ? null : (!isAlpineReady() ? createLegacyProgressReporter() : null);
-    let progressFinished = false;
-    try {
-      const { rows, headers } = await parseFile(file);
-      const defaultMapping = buildDefaultMapping(headers);
-      const mapping = await renderMappingModal(rows, headers, defaultMapping);
-      if (!mapping){
-        return;
-      }
-
-      updateMissingColumnsBanner([]);
-
-      const handleProgress = (percent) => {
-        if(usingStoreProgress){
-          store.setProgress(percent);
-        } else if(progressReporter && typeof progressReporter.update === 'function'){
-          progressReporter.update(percent);
-        }
-      };
-
-      if(usingStoreProgress){
-        store.setProgress(0);
-      } else if(progressReporter && typeof progressReporter.start === 'function'){
-        progressReporter.start();
-      }
-
-      const result = await importFromRows(rows, mapping, headers, { onProgress: handleProgress });
-      progressFinished = true;
+    const finalizeProgress = () => {
       if(progressReporter && typeof progressReporter.finish === 'function'){
         progressReporter.finish();
       }
+    };
+
+    let rows;
+    let headers;
+    try {
+      const parsed = await parseFile(file);
+      rows = parsed.rows;
+      headers = parsed.headers;
+    } catch (error) {
+      finalizeProgress();
+      reportImportFailure('parse', error);
+      input.value = '';
+      return;
+    }
+
+    const defaultMapping = buildDefaultMapping(headers);
+    const mapping = await renderMappingModal(rows, headers, defaultMapping);
+    if (!mapping){
+      input.value = '';
+      return;
+    }
+
+    updateMissingColumnsBanner([]);
+
+    const handleProgress = (percent) => {
+      if(usingStoreProgress){
+        store.setProgress(percent);
+      } else if(progressReporter && typeof progressReporter.update === 'function'){
+        progressReporter.update(percent);
+      }
+    };
+
+    if(usingStoreProgress){
+      store.setProgress(0);
+    } else if(progressReporter && typeof progressReporter.start === 'function'){
+      progressReporter.start();
+    }
+
+    try {
+      const result = await importFromRows(rows, mapping, headers, { onProgress: handleProgress });
+      finalizeProgress();
       const baseMessage = `Imported ${result.importedCount} employee${result.importedCount === 1 ? '' : 's'}.`;
       const skippedCount = result.skippedRows.length;
       let message = baseMessage;
@@ -1310,17 +1421,10 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
       showToastMessage(message, skippedCount ? 'info' : 'success');
       toggleImportModal(false);
     } catch (e) {
-      console.error('Import failed:', e);
-      progressFinished = true;
-      if(progressReporter && typeof progressReporter.finish === 'function'){
-        progressReporter.finish();
-      }
-      const failureMessage = `Import failed: ${e.message || e}`;
-      showToastMessage(failureMessage, 'error');
+      finalizeProgress();
+      const stage = e && typeof e === 'object' && e.importStage ? e.importStage : 'transform';
+      reportImportFailure(stage, e);
     } finally {
-      if (progressReporter && !progressFinished){
-        progressReporter.finish();
-      }
       input.value = '';
     }
   }
