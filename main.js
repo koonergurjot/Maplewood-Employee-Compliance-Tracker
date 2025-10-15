@@ -14,7 +14,7 @@ import './import-employees.js';
 import './onboarding.js';
 import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup, putEmployeeRecord } from './db.js';
 
-const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Recreation', 'Reception', 'Rehab Assistant', 'Other'];
+const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
 const THEME_STORAGE_KEY = 'maplewood:theme';
@@ -714,10 +714,13 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
       return {
         open: false,
         saving: false,
-        name: '',
+        firstName: '',
+        lastName: '',
         role: '',
         status: '',
         employmentType: '',
+        employeeId: '',
+        seniorityHours: '',
         roles: [],
         statuses: [],
         employmentTypes: [],
@@ -831,10 +834,13 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           return merged;
         },
         reset(){
-          this.name = '';
+          this.firstName = '';
+          this.lastName = '';
           this.role = '';
           this.status = '';
           this.employmentType = '';
+          this.employeeId = '';
+          this.seniorityHours = '';
         },
         show(){
           this.lastActiveElement = null;
@@ -853,7 +859,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               const container = this.$refs?.dialog || this.$el;
               this.deactivateFocusTrap();
               this.focusTrapCleanup = trapFocusWithin(container);
-              const input = this.$refs?.name;
+              const input = this.$refs?.firstName;
               if(input && typeof input.focus === 'function'){
                 try {
                   input.focus({ preventScroll: true });
@@ -924,7 +930,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           return this.close();
         },
         valid(){
-          const required = [this.name, this.role, this.status, this.employmentType];
+          const required = [this.firstName, this.lastName, this.role, this.status, this.employmentType];
           return required.every(value => typeof value === 'string' && value.trim().length > 0);
         },
         async ensureDb(){
@@ -1037,7 +1043,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               window.alert('Please fill out all required fields before saving.');
             }
 
-            const input = this.$refs?.name;
+            const input = this.$refs?.firstName;
             if(input && typeof input.focus === 'function'){
               input.focus();
             }
@@ -1049,9 +1055,15 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           try {
             const db = await this.ensureDb();
             const timestamp = new Date().toISOString();
+            const trimmedFirstName = typeof this.firstName === 'string' ? this.firstName.trim() : '';
+            const trimmedLastName = typeof this.lastName === 'string' ? this.lastName.trim() : '';
             const baseEmployee = {
               id: generateId(),
-              name: this.name.trim(),
+              firstName: trimmedFirstName,
+              lastName: trimmedLastName,
+              name: trimmedFirstName && trimmedLastName
+                ? `${trimmedFirstName} ${trimmedLastName}`
+                : (trimmedFirstName || trimmedLastName),
               role: this.role.trim(),
               employmentType: this.employmentType.trim(),
               status: this.status ? this.status.trim() : '',
@@ -1060,6 +1072,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               createdAt: timestamp,
               updatedAt: timestamp
             };
+            if(this.employeeId){
+              baseEmployee.employeeId = this.employeeId.trim();
+            }
+            if(this.seniorityHours){
+              baseEmployee.seniorityHours = Number(this.seniorityHours) || 0;
+            }
 
             const [roleValue, statusValue, employmentTypeValue] = await Promise.all([
               this.ensureLookupValue('role', baseEmployee.role),
