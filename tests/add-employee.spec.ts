@@ -5,7 +5,7 @@ const withTimestamp = (label: string) => `${label} ${Date.now()}`;
 test('user can add an employee from the quick add modal', async ({ page }) => {
   await page.goto('/');
 
-  const addEmployeeButton = page.locator('#add-employee-btn');
+  const addEmployeeButton = page.locator('#btn-add-employee');
   await expect(addEmployeeButton).toBeEnabled({ timeout: 20000 });
   await addEmployeeButton.click();
 
@@ -37,8 +37,8 @@ test('user can add an employee from the quick add modal', async ({ page }) => {
   await addLookupValue('button[aria-label="Add new status"]', newStatus);
   await expect(page.locator('#add-emp-status')).toHaveValue(newStatus);
 
-  await page.click('#add-emp-modal button[type="submit"]');
-  await expect(page.locator('#add-emp-modal')).toBeHidden();
+  await page.click('#add-employee-modal button[type="submit"]');
+  await expect(page.locator('#add-employee-modal')).toBeHidden();
 
   const newRow = page.locator('#employee-table tbody tr').filter({ hasText: newRole });
   await expect(newRow).toBeVisible();
