@@ -54,7 +54,7 @@ export async function ensureDexieLoaded() {
     }
     return DexieInstance;
   } catch (error) {
-    const loadError = new Error('Dexie failed to load');
+    const loadError = new Error('Dexie not bundled. Install dexie and rebuild (npm i dexie && npm run build).');
     loadError.cause = error;
     throw loadError;
   }
