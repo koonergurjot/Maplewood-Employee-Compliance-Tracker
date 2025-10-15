@@ -3426,8 +3426,37 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             }
             return { added, updated, skipped: skipped.length };
           }catch(error){
+            const stage = error && typeof error === 'object' && error.importStage ? error.importStage : 'write';
+            const stageLabel = stage === 'parse' ? 'Parse' : (stage === 'transform' ? 'Transform' : 'Write');
+            const messageText = error && error.message ? String(error.message) : String(error ?? 'Unknown error');
+            const toastMessage = `Import failed during ${stageLabel}: ${messageText}. See console for details.`;
             console.error('Failed to import employees', error);
-            this.notify('Failed to import employees', 'var(--danger)');
+            try {
+              const hasStore = typeof Alpine !== 'undefined' && typeof Alpine.store === 'function';
+              const store = hasStore ? Alpine.store('app') : null;
+              if(store && typeof store.showToast === 'function'){
+                store.showToast({
+                  type: 'error',
+                  message: toastMessage,
+                  duration: 8000,
+                  action: {
+                    label: 'See details',
+                    dismiss: false,
+                    handler(){
+                      console.log(`Import failure details (${stageLabel} stage):`, error);
+                      if(error && error.stack){
+                        console.error(error.stack);
+                      }
+                    }
+                  }
+                });
+              } else {
+                this.notify(toastMessage, 'var(--danger)');
+              }
+            } catch (toastError) {
+              console.error('Failed to show import error toast', toastError);
+              this.notify(toastMessage, 'var(--danger)');
+            }
             return null;
           }
         },
