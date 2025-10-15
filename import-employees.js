@@ -28,6 +28,13 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
 
   const SAMPLE_CSV_URL = '/sample-employees.csv';
 
+  const REQUIRED_DEXIE_STORES = Object.freeze([
+    'employees',
+    'requirements',
+    'employeeRequirements',
+    'roleRequirementProfiles'
+  ]);
+
   function showToastMessage(message, type = 'info', options = {}){
     const payload = typeof options === 'object' && options !== null ? { ...options } : {};
     payload.message = typeof message === 'string' ? message : String(message ?? '');
@@ -298,6 +305,66 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
   async function ensureDb(){
     await ensureDexieLoaded();
     return await createDatabase();
+  }
+
+  async function runImportEnvironmentPreflight(){
+    const issues = [];
+
+    try {
+      const DexieCtor = await ensureDexieLoaded();
+      if (!DexieCtor) {
+        issues.push('Dexie failed to load.');
+        return { ok: false, issues };
+      }
+      if (typeof DexieCtor !== 'function') {
+        issues.push('Dexie did not resolve to a constructor.');
+        return { ok: false, issues };
+      }
+    } catch (error) {
+      issues.push(`Dexie failed to load: ${error?.message || error}`);
+      return { ok: false, issues };
+    }
+
+    let db;
+    try {
+      db = await createDatabase();
+      if (!db) {
+        issues.push('Database could not be initialized.');
+        return { ok: false, issues };
+      }
+    } catch (error) {
+      issues.push(`Database initialization failed: ${error?.message || error}`);
+      return { ok: false, issues };
+    }
+
+    let availableStores = [];
+    try {
+      await db.open();
+      if (Array.isArray(db?.tables)) {
+        availableStores = db.tables
+          .map(table => table && table.name)
+          .filter(name => typeof name === 'string' && name.trim().length);
+      }
+    } catch (error) {
+      issues.push(`IndexedDB could not be opened: ${error?.message || error}`);
+      return { ok: false, issues };
+    } finally {
+      if (db && typeof db.close === 'function') {
+        try {
+          db.close();
+        } catch (_) {
+          // Ignore close errors during preflight
+        }
+      }
+    }
+
+    const missingStores = REQUIRED_DEXIE_STORES.filter(storeName => !availableStores.includes(storeName));
+    if (missingStores.length) {
+      const label = missingStores.join(', ');
+      issues.push(`Missing data stores: ${label}.`);
+    }
+
+    return { ok: issues.length === 0, issues };
   }
 
   function normalizeSeniorityHours(val){
@@ -1475,6 +1542,42 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     let rows;
     let headers;
     let kind = 'csv';
+
+    const preflight = await runImportEnvironmentPreflight();
+    if (!preflight.ok){
+      finalizeProgress();
+      const detail = preflight.issues.length ? ` ${preflight.issues.join(' ')}` : '';
+      showToastMessage(
+        `Environment not ready.${detail} Open the import troubleshooting panel for setup guidance.`,
+        'error',
+        {
+          duration: 10000,
+          action: {
+            label: 'View diagnostics',
+            handler(){
+              const diagnosticsStore = getAppStore();
+              if (!diagnosticsStore) return;
+              try {
+                diagnosticsStore.importDiagnosticsPanelOpen = true;
+                if (typeof diagnosticsStore.refreshImportDiagnostics === 'function'){
+                  diagnosticsStore.refreshImportDiagnostics();
+                }
+              } catch (actionError) {
+                console.warn('Failed to open diagnostics panel from environment toast action', actionError);
+              }
+            }
+          }
+        }
+      );
+      if (store && typeof store.recordImportLog === 'function'){
+        const summary = preflight.issues.length ? preflight.issues.join(' | ') : 'Unknown environment issue.';
+        store.recordImportLog(`Import preflight failed: ${summary}`, 'error', { source: 'preflight', issues: preflight.issues });
+      }
+      console.warn('Import preflight failed. Issues:', preflight.issues);
+      input.value = '';
+      return;
+    }
+
     try {
       const parsed = await parseFile(file);
       rows = parsed.rows;
