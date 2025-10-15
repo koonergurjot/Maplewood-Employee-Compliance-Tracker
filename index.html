@@ -503,7 +503,7 @@
                       <button
                         @click="editRequirement(req)"
                         class="opacity-50 hover:opacity-100 transition-opacity"
-                        :aria-label="'Edit requirement ' + req.name"
+                        :aria-label="'Edit requirement ' + (req.name || '')"
                         :aria-expanded="showEditRequirementModal"
                         aria-controls="edit-requirement-modal"
                         aria-haspopup="dialog"
@@ -513,7 +513,7 @@
                       <button
                         @click="confirmDeleteRequirement(req)"
                         class="opacity-50 hover:opacity-100 transition-opacity"
-                        :aria-label="'Delete requirement ' + req.name"
+                        :aria-label="'Delete requirement ' + (req.name || '')"
                       >
                         <i data-feather="trash-2" class="w-3 h-3"></i>
                       </button>
@@ -675,7 +675,7 @@
                         class="status-chip focus-ring"
                         @click="toggleStatus(emp, req)"
                         :title="getStatusTooltip(emp.id, req.id)"
-                        :aria-label="req.name + ' requirement for ' + ([emp.firstName, emp.lastName].filter(Boolean).join(' ') || 'employee') + ': ' + getStatusTooltip(emp.id, req.id)"
+                        :aria-label="(req.name || '') + ' requirement for ' + ([emp.firstName, emp.lastName].filter(Boolean).join(' ') || 'employee') + ': ' + getStatusTooltip(emp.id, req.id)"
                         x-text="{
                           compliant: '✔ Complete',
                           expiring: '⚠ Due Soon',
@@ -945,12 +945,12 @@
         <div class="flex flex-wrap items-center gap-2" x-show="activeFilterChips.length" x-transition>
           <template x-for="chip in activeFilterChips" :key="chip.key">
             <span class="badge" style="gap:0.35rem;">
-              <span x-text="chip.label + ': ' + chip.value"></span>
+              <span x-text="(chip.label || '') + ': ' + (chip.value || '')"></span>
               <button
                 type="button"
                 class="inline-flex items-center justify-center w-5 h-5 rounded-full focus-ring"
                 style="background:transparent;border:none;color:inherit;font-size:0.75rem;line-height:1;"
-                :aria-label="'Remove ' + chip.label + ' filter'"
+                :aria-label="'Remove ' + (chip.label || '') + ' filter'"
                 @click="clearFilterChip(chip.key)"
               >
                 ×
