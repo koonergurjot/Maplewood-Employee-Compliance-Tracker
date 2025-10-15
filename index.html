@@ -569,7 +569,7 @@
             <template x-if="appReady && employees.length > 0">
               <tr class="virtual-spacer" x-show="virtualPaddingTop > 0" aria-hidden="true">
                 <td :colspan="visibleColumnCount()">
-                  <div :style="`height:${virtualPaddingTop}px`"></div>
+                  <div :style="{ height: virtualPaddingTop + 'px' }"></div>
                 </td>
               </tr>
               <template x-for="emp in visibleEmployees()" :key="emp.id">
@@ -683,7 +683,7 @@
               </tr>
               <tr class="virtual-spacer" x-show="virtualPaddingBottom > 0" aria-hidden="true">
                 <td :colspan="visibleColumnCount()">
-                  <div :style="`height:${virtualPaddingBottom}px`"></div>
+                  <div :style="{ height: virtualPaddingBottom + 'px' }"></div>
                 </td>
               </tr>
             </template>
@@ -1975,7 +1975,7 @@
         <div class="w-full">
           <div class="text-sm mb-1" x-text="$store.app.toast.message"></div>
           <div class="h-2 bg-white/10 rounded">
-            <div class="h-2 rounded bg-white/70" :style="`width:${$store.app.toast.percent||0}%`"></div>
+            <div class="h-2 rounded bg-white/70" :style="{ width: ($store.app.toast.percent || 0) + '%' }"></div>
           </div>
         </div>
       </template>

@@ -19,6 +19,7 @@ const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
 const THEME_STORAGE_KEY = 'maplewood:theme';
 const COLUMN_VISIBILITY_STORAGE_KEY = 'maplewood:employeeTable:visibleColumns';
+const FILTER_VIEWS_STORAGE_KEY = 'maplewood:employeeFilters:savedViews';
 const DEFAULT_VISIBLE_COLUMNS = Object.freeze({
   role: true,
   employmentType: true,
