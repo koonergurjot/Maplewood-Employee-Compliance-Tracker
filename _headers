@@ -11,3 +11,6 @@
 /sw.js
   Service-Worker-Allowed: /
   Cache-Control: no-cache
+/\*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-bWFwbGV3b29k'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'
+
