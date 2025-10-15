@@ -726,7 +726,6 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         statuses: [],
         employmentTypes: [],
         lastActiveElement: null,
-        focusTrapCleanup: null,
         db: null,
         dbPromise: null,
         async init(){
@@ -857,9 +856,6 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           this.open = true;
           return new Promise(resolve => {
             this.$nextTick(() => {
-              const container = this.$refs?.dialog || this.$el;
-              this.deactivateFocusTrap();
-              this.focusTrapCleanup = trapFocusWithin(container);
               const input = this.$refs?.firstName;
               if(input && typeof input.focus === 'function'){
                 try {
@@ -878,7 +874,6 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         hide(){
           this.open = false;
           this.reset();
-          this.deactivateFocusTrap();
           if(typeof window !== 'undefined'){
             this.$nextTick(() => {
               const target = this.lastActiveElement;
@@ -906,29 +901,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           }
           return Promise.resolve();
         },
-        deactivateFocusTrap(){
-          if(typeof this.focusTrapCleanup === 'function'){
-            this.focusTrapCleanup();
-          }
-          this.focusTrapCleanup = null;
-        },
         close(){
           const result = this.hide();
           if(this?.$root){
             this.$root.showAddEmployeeModal = false;
           }
           return result;
-        },
-        handleEscape(event){
-          if(event){
-            if(typeof event.preventDefault === 'function'){
-              event.preventDefault();
-            }
-            if(typeof event.stopPropagation === 'function'){
-              event.stopPropagation();
-            }
-          }
-          return this.close();
         },
         valid(){
           const required = [this.firstName, this.lastName, this.role, this.status, this.employmentType];
