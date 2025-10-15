@@ -2059,6 +2059,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
                   console.info('SW disabled (register failed):', error);
                 });
             } else {
+              // Service Worker registration is disabled unless running on Pages; not required for importer.
               console.info('SW disabled (non-Pages host).');
             }
           }
