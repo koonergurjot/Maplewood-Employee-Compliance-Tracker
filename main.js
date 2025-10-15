@@ -637,6 +637,33 @@ Alpine.store('app', {
 });
 
 const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev';
+    const TIMELINE_READY_RETRY_ATTEMPTS = 3;
+    const TIMELINE_READY_RETRY_DELAY = 500;
+    let timelineReadyInfoLogged = false;
+
+    async function waitForTimelineAppReady(root, maxAttempts = TIMELINE_READY_RETRY_ATTEMPTS){
+      if(!root) return false;
+
+      const attempts = Math.max(1, maxAttempts);
+      for(let attempt = 0; attempt < attempts; attempt += 1){
+        if(root?.appReady && root?.db){
+          return true;
+        }
+
+        if(attempt === 0 && !timelineReadyInfoLogged){
+          console.info('Activity timeline waiting for app readiness; will retry shortly.');
+          timelineReadyInfoLogged = true;
+        }
+
+        if(attempt < attempts - 1){
+          const waitTime = TIMELINE_READY_RETRY_DELAY * (attempt + 1);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+
+      return Boolean(root?.appReady && root?.db);
+    }
+
     function activityTimeline(){
       return {
         entries: [],
@@ -646,15 +673,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             return;
           }
 
-          try {
-            await waitForReady();
-          } catch (error) {
-            console.warn('Activity timeline wait for app readiness failed.', error);
-            return;
-          }
-
-          if(!this.$root.appReady || !this.$root.db){
-            console.warn('Activity timeline load aborted: app not ready after wait.');
+          const ready = await waitForTimelineAppReady(this.$root);
+          if(!ready){
             return;
           }
 
