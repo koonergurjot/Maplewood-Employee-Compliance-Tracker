@@ -576,13 +576,13 @@
                       <input
                         type="checkbox"
                         class="checkbox mt-1"
-                        :aria-label="('Select ' + [emp.firstName, emp.lastName].filter(Boolean).join(' ')).trim()"
+                        :aria-label="('Select ' + getEmployeeLabel(emp)).trim()"
                         :checked="isEmployeeSelected(emp.id)"
                         @change="toggleEmployeeSelection(emp.id, $event.target.checked)"
                         @click.stop
                       >
                       <div>
-                        <div class="text-sm font-semibold" x-html="highlightText([emp.firstName, emp.lastName].filter(Boolean).join(' '))"></div>
+                        <div class="text-sm font-semibold" x-html="highlightText(getEmployeeName(emp) || 'Unnamed employee')"></div>
                         <div x-show="emp.employeeId" class="text-xs" style="color:var(--muted)" x-html="highlightText('ID: ' + emp.employeeId)"></div>
                         <div class="text-xs" style="color:var(--muted)" x-html="highlightText(emp.role || 'No role assigned')"></div>
                       </div>
@@ -591,7 +591,7 @@
                       <button
                         @click="editEmployee(emp)"
                         class="opacity-50 hover:opacity-100 transition-opacity"
-                        :aria-label="('Edit employee ' + [emp.firstName, emp.lastName].filter(Boolean).join(' ')).trim()"
+                        :aria-label="('Edit employee ' + getEmployeeLabel(emp)).trim()"
                         :aria-expanded="showEditEmployeeModal"
                         aria-controls="edit-employee-modal"
                         aria-haspopup="dialog"
@@ -601,7 +601,7 @@
                       <button
                         @click="confirmDeleteEmployee(emp)"
                         class="opacity-50 hover:opacity-100 transition-opacity"
-                        :aria-label="('Delete employee ' + [emp.firstName, emp.lastName].filter(Boolean).join(' ')).trim()"
+                        :aria-label="('Delete employee ' + getEmployeeLabel(emp)).trim()"
                         style="color:var(--danger)"
                       >
                         <i data-feather="trash-2" class="icon-sm"></i>
@@ -615,7 +615,7 @@
                     x-model="emp.role"
                     @focus="trackInlineEdit(emp, 'role')"
                     @change="handleInlineEmployeeUpdate(emp, 'role', $event.target.value)"
-                    :aria-label="('Role for ' + [emp.firstName, emp.lastName].filter(Boolean).join(' ')).trim()"
+                    :aria-label="('Role for ' + getEmployeeLabel(emp)).trim()"
                   >
                     <option value="">Select Role</option>
                     <template x-for="role in roleOptions" :key="role">
@@ -629,7 +629,7 @@
                     x-model="emp.employmentType"
                     @focus="trackInlineEdit(emp, 'employmentType')"
                     @change="handleInlineEmployeeUpdate(emp, 'employmentType', $event.target.value)"
-                    :aria-label="('Employment type for ' + [emp.firstName, emp.lastName].filter(Boolean).join(' ')).trim()"
+                    :aria-label="('Employment type for ' + getEmployeeLabel(emp)).trim()"
                   >
                     <option value="">Select Employment Type</option>
                     <template x-for="type in employmentTypeOptions" :key="type">
@@ -645,7 +645,7 @@
                     x-model="emp.status"
                     @focus="trackInlineEdit(emp, 'status')"
                     @change="handleInlineEmployeeUpdate(emp, 'status', $event.target.value)"
-                    :aria-label="('Status for ' + [emp.firstName, emp.lastName].filter(Boolean).join(' ')).trim()"
+                    :aria-label="('Status for ' + getEmployeeLabel(emp)).trim()"
                   >
                     <option value="">Select Status</option>
                     <template x-for="status in statusOptions" :key="status">
@@ -665,7 +665,7 @@
                         class="status-chip focus-ring"
                         @click="toggleStatus(emp, req)"
                         :title="getStatusTooltip(emp.id, req.id)"
-                        :aria-label="(req.name || '') + ' requirement for ' + ([emp.firstName, emp.lastName].filter(Boolean).join(' ') || 'employee') + ': ' + getStatusTooltip(emp.id, req.id)"
+                        :aria-label="(req.name || '') + ' requirement for ' + (getEmployeeLabel(emp) || 'employee') + ': ' + getStatusTooltip(emp.id, req.id)"
                         x-text="{
                           compliant: '✔ Complete',
                           expiring: '⚠ Due Soon',

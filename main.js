@@ -4308,13 +4308,11 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           if (trimmedQuery) {
             const query = trimmedQuery.toLowerCase();
             filtered = filtered.filter(emp => {
-              const first = (emp.firstName ?? '').toString().toLowerCase();
-              const last = (emp.lastName ?? '').toString().toLowerCase();
+              const name = this.getEmployeeName(emp).toLowerCase();
               const role = (emp.role ?? '').toString().toLowerCase();
               const employeeId = (emp.employeeId ?? '').toString().toLowerCase();
               return (
-                first.includes(query) ||
-                last.includes(query) ||
+                name.includes(query) ||
                 role.includes(query) ||
                 employeeId.includes(query)
               );
@@ -4497,17 +4495,15 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           if (needsRebuild) {
             const data = [
               ...this.employees.map(e => {
-                const firstName = e.firstName || '';
-                const lastName = e.lastName || '';
-                const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+                const name = this.getEmployeeName(e);
                 const role = e.role || '';
                 const employeeId = e.employeeId ? String(e.employeeId) : '';
-                const textParts = [fullName, role, employeeId].filter(Boolean);
+                const textParts = [name, role, employeeId].filter(Boolean);
                 return {
                   type: 'employee',
                   id: e.id,
                   text: textParts.join(' ').trim(),
-                  label: fullName || role || employeeId || 'Employee',
+                  label: name || role || employeeId || 'Employee',
                   meta: {
                     role,
                     employeeId: employeeId ? `ID: ${employeeId}` : ''
@@ -4596,6 +4592,44 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               default: return char;
             }
           });
+        },
+        getEmployeeName(emp){
+          if(!emp) return '';
+          const first = emp.firstName == null ? '' : String(emp.firstName).trim();
+          const last = emp.lastName == null ? '' : String(emp.lastName).trim();
+          const combined = [first, last].filter(Boolean).join(' ').trim();
+          if(combined){
+            return combined;
+          }
+          const meta = (emp.meta && typeof emp.meta === 'object') ? emp.meta : null;
+          if(meta){
+            const candidates = [meta.sourceName, meta.fullName, meta.name]
+              .map(value => (value == null ? '' : String(value).trim()))
+              .filter(Boolean);
+            if(candidates.length){
+              return candidates[0];
+            }
+          }
+          if(emp.employeeId != null && emp.employeeId !== ''){
+            const id = String(emp.employeeId).trim();
+            if(id){
+              return `Employee ${id}`;
+            }
+          }
+          if(emp.id != null){
+            const fallbackId = String(emp.id).trim();
+            if(fallbackId){
+              return `Employee ${fallbackId}`;
+            }
+          }
+          return '';
+        },
+        getEmployeeLabel(emp){
+          const name = this.getEmployeeName(emp);
+          if(name){
+            return name;
+          }
+          return 'Employee';
         },
         highlightText(text){
           if(text == null) return '';
@@ -5329,7 +5363,8 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
         confirmDeleteEmployee(emp){
           if(!emp) return;
-          if(confirm(`Delete employee "${emp.firstName} ${emp.lastName}"? This will remove all associated records.`)){
+          const label = this.getEmployeeLabel(emp);
+          if(confirm(`Delete employee "${label}"? This will remove all associated records.`)){
             this.deleteEmployee(emp);
           }
         },
@@ -5345,11 +5380,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               metadata: {
                 employeeId: emp.id,
                 firstName: emp.firstName,
-                lastName: emp.lastName
+                lastName: emp.lastName,
+                displayName: this.getEmployeeName(emp) || this.getEmployeeLabel(emp)
               },
-              successMessage: `Deleted ${emp.firstName} ${emp.lastName}`,
+              successMessage: `Deleted ${this.getEmployeeLabel(emp)}`,
               successColor: 'var(--warn)',
-              undoMessage: `Restored ${emp.firstName} ${emp.lastName}`,
+              undoMessage: `Restored ${this.getEmployeeLabel(emp)}`,
               refreshIcons: true
             });
             this.showEditEmployeeModal = false;
