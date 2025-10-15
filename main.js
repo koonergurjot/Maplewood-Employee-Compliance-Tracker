@@ -1694,39 +1694,17 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           });
 
           if ('serviceWorker' in navigator) {
-            if (location.hostname.endsWith('your-prod-domain.com')) {
+            if (location.hostname.endsWith('.pages.dev') || location.hostname === 'YOUR_CUSTOM_DOMAIN') {
               const swUrl = `sw.js?build=${BUILD_HASH}`;
-
-              const registerServiceWorker = async () => {
-                const needsClassicFallback = (error) => {
-                  if (!error) return false;
-                  if (error.name === 'TypeError') return true;
-                  const message = String(error.message || '').toLowerCase();
-                  if (!message) return false;
-                  return message.includes('module') || message.includes('mime');
-                };
-
-                try {
-                  await navigator.serviceWorker.register(swUrl, { type: 'module' });
-                } catch (moduleError) {
-                  if (needsClassicFallback(moduleError)) {
-                    console.warn('Module service worker registration failed, retrying without module type', moduleError);
-                    try {
-                      await navigator.serviceWorker.register(swUrl);
-                    } catch (classicError) {
-                      console.warn('Service worker registration failed after module fallback', classicError);
-                    }
-                  } else {
-                    console.warn('Service worker registration failed', moduleError);
-                  }
-                }
-              };
-
-              registerServiceWorker().catch((error) => {
-                console.warn('Unexpected error during service worker registration', error);
-              });
+              navigator.serviceWorker?.register(swUrl, { scope: './' })
+                .then((registration) => {
+                  console.info('SW registered', registration.scope);
+                })
+                .catch((error) => {
+                  console.info('SW disabled (register failed):', error);
+                });
             } else {
-              console.info('SW disabled outside prod');
+              console.info('SW disabled (non-Pages host).');
             }
           }
 
