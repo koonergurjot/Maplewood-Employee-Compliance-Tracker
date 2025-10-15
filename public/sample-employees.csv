@@ -1,0 +1,4 @@
+Name,EmployeeID,SeniorityHours,Position,Status,Rank
+Ada Lovelace,E001,1520,Software Engineer,Active,1
+Grace Hopper,E002,980,Technical Lead,Active,2
+Alan Turing,E003,450,Researcher,Inactive,3

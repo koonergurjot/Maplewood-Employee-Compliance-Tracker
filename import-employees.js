@@ -26,6 +26,8 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     return Boolean(getAppStore());
   }
 
+  const SAMPLE_CSV_URL = '/sample-employees.csv';
+
   function showToastMessage(message, type = 'info', options = {}){
     const payload = typeof options === 'object' && options !== null ? { ...options } : {};
     payload.message = typeof message === 'string' ? message : String(message ?? '');
@@ -38,6 +40,107 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     if(typeof window !== 'undefined' && typeof window.alert === 'function'){
       window.alert(payload.message);
     }
+  }
+
+  function openSampleCsv(){
+    if (typeof window === 'undefined') return;
+    try {
+      window.open(SAMPLE_CSV_URL, '_blank', 'noopener');
+    } catch (error) {
+      console.error('Failed to open sample CSV link.', error);
+    }
+  }
+
+  function showSchemaErrorToast(detail){
+    const baseMessage = detail ? `${detail} Download the sample CSV for the correct format.` : 'The uploaded file does not match the expected template. Download the sample CSV for the correct format.';
+    showToastMessage(baseMessage, 'error', {
+      duration: 10000,
+      action: {
+        label: 'View sample CSV',
+        dismiss: false,
+        handler(){
+          openSampleCsv();
+        }
+      }
+    });
+  }
+
+  const REQUIRED_CSV_HEADERS = Object.freeze([
+    { id: 'name', label: 'Name' },
+    { id: 'employeeid', label: 'EmployeeID' },
+    { id: 'seniorityhours', label: 'SeniorityHours' },
+    { id: 'position', label: 'Position' },
+    { id: 'status', label: 'Status' },
+    { id: 'rank', label: 'Rank' }
+  ]);
+
+  function normalizeSchemaHeader(value){
+    if (value == null) return '';
+    return String(value).trim().toLowerCase();
+  }
+
+  function isValidSeniorityHoursValue(val){
+    if (typeof val === 'number'){
+      return Number.isFinite(val);
+    }
+    if (val == null) return true;
+    const str = String(val).trim();
+    if (!str) return true;
+
+    if (/^(\d+)\s*:\s*([0-5]?\d)$/.test(str)){
+      return true;
+    }
+
+    const stripped = str.replace(/,/g, '').replace(/\s+/g, '');
+    const numericCandidate = Number(stripped);
+    if (!Number.isNaN(numericCandidate)){
+      return true;
+    }
+
+    const leadingNumeric = stripped.match(/^-?\d+(?:\.\d+)?/);
+    if (leadingNumeric && !Number.isNaN(Number(leadingNumeric[0]))){
+      return true;
+    }
+
+    return false;
+  }
+
+  function validateParsedCsvSchema(headers, rows){
+    const normalizedMap = new Map();
+    if (Array.isArray(headers)){
+      for (const header of headers){
+        const normalized = normalizeSchemaHeader(header);
+        if (!normalized || normalizedMap.has(normalized)) continue;
+        normalizedMap.set(normalized, header);
+      }
+    }
+
+    for (const column of REQUIRED_CSV_HEADERS){
+      if (!normalizedMap.has(column.id)){
+        return {
+          valid: false,
+          message: `Missing required column "${column.label}".`
+        };
+      }
+    }
+
+    const seniorityHeader = normalizedMap.get('seniorityhours');
+    if (seniorityHeader && Array.isArray(rows)){
+      for (let index = 0; index < rows.length; index += 1){
+        const row = rows[index];
+        if (!row || typeof row !== 'object') continue;
+        const value = row[seniorityHeader];
+        if (!isValidSeniorityHoursValue(value)){
+          const readableValue = value == null ? 'an empty value' : `"${String(value).trim()}"`;
+          return {
+            valid: false,
+            message: `Row ${index + 2}: "${seniorityHeader}" must be numeric (received ${readableValue}).`
+          };
+        }
+      }
+    }
+
+    return { valid: true };
   }
 
   function formatImportStageLabel(stage){
@@ -1333,10 +1436,10 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
       const payload = JSON.parse(text);
       if (Array.isArray(payload.employees)) {
         // Already in our shape
-        return { rows: payload.employees, headers: extractHeaders(payload.employees) };
+        return { rows: payload.employees, headers: extractHeaders(payload.employees), kind: 'json' };
       }
       if (Array.isArray(payload)){
-        return { rows: payload, headers: extractHeaders(payload) };
+        return { rows: payload, headers: extractHeaders(payload), kind: 'json' };
       }
       throw new Error('JSON file must contain an array or {employees: []}');
     }
@@ -1350,7 +1453,7 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
         skipEmptyLines: true,
         complete: (res)=> {
           const headers = Array.isArray(res.meta?.fields) ? res.meta.fields : extractHeaders(res.data);
-          resolve({ rows: res.data, headers });
+          resolve({ rows: res.data, headers, kind: 'csv' });
         },
         error: (err)=> reject(err)
       });
@@ -1371,15 +1474,26 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
 
     let rows;
     let headers;
+    let kind = 'csv';
     try {
       const parsed = await parseFile(file);
       rows = parsed.rows;
       headers = parsed.headers;
+      kind = parsed.kind || kind;
     } catch (error) {
       finalizeProgress();
       reportImportFailure('parse', error);
       input.value = '';
       return;
+    }
+
+    if (kind === 'csv'){
+      const schemaResult = validateParsedCsvSchema(headers, rows);
+      if (!schemaResult.valid){
+        showSchemaErrorToast(schemaResult.message);
+        input.value = '';
+        return;
+      }
     }
 
     const defaultMapping = buildDefaultMapping(headers);
