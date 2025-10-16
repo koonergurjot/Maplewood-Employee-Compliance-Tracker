@@ -127,17 +127,29 @@
                 </div>
               </th>
               <template x-for="req in requirements" :key="req.id">
-                <td>
-                  <button
-                    type="button"
+                <td x-data="{ cell: getRequirementCell(employee.id, req.id) }">
+                  <div
                     class="cell"
-                    @click="openEditor(employee.id, req.id, $event)"
-                    :aria-label="`Edit ${req.name} for ${employee.firstName || ''} ${employee.lastName || ''}`"
+                    @click="openEditor($event, employee.id, req.id)"
                   >
-                    <span class="cell-status" :class="statusBadgeClass(employee.id, req.id)" x-text="cellStatusLabel(employee.id, req.id)"></span>
-                    <span class="cell-sub" x-text="cellSubtext(employee.id, req.id)"></span>
-                    <span class="cell-indicator" x-show="isRequirementExpiring(getEmployeeRequirement(employee.id, req.id))"></span>
-                  </button>
+                    <span
+                      class="badge"
+                      :class="{
+                        'badge-green': (cell.status==='Completed' || cell.status==='Complete') && !cellExpired(cell),
+                        'badge-amber': (cell.status==='Completed' || cell.status==='Complete') && cellWarn(cell),
+                        'badge-rose':  cellExpired(cell),
+                        'badge-slate': (cell.status!=='Completed' && cell.status!=='Complete') && !cellExpired(cell)
+                      }"
+                      x-text="chipText(cell)"
+                      role="button"
+                      tabindex="0"
+                      :aria-label="`Edit ${req.name} for ${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Edit requirement'"
+                      @click.stop="openEditor($event, employee.id, req.id)"
+                      @keydown.enter.prevent="openEditor($event, employee.id, req.id)"
+                      @keydown.space.prevent="openEditor($event, employee.id, req.id)"
+                    ></span>
+                    <span class="cell-sub" x-text="cellSubtext(cell)"></span>
+                  </div>
                 </td>
               </template>
             </tr>
