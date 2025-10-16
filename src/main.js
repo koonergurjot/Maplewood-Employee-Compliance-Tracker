@@ -51,6 +51,7 @@ const inlineEditTemplate = `
 import './styles/tailwind.css';
 import { openDatabase, generateId } from '../db.js';
 import { addEmployee as addEmployeeApi } from './v2/api.js';
+import { exportFilteredCSV, exportFilteredJSON } from './v2/exporter.js';
 
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
@@ -1517,10 +1518,61 @@ registerV2Component('v2DashboardApp', () => ({
     }
     appStore.filteredEmployees = Array.isArray(this.filteredEmployees) ? this.filteredEmployees : [];
   },
+  buildExportRows() {
+    const source = Array.isArray(this.filteredEmployees) ? this.filteredEmployees : [];
+    return source.filter(Boolean).map(employee => {
+      const firstName = normalizeString(employee?.firstName);
+      const lastName = normalizeString(employee?.lastName);
+      const combinedName = `${firstName} ${lastName}`.trim();
+      const requirementEntries = (Array.isArray(this.requirements) ? this.requirements : [])
+        .filter(Boolean)
+        .map(requirement => {
+          const record = this.getEmployeeRequirement(employee.id, requirement.id);
+          return {
+            requirementId: requirement.id,
+            requirementName: requirement.name,
+            status: normalizeStatus(record?.status || 'Pending'),
+            completedOn: record?.completedOn || null,
+            expiresOn: record?.expiresOn || null,
+            notes: record?.notes ?? null
+          };
+        });
+      return {
+        employeeId: employee?.id ?? null,
+        firstName,
+        lastName,
+        fullName: combinedName || 'Unnamed employee',
+        role: normalizeString(employee?.role),
+        status: normalizeString(employee?.status),
+        employmentType: normalizeString(employee?.employmentType),
+        compliancePercent: this.employeeCompliancePercent(employee.id),
+        requirements: requirementEntries
+      };
+    });
+  },
   triggerExport(format) {
     this.showExportMenu = false;
     const normalized = typeof format === 'string' ? format.toLowerCase() : '';
-    console.info(`Export requested: ${normalized}`);
+    const rows = this.buildExportRows();
+    if (!rows.length) {
+      this.$store?.app?.showToast?.({ type: 'info', message: 'No employees match the current filters.' });
+      return;
+    }
+    if (normalized === 'csv') {
+      const success = exportFilteredCSV(this.filteredEmployees, this.requirements, rows);
+      if (!success) {
+        this.$store?.app?.showToast?.({ type: 'error', message: 'Unable to export CSV. Please try again.' });
+      }
+      return;
+    }
+    if (normalized === 'json') {
+      const success = exportFilteredJSON(this.filteredEmployees, this.requirements, rows);
+      if (!success) {
+        this.$store?.app?.showToast?.({ type: 'error', message: 'Unable to export JSON. Please try again.' });
+      }
+      return;
+    }
+    console.info(`Unsupported export format requested: ${normalized}`);
   },
   printReport() {
     this.showExportMenu = false;
