@@ -1254,7 +1254,10 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
   },
   async loadData() {
-    if (!this.db) return;
+    if (!this.db) {
+      this.loading = false;
+      return;
+    }
     this.loading = true;
     try {
       const [employees, requirements, employeeRequirements] = await Promise.all([
