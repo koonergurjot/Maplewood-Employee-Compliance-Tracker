@@ -59,7 +59,7 @@ const inlineEditTemplate = `
 </template>
 `;
 import './styles/tailwind.css';
-import { openDatabase, generateId } from '../db.js';
+import { openDatabase, generateId, mapPositionStatus } from '../db.js';
 import { addEmployee as addEmployeeApi } from './v2/api.js';
 import { exportFilteredCSV, exportFilteredJSON } from './v2/exporter.js';
 import {
@@ -995,6 +995,10 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       employmentType,
       position: role,
       rank: employmentType,
+      jobClass: '',
+      jobTitle: '',
+      ranking: null,
+      positionStatus: mapPositionStatus(employmentType),
       seniorityHours: Number.isFinite(seniorityHours) ? seniorityHours : 0,
       createdAt: timestamp,
       updatedAt: timestamp
