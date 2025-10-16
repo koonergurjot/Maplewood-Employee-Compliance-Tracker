@@ -11,6 +11,7 @@ const inlineEditTemplate = `
 <template>
   <div class="inline-overlay" x-show="activeEditor.open" x-transition.opacity @click="closeEditor" aria-hidden="true"></div>
   <div
+    id="inline-editor"
     class="inline-panel"
     x-show="activeEditor.open"
     x-transition
@@ -18,7 +19,7 @@ const inlineEditTemplate = `
     role="dialog"
     aria-modal="true"
     :aria-label="editorTitle()"
-    @keydown.escape.window.stop.prevent="closeEditor"
+    @keydown.escape.stop="closeEditor()"
     @click.outside="closeEditor"
   >
     <form class="inline-form" @submit.prevent="saveActiveEditor">
@@ -28,7 +29,7 @@ const inlineEditTemplate = `
       <div class="inline-body">
         <label class="inline-field">
           <span>Status</span>
-          <select class="input" x-ref="editorStatus" x-model="editorForm.status">
+          <select class="input" x-ref="editorStatus" x-model="editorForm.status" data-autofocus>
             <template x-for="status in editorStatusOptions" :key="status">
               <option :value="status" x-text="status"></option>
             </template>
@@ -2074,7 +2075,8 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.activeEditor.style = this.computePopoverStyle(anchor);
     this.activeEditor.open = true;
     this.$nextTick(() => {
-      this.$refs.editorStatus?.focus();
+      const node = document.querySelector('#inline-editor [data-autofocus]');
+      if (node) node.focus();
     });
   },
   closeEditor() {
