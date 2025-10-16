@@ -112,6 +112,18 @@ function toggleUseV2MainFlag() {
   window.location.reload();
 }
 
+function formatDateToLocalYYYYMMDD(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
 function normalizeDateInputValue(value) {
   if (!value) {
     return '';
@@ -129,7 +141,7 @@ function normalizeDateInputValue(value) {
 
     const parsed = new Date(trimmed);
     if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString().slice(0, 10);
+      return formatDateToLocalYYYYMMDD(parsed);
     }
 
     return '';
@@ -140,7 +152,7 @@ function normalizeDateInputValue(value) {
     return '';
   }
 
-  return date.toISOString().slice(0, 10);
+  return formatDateToLocalYYYYMMDD(date);
 }
 
 function isTextInput(element) {
