@@ -261,4 +261,7 @@ body.dark .inline-header, body.dark .inline-footer { border-color: var(--border-
 .badge-slate { @apply bg-slate-100 text-slate-700; }
 
 .card    { @apply rounded-2xl border border-slate-200 bg-white shadow-sm; }
-.toolbar { @apply sticky top-[56px] z-20 bg-white/70 backdrop-blur border-b; }
+.toolbar {
+  @apply sticky z-20 bg-white/70 backdrop-blur border-b;
+  top: var(--dashboard-header-height, 56px);
+}

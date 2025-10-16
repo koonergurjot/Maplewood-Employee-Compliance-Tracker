@@ -26,6 +26,7 @@
       --danger: #ef4444;
       --warn: #f59e0b;
       --success: #10b981;
+      --dashboard-header-height: 56px;
     }
 
     body {
@@ -209,6 +210,37 @@
 
   <div id="app-legacy" x-show="!APP_FLAGS.USE_V2_MAIN"></div>
 
+  <script>
+    (function () {
+      const updateHeaderOffset = () => {
+        const header = document.querySelector('#app-v2 main > header');
+        if (!header) {
+          return;
+        }
+        const height = header.getBoundingClientRect().height;
+        document.documentElement.style.setProperty(
+          '--dashboard-header-height',
+          `${Math.ceil(height)}px`
+        );
+      };
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', updateHeaderOffset, { once: true });
+      } else {
+        updateHeaderOffset();
+      }
+
+      if (typeof ResizeObserver !== 'undefined') {
+        const header = document.querySelector('#app-v2 main > header');
+        if (header) {
+          const observer = new ResizeObserver(updateHeaderOffset);
+          observer.observe(header);
+        }
+      } else {
+        window.addEventListener('resize', updateHeaderOffset);
+      }
+    })();
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
