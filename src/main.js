@@ -28,6 +28,36 @@ import inlineEditTemplate from './components/inline-edit.html?raw';
 import './styles/tailwind.css';
 import { openDatabase, generateId } from '../db.js';
 
+const DEFAULT_APP_FLAGS = { USE_V2_MAIN: true };
+const existingFlags = typeof window.APP_FLAGS === 'object' && window.APP_FLAGS !== null ? window.APP_FLAGS : {};
+const appFlagsTarget = { ...DEFAULT_APP_FLAGS, ...existingFlags };
+
+window.APP_FLAGS = new Proxy(appFlagsTarget, {
+  set(target, property, value) {
+    target[property] = value;
+    document.dispatchEvent(
+      new CustomEvent('app-flags:changed', {
+        detail: { property, value }
+      })
+    );
+    return true;
+  }
+});
+
+window.AppStore = window.AppStore || function AppStore() {
+  const state = {
+    APP_FLAGS: { ...window.APP_FLAGS }
+  };
+
+  const handleFlagChange = () => {
+    state.APP_FLAGS = { ...window.APP_FLAGS };
+  };
+
+  document.addEventListener('app-flags:changed', handleFlagChange);
+
+  return state;
+};
+
 const DARK_MODE_KEY = 'maplewood:dashboard:dark-mode';
 const RING_RADIUS = 16;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -46,7 +76,9 @@ function replaceTemplate(targetId, html) {
   }
 }
 
-replaceTemplate('inline-edit-template', inlineEditTemplate);
+if (window.APP_FLAGS.USE_V2_MAIN) {
+  replaceTemplate('inline-edit-template', inlineEditTemplate);
+}
 
 function normalizeString(value) {
   return (value ?? '').toString().trim();
@@ -112,6 +144,10 @@ Alpine.data('dashboardApp', () => ({
     expiresOn: ''
   },
   init() {
+    if (!window.APP_FLAGS?.USE_V2_MAIN) {
+      console.info('Legacy dashboard active; skipping v2 bootstrap.');
+      return;
+    }
     this.mountInlineTemplate();
     this.initializeDarkMode();
     this.bootstrap();

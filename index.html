@@ -42,87 +42,99 @@
     [x-cloak] { display: none !important; }
   </style>
 </head>
-<body x-data="dashboardApp" x-init="init()" x-cloak :class="{ dark: darkMode }">
-  <main class="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-    <header class="space-y-2">
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <h1 class="text-2xl font-semibold leading-tight">Employee Compliance Overview</h1>
-          <p class="text-sm text-muted">Use filters to narrow results and click any requirement cell to update progress.</p>
-        </div>
-        <button type="button" class="btn" @click="toggleDarkMode" aria-label="Toggle dark mode">
-          <span x-text="darkMode ? 'Light mode' : 'Dark mode'"></span>
-        </button>
-      </div>
-      <div class="text-xs text-muted">Showing <span x-text="filteredEmployees.length"></span> of <span x-text="employees.length"></span> team members.</div>
-    </header>
-
-    <template x-if="loadError">
-      <section class="card" role="alert">
-        <div class="space-y-2" style="padding:1.25rem 1.5rem;">
-          <h2 class="text-lg font-semibold">Unable to load data</h2>
-          <p class="text-sm text-muted" x-text="loadError"></p>
-        </div>
-      </section>
-    </template>
-
-    <section class="card" aria-label="Employee requirements grid">
-      <div class="space-y-4">
-        <section class="filters-card">
-          <div class="filters-grid">
-            <label class="filter-field" aria-label="Filter by role">
-              <span class="filter-label">Role</span>
-              <select multiple size="4" class="input" x-model="filters.roles" @change="applyFilters">
-                <template x-if="!roleOptions.length">
-                  <option disabled value="">No roles available</option>
-                </template>
-                <template x-for="role in roleOptions" :key="role">
-                  <option :value="role" x-text="role"></option>
-                </template>
-              </select>
-            </label>
-            <label class="filter-field" aria-label="Filter by employee status">
-              <span class="filter-label">Status</span>
-              <select class="input" x-model="filters.status" @change="applyFilters">
-                <template x-for="option in statusOptions" :key="option.value">
-                  <option :value="option.value" x-text="option.label"></option>
-                </template>
-              </select>
-            </label>
-            <label class="filter-field" aria-label="Filter by compliance percentage">
-              <span class="filter-label">Compliance %</span>
-              <select class="input" x-model="filters.compliance" @change="applyFilters">
-                <template x-for="option in complianceOptions" :key="option.value">
-                  <option :value="option.value" x-text="option.label"></option>
-                </template>
-              </select>
-            </label>
-            <label class="filter-field" aria-label="Filter by expiration window">
-              <span class="filter-label">Expiring soon</span>
-              <div class="toggle-row">
-                <input id="expiring-toggle" type="checkbox" class="toggle" x-model="filters.expiringSoon" @change="applyFilters" />
-                <label class="toggle-label" for="expiring-toggle">Within 30 days</label>
-              </div>
-            </label>
-            <label class="filter-field filter-wide" aria-label="Search employees">
-              <span class="filter-label">Search</span>
-              <input type="search" class="input" placeholder="Search by name" x-model="filters.search" @input.debounce.200ms="applyFilters" />
-            </label>
+<body x-data="AppStore()" data-app="compliance-tracker">
+  <div
+    id="app-v2"
+    x-show="APP_FLAGS.USE_V2_MAIN"
+    x-data="dashboardApp"
+    x-init="init()"
+    x-cloak
+    :class="{ dark: darkMode }"
+    x-effect="document.body.classList.toggle('dark', darkMode)"
+  >
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <header class="space-y-2">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <h1 class="text-2xl font-semibold leading-tight">Employee Compliance Overview</h1>
+            <p class="text-sm text-muted">Use filters to narrow results and click any requirement cell to update progress.</p>
           </div>
-          <div class="filters-footer">
-            <button type="button" class="btn ghost" @click="resetFilters">Reset filters</button>
-            <div class="filters-meta" x-show="filters.roles.length || filters.status !== 'all' || filters.compliance !== 'all' || filters.expiringSoon || filters.search">
-              <span class="text-muted">Filters active</span>
-            </div>
+          <button type="button" class="btn" @click="toggleDarkMode" aria-label="Toggle dark mode">
+            <span x-text="darkMode ? 'Light mode' : 'Dark mode'"></span>
+          </button>
+        </div>
+        <div class="text-xs text-muted">Showing <span x-text="filteredEmployees.length"></span> of <span x-text="employees.length"></span> team members.</div>
+      </header>
+
+      <template x-if="loadError">
+        <section class="card" role="alert">
+          <div class="space-y-2" style="padding:1.25rem 1.5rem;">
+            <h2 class="text-lg font-semibold">Unable to load data</h2>
+            <p class="text-sm text-muted" x-text="loadError"></p>
           </div>
         </section>
+      </template>
 
-        <div id="requirements-grid" x-html="partials.requirementsGrid"></div>
-      </div>
-    </section>
-  </main>
+      <section class="card" aria-label="Employee requirements grid">
+        <div class="space-y-4">
+          <section class="filters-card">
+            <div class="filters-grid">
+              <label class="filter-field" aria-label="Filter by role">
+                <span class="filter-label">Role</span>
+                <select multiple size="4" class="input" x-model="filters.roles" @change="applyFilters">
+                  <template x-if="!roleOptions.length">
+                    <option disabled value="">No roles available</option>
+                  </template>
+                  <template x-for="role in roleOptions" :key="role">
+                    <option :value="role" x-text="role"></option>
+                  </template>
+                </select>
+              </label>
+              <label class="filter-field" aria-label="Filter by employee status">
+                <span class="filter-label">Status</span>
+                <select class="input" x-model="filters.status" @change="applyFilters">
+                  <template x-for="option in statusOptions" :key="option.value">
+                    <option :value="option.value" x-text="option.label"></option>
+                  </template>
+                </select>
+              </label>
+              <label class="filter-field" aria-label="Filter by compliance percentage">
+                <span class="filter-label">Compliance %</span>
+                <select class="input" x-model="filters.compliance" @change="applyFilters">
+                  <template x-for="option in complianceOptions" :key="option.value">
+                    <option :value="option.value" x-text="option.label"></option>
+                  </template>
+                </select>
+              </label>
+              <label class="filter-field" aria-label="Filter by expiration window">
+                <span class="filter-label">Expiring soon</span>
+                <div class="toggle-row">
+                  <input id="expiring-toggle" type="checkbox" class="toggle" x-model="filters.expiringSoon" @change="applyFilters" />
+                  <label class="toggle-label" for="expiring-toggle">Within 30 days</label>
+                </div>
+              </label>
+              <label class="filter-field filter-wide" aria-label="Search employees">
+                <span class="filter-label">Search</span>
+                <input type="search" class="input" placeholder="Search by name" x-model="filters.search" @input.debounce.200ms="applyFilters" />
+              </label>
+            </div>
+            <div class="filters-footer">
+              <button type="button" class="btn ghost" @click="resetFilters">Reset filters</button>
+              <div class="filters-meta" x-show="filters.roles.length || filters.status !== 'all' || filters.compliance !== 'all' || filters.expiringSoon || filters.search">
+                <span class="text-muted">Filters active</span>
+              </div>
+            </div>
+          </section>
 
-  <template id="inline-edit-template"></template>
+          <div id="requirements-grid" x-html="partials.requirementsGrid"></div>
+        </div>
+      </section>
+    </main>
+
+    <template id="inline-edit-template"></template>
+  </div>
+
+  <div id="app-legacy" x-show="!APP_FLAGS.USE_V2_MAIN"></div>
 
   <script type="module" src="/src/main.js"></script>
 </body>
