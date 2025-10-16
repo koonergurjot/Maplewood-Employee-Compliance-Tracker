@@ -76,22 +76,28 @@ async function collectFileMap() {
 
 function expandReferenceCandidates(candidate) {
   const normalized = candidate.replace(/\\+/g, '/');
-  const ext = path.posix.extname(normalized);
+  const stripped = normalized.replace(/[?#].*$/, '');
+  const ext = path.posix.extname(stripped);
   const results = new Set();
 
+  if (!stripped) {
+    return [];
+  }
+
+  results.add(stripped);
+
   if (ext) {
-    results.add(normalized);
+    results.add(stripped);
   } else {
-    results.add(normalized);
     for (const fallback of EXTENSION_FALLBACKS) {
-      results.add(`${normalized}${fallback}`);
+      results.add(`${stripped}${fallback}`);
     }
-    results.add(path.posix.join(normalized, 'index.js'));
-    results.add(path.posix.join(normalized, 'index.ts'));
-    results.add(path.posix.join(normalized, 'index.tsx'));
-    results.add(path.posix.join(normalized, 'index.jsx'));
-    results.add(path.posix.join(normalized, 'index.html'));
-    results.add(path.posix.join(normalized, 'index.json'));
+    results.add(path.posix.join(stripped, 'index.js'));
+    results.add(path.posix.join(stripped, 'index.ts'));
+    results.add(path.posix.join(stripped, 'index.tsx'));
+    results.add(path.posix.join(stripped, 'index.jsx'));
+    results.add(path.posix.join(stripped, 'index.html'));
+    results.add(path.posix.join(stripped, 'index.json'));
   }
 
   return Array.from(results);
