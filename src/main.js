@@ -1957,6 +1957,49 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.filters.analytics = null;
     this.applyFilters();
   },
+  employeeById(id) {
+    if (!id) return null;
+    return this.employees.find(emp => emp && emp.id === id) || null;
+  },
+  requirementById(id) {
+    if (!id) return null;
+    return this.requirements.find(req => req && req.id === id) || null;
+  },
+  async toggleRequirement(empId, reqId, checked) {
+    if (!this.db) return;
+    const table = this.db.employeeRequirements;
+    if (!table) return;
+    const row = await table.where({ employeeId: empId, requirementId: reqId }).first();
+    if (!row) return;
+    const timestamp = new Date().toISOString();
+    row.status = checked ? 'Completed' : 'Pending';
+    if (checked) {
+      if (!row.completedOn) {
+        row.completedOn = timestamp;
+      }
+      if (!row.completedAt) {
+        row.completedAt = timestamp;
+      }
+    } else {
+      row.completedOn = null;
+      row.completedAt = null;
+    }
+    row.updatedAt = timestamp;
+    await table.put(row);
+    this.setEmployeeRequirement(row);
+    this.refreshAnalytics();
+    this.applyFilters();
+    const requirementName = this.requirementById(reqId)?.name || 'requirement';
+    const employeeRecord = this.employeeById(empId);
+    const employeeName = (
+      employeeRecord?.fullName ||
+      `${normalizeString(employeeRecord?.firstName)} ${normalizeString(employeeRecord?.lastName)}`.trim()
+    ) || 'employee';
+    this.activityLog?.record?.({
+      type: 'EditRequirement',
+      summary: `${checked ? 'Completed' : 'Cleared'} ${requirementName} for ${employeeName}`
+    });
+  },
   getEmployeeRequirement(employeeId, requirementId) {
     return this.employeeRequirementMap.get(this.buildRequirementKey(employeeId, requirementId)) || null;
   },
@@ -1988,14 +2031,6 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     if (Number.isNaN(expiresOn.getTime())) return false;
     const diff = (expiresOn.getTime() - Date.now()) / 86400000;
     return diff >= 0 && diff <= 30;
-  },
-  chipText(cell) {
-    const status = normalizeStatus(cell?.status || 'Pending');
-    if (status === 'Exempt') return '◎ Exempt';
-    if (this.cellExpired(cell)) return '✖ Expired';
-    if (status === 'Completed' && this.cellWarn(cell)) return '⚠ Due soon';
-    if (status === 'Completed') return '✔ Complete';
-    return '○ Pending';
   },
   requirementExpired(record) {
     if (!record) return false;
