@@ -2057,6 +2057,31 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     if (percent >= 40) return 'ring-warn';
     return 'ring-alert';
   },
+  openProfile(employeeId) {
+    if (!employeeId) {
+      return;
+    }
+
+    const appStore = this.$store?.app;
+    const handler = [
+      appStore?.openEmployeeProfile,
+      appStore?.showEmployeeProfile,
+      appStore?.openEmployeeDrawer
+    ].find(candidate => typeof candidate === 'function');
+
+    if (handler) {
+      handler.call(appStore, employeeId);
+      return;
+    }
+
+    const employee = this.employees.find(emp => emp.id === employeeId);
+    const name = `${normalizeString(employee?.firstName)} ${normalizeString(employee?.lastName)}`.trim() || 'Employee';
+
+    appStore?.showToast?.({ type: 'info', message: `${name} profile is not available yet.` });
+    console.info('Profile handler not available for employee profile button. Provide a handler on appStore.', {
+      employeeId
+    });
+  },
   computePopoverStyle(target) {
     if (!target) return '';
     const rect = target.getBoundingClientRect();
