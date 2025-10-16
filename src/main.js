@@ -89,6 +89,32 @@ function registerV2Component(name, definition) {
   return Alpine.data(name, definition);
 }
 
+async function ensureSeedRequirements(db) {
+  const count = (await db.requirements.count?.()) ?? 0;
+  if (count) {
+    return;
+  }
+  const now = new Date().toISOString();
+  const seed = [
+    { key: 'CRC', name: 'Criminal Record Check (CRC)', color: '#fee2e2', defaultExpiryDays: 730 },
+    { key: 'FA', name: 'First Aid / CPR', color: '#e0e7ff', defaultExpiryDays: 1095 },
+    { key: 'FS', name: 'FoodSafe', color: '#dcfce7', defaultExpiryDays: 1825 },
+    { key: 'N95', name: 'N95 Fit Test', color: '#fef9c3', defaultExpiryDays: 365 },
+    { key: 'TB', name: 'TB Test', color: '#dbeafe', defaultExpiryDays: 1825 },
+    { key: 'IMM', name: 'Immunizations', color: '#fae8ff', defaultExpiryDays: null },
+    { key: 'PRV', name: 'Privacy & Confidentiality', color: '#fde68a', defaultExpiryDays: 365 }
+  ].map(requirement => ({
+    id: crypto.randomUUID?.() || Math.random().toString(36).slice(2),
+    createdAt: now,
+    updatedAt: now,
+    ...requirement
+  }));
+
+  await db.transaction('rw', db.requirements, async () => {
+    await db.requirements.bulkAdd(seed);
+  });
+}
+
 function formatActivityTimestamp(date) {
   try {
     return date.toLocaleString(undefined, {
@@ -616,6 +642,7 @@ registerV2Component('v2DashboardApp', () => ({
       this.loading = true;
       await this.loadPartials();
       this.db = await openDatabase();
+      await ensureSeedRequirements(this.db);
       await this.initActivityLog();
       await this.loadData();
       this.applyFilters();
