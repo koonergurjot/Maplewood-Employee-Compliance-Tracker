@@ -89,6 +89,7 @@ export class AddEmployee {
     }
 
     const employee = clone(this.employee);
+    employee.id = employee.id || generateId();
     const timestamp = nowISO();
     employee.createdAt = employee.createdAt || timestamp;
     employee.updatedAt = timestamp;
