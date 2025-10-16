@@ -1,4 +1,28 @@
 import Alpine from 'alpinejs';
+
+// Safari 15.x and some hardened environments occasionally return non-Promise
+// values from AsyncFunction.prototype.call, which Alpine expects to always
+// return a thenable. When that happens Alpine's internal evaluator tries to
+// access `.catch` on `undefined`, crashing the component initialization and
+// leaving all bound expressions unresolved. To make the evaluator resilient we
+// wrap the AsyncFunction call result in a resolved Promise when it is not
+// already thenable. This mirrors native behaviour and prevents `r.call(...)
+// .catch` TypeErrors without altering the semantics for compliant runtimes.
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+if (!AsyncFunction.prototype.__maplewoodPatchedCall) {
+  const originalAsyncCall = AsyncFunction.prototype.call;
+  Object.defineProperty(AsyncFunction.prototype, '__maplewoodPatchedCall', {
+    value: true,
+    configurable: true
+  });
+  AsyncFunction.prototype.call = function patchedAsyncCall(context, ...args) {
+    const result = originalAsyncCall.call(this, context, ...args);
+    if (result && typeof result.catch === 'function') {
+      return result;
+    }
+    return Promise.resolve(result);
+  };
+}
 import requirementsGridTemplate from './components/requirements-grid.html?raw';
 import inlineEditTemplate from './components/inline-edit.html?raw';
 import './styles/tailwind.css';
