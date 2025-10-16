@@ -37,18 +37,21 @@ export async function addEmployee({
   }
 
   const command = new AddEmployee(database, { employee });
-  const undoPayload = await command.execute();
+  const result = await command.execute();
+  const undoPayload = result;
+  const createdEmployee = result?.employee || employee;
+  const targetId = createdEmployee?.id || employee.id;
 
   await recordActivity(activityLog, {
     actionType: 'AddEmployee',
     actor,
-    targets: [employee.id],
-    metadata: { ...metadata, employee },
+    targets: targetId ? [targetId] : [],
+    metadata: { ...metadata, employee: createdEmployee },
     undoPayload,
     supportsUndo
   });
 
-  return { undoPayload, employee };
+  return { undoPayload, employee: createdEmployee };
 }
 
 export async function importEmployees({
