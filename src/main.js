@@ -1002,6 +1002,19 @@ registerV2Component('v2DashboardApp', () => ({
       this.addEmployeeModal.saving = false;
     }
   },
+  toast(message, type = 'info', options = {}) {
+    const store = this.$store?.app;
+    const payload = typeof options === 'object' && options !== null ? { ...options } : {};
+    payload.type = typeof type === 'string' && type ? type : 'info';
+    payload.message = typeof message === 'string' ? message : String(message ?? '');
+    if (store && typeof store.showToast === 'function') {
+      store.showToast(payload);
+      return;
+    }
+    if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+      window.alert(payload.message);
+    }
+  },
   downloadSampleCsv() {
     try {
       window.open('/sample-employees.csv', '_blank', 'noopener');
@@ -1104,6 +1117,12 @@ registerV2Component('v2DashboardApp', () => ({
     const targetFile = file || this.importDrawer.file;
     if (!targetFile) {
       this.setImportDrawerError('Select a file to start the dry-run.', { toast: false });
+      return;
+    }
+    const fileName = typeof targetFile.name === 'string' ? targetFile.name : '';
+    const extension = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
+    if (extension === 'xlsx' && !window.XLSX && !window.__xlsxModule) {
+      this.toast('Excel not available—use CSV or bundle XLSX', 'error');
       return;
     }
     const dryRunFn = window.importEmployeesDryRun;
