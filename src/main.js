@@ -593,6 +593,51 @@ registerV2Component('v2DashboardApp', () => ({
       console.info('Legacy dashboard active; skipping v2 bootstrap.');
       return;
     }
+    const savedFilters = (() => {
+      try {
+        return JSON.parse(localStorage.getItem('filters') || '{}') || {};
+      } catch (error) {
+        console.warn('Failed to parse saved filters', error);
+        return {};
+      }
+    })();
+    const defaultFilters = {
+      roles: [],
+      status: 'all',
+      compliance: 'all',
+      expiringSoon: false,
+      search: '',
+      analytics: null
+    };
+    const normalizedFilters = {
+      ...defaultFilters,
+      ...savedFilters
+    };
+    if (!Array.isArray(normalizedFilters.roles)) {
+      normalizedFilters.roles = [];
+    }
+    if (typeof normalizedFilters.status !== 'string') {
+      normalizedFilters.status = defaultFilters.status;
+    }
+    if (typeof normalizedFilters.compliance !== 'string') {
+      normalizedFilters.compliance = defaultFilters.compliance;
+    }
+    if (typeof normalizedFilters.search !== 'string') {
+      normalizedFilters.search = defaultFilters.search;
+    }
+    normalizedFilters.expiringSoon = !!normalizedFilters.expiringSoon;
+    this.filters = normalizedFilters;
+    this.$watch(
+      'filters',
+      value => {
+        try {
+          localStorage.setItem('filters', JSON.stringify(value));
+        } catch (error) {
+          console.warn('Failed to persist filters', error);
+        }
+      },
+      { deep: true }
+    );
     this.mountInlineTemplate();
     this.initializeDarkMode();
     this.$watch(
