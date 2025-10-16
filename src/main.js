@@ -180,6 +180,9 @@ function createAppStore() {
   const store = {
     APP_FLAGS: { ...window.APP_FLAGS },
     showImportModal: false,
+    showAddEmployeeModal: false,
+    employees: [],
+    filteredEmployees: [],
     showLookupModal: null,
     toast: null,
     _toastTimer: null,
@@ -281,6 +284,18 @@ function createAppStore() {
     },
     setToast(toast) {
       this.toast = toast ?? null;
+    },
+    setEmployees(employees) {
+      this.employees = Array.isArray(employees) ? employees : [];
+    },
+    setFilteredEmployees(employees) {
+      this.filteredEmployees = Array.isArray(employees) ? employees : [];
+    },
+    totalEmployees() {
+      return this.employees.length;
+    },
+    filteredCount() {
+      return this.filteredEmployees.length;
     }
   };
 
@@ -351,6 +366,7 @@ registerV2Component('v2DashboardApp', () => ({
   loading: true,
   loadError: null,
   darkMode: false,
+  showExportMenu: false,
   employees: [],
   requirements: [],
   employeeRequirements: [],
@@ -445,6 +461,7 @@ registerV2Component('v2DashboardApp', () => ({
       return normalizeLower(a?.firstName).localeCompare(normalizeLower(b?.firstName));
     });
     this.employees = employees;
+    this.updateStoreEmployees();
     this.requirements = requirements;
     this.employeeRequirements = employeeRequirements;
     this.refreshRequirementMap();
@@ -491,6 +508,37 @@ registerV2Component('v2DashboardApp', () => ({
     this.darkMode = !this.darkMode;
     localStorage.setItem(DARK_MODE_KEY, this.darkMode ? 'dark' : 'light');
   },
+  updateStoreEmployees() {
+    const appStore = this.$store?.app;
+    if (!appStore) return;
+    if (typeof appStore.setEmployees === 'function') {
+      appStore.setEmployees(this.employees);
+      return;
+    }
+    appStore.employees = Array.isArray(this.employees) ? this.employees : [];
+  },
+  updateStoreFilteredEmployees() {
+    const appStore = this.$store?.app;
+    if (!appStore) return;
+    if (typeof appStore.setFilteredEmployees === 'function') {
+      appStore.setFilteredEmployees(this.filteredEmployees);
+      return;
+    }
+    appStore.filteredEmployees = Array.isArray(this.filteredEmployees) ? this.filteredEmployees : [];
+  },
+  triggerExport(format) {
+    this.showExportMenu = false;
+    const normalized = typeof format === 'string' ? format.toLowerCase() : '';
+    console.info(`Export requested: ${normalized}`);
+  },
+  printReport() {
+    this.showExportMenu = false;
+    if (typeof window?.print === 'function') {
+      window.print();
+    } else {
+      console.info('Print requested');
+    }
+  },
   applyFilters() {
     const roleFilter = this.filters.roles.map(normalizeLower);
     const statusFilter = normalizeLower(this.filters.status);
@@ -516,6 +564,7 @@ registerV2Component('v2DashboardApp', () => ({
       }
       return true;
     });
+    this.updateStoreFilteredEmployees();
   },
   resetFilters() {
     this.filters.roles = [];

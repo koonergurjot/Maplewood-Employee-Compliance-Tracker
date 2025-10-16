@@ -40,6 +40,40 @@
     }
 
     [x-cloak] { display: none !important; }
+
+    .export-menu {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border-soft);
+      border-radius: 0.75rem;
+      padding: 0.25rem;
+      box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.08);
+    }
+
+    body.dark .export-menu {
+      background: var(--bg-card-dark);
+      color: var(--text-primary-dark);
+      border-color: var(--border-soft-dark);
+    }
+
+    .export-menu button {
+      width: 100%;
+      display: block;
+      background: none;
+      border: none;
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      color: inherit;
+      cursor: pointer;
+    }
+
+    .export-menu button:hover,
+    .export-menu button:focus {
+      background: var(--accent-soft);
+      outline: none;
+    }
   </style>
 </head>
 <body x-data="AppStore()" data-app="compliance-tracker">
@@ -54,16 +88,33 @@
   >
     <main class="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
       <header class="space-y-2">
-        <div class="flex items-center justify-between gap-4">
+        <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 class="text-2xl font-semibold leading-tight">Employee Compliance Overview</h1>
             <p class="text-sm text-muted">Use filters to narrow results and click any requirement cell to update progress.</p>
           </div>
-          <button type="button" class="btn" @click="toggleDarkMode" aria-label="Toggle dark mode">
-            <span x-text="darkMode ? 'Light mode' : 'Dark mode'"></span>
-          </button>
+          <div class="flex flex-wrap items-center justify-end gap-2">
+            <button type="button" class="btn ghost" @click="$store.app.showImportModal = true">Import</button>
+            <button type="button" class="btn ghost" @click="$store.app.showAddEmployeeModal = true">Add Employee</button>
+            <div class="relative" @click.outside="showExportMenu = false">
+              <button type="button" class="btn ghost" @click="showExportMenu = !showExportMenu">Export</button>
+              <div
+                class="export-menu"
+                x-show="showExportMenu"
+                x-transition.opacity
+                style="min-width: 10rem; position: absolute; right: 0; margin-top: 0.5rem;"
+              >
+                <button type="button" @click="triggerExport('csv')">Export CSV</button>
+                <button type="button" @click="triggerExport('json')">Export JSON</button>
+                <button type="button" @click="printReport">Print</button>
+              </div>
+            </div>
+            <button type="button" class="btn" @click="toggleDarkMode" aria-label="Toggle dark mode">
+              <span x-text="darkMode ? 'Light mode' : 'Dark mode'"></span>
+            </button>
+          </div>
         </div>
-        <div class="text-xs text-muted">Showing <span x-text="filteredEmployees.length"></span> of <span x-text="employees.length"></span> team members.</div>
+        <div class="text-xs text-muted">Showing <span x-text="$store.app.filteredCount()"></span> of <span x-text="$store.app.totalEmployees()"></span> team members.</div>
       </header>
 
       <template x-if="loadError">
