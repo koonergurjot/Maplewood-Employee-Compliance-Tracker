@@ -57,11 +57,16 @@ export function evaluateRequirementState(record, options = {}) {
   }
 
   const overdue = !compliant && expired;
-  const expiringSoon =
+  const withinAtRiskWindow =
     !compliant &&
     daysUntilExpiry !== null &&
     daysUntilExpiry >= 0 &&
     daysUntilExpiry <= atRiskWindowDays;
+  const expiringSoon =
+    !compliant &&
+    daysUntilExpiry !== null &&
+    daysUntilExpiry >= 0 &&
+    daysUntilExpiry <= expiringSoonDays;
   const expiringThisWeek =
     !compliant &&
     daysUntilExpiry !== null &&
@@ -77,7 +82,7 @@ export function evaluateRequirementState(record, options = {}) {
     overdue,
     expiringSoon,
     expiringThisWeek,
-    atRisk: overdue || expiringSoon
+    atRisk: overdue || withinAtRiskWindow
   };
 }
 
@@ -154,9 +159,11 @@ export function computeAnalyticsSummary(context) {
       }
       if (state.overdue) {
         stats.overdueCount += 1;
-        stats.atRiskCount += 1;
-      } else if (state.expiringSoon) {
+      }
+      if (state.expiringSoon) {
         stats.expiringSoonCount += 1;
+      }
+      if (state.atRisk) {
         stats.atRiskCount += 1;
       }
       if (state.expiringThisWeek) {
