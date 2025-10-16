@@ -2,6 +2,7 @@ import Papa from 'papaparse';
 
 import { createDatabase, ensureDexieLoaded, generateId, BULK_OPERATION_CHUNK_SIZE, chunkArray } from './db.js';
 import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
+import { warnOnce } from './src/compat/deprecations.js';
 
 /**
  * Client-side importer for Employees.
@@ -11,6 +12,11 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
  * - Uses Dexie and PapaParse modules provided via the bundled build.
 */
 (function(){
+  if (typeof window !== 'undefined' && window.APP_FLAGS?.USE_V2_MAIN) {
+    warnOnce('legacy-importer', 'Legacy importer loaded but v2 is active; not mounting.');
+    return;
+  }
+
   function getAppStore(){
     if (!window.Alpine || typeof window.Alpine.store !== 'function'){
       return null;

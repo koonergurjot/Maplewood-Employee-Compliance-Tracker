@@ -1,3 +1,12 @@
+import { warnOnce } from './src/compat/deprecations.js';
+
+const hasWindowObject = typeof window !== 'undefined';
+const skipLegacyOnboarding = hasWindowObject && Boolean(window.APP_FLAGS?.USE_V2_MAIN);
+
+if (skipLegacyOnboarding) {
+  warnOnce('legacy-onboarding', 'Legacy onboarding loaded but v2 is active; not mounting.');
+}
+
 function startTour(){
   const steps = [
     { element: '#import-btn', text: 'Import employee data from a file.' },
@@ -79,4 +88,6 @@ function startTour(){
   showStep();
 }
 
-window.startTour = startTour;
+if (hasWindowObject) {
+  window.startTour = skipLegacyOnboarding ? () => {} : startTour;
+}
