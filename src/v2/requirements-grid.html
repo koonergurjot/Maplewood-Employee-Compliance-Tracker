@@ -22,7 +22,7 @@
     <table class="requirements-table has-selection-column">
       <thead>
         <tr>
-          <th scope="col" class="sticky-select sticky-header checkbox-cell">
+          <th scope="col" class="sticky-select sticky-header checkbox-cell" rowspan="2">
             <span class="sr-only">Select all employees</span>
             <input
               type="checkbox"
@@ -34,18 +34,47 @@
               x-effect="if ($refs.selectAllCheckbox) { $refs.selectAllCheckbox.indeterminate = hasSomeVisibleSelected() && !areAllVisibleSelected(); }"
             />
           </th>
-          <th scope="col" class="sticky-col sticky-header">
+          <th scope="col" class="sticky-col sticky-header sticky-col-name employee-header" rowspan="2">
             <span>Employee</span>
           </th>
-          <template x-for="req in requirements" :key="req.id">
-            <th scope="col" class="sticky-header">
-              <div class="requirement-head">
-                <span class="requirement-name" x-text="req.name"></span>
-                <span class="requirement-tag" x-show="req.defaultExpiryDays" x-text="req.defaultExpiryDays + 'd'"></span>
-              </div>
+          <th scope="col" class="sticky-col sticky-header sticky-info-col sticky-col-info-1 employee-header" rowspan="2">
+            <span>Seniority Hours</span>
+          </th>
+          <th scope="col" class="sticky-col sticky-header sticky-info-col sticky-col-info-2 employee-header" rowspan="2">
+            <span>Job Class</span>
+          </th>
+          <th scope="col" class="sticky-col sticky-header sticky-info-col sticky-col-info-3 employee-header" rowspan="2">
+            <span>Job Title</span>
+          </th>
+          <th scope="col" class="sticky-col sticky-header sticky-info-col sticky-col-info-4 employee-header" rowspan="2">
+            <span>Ranking</span>
+          </th>
+          <th scope="col" class="sticky-col sticky-header sticky-info-col sticky-col-info-5 employee-header" rowspan="2">
+            <span>Position Status</span>
+          </th>
+          <th class="sticky-header requirements-divider sticky-divider" role="presentation" aria-hidden="true" rowspan="2"></th>
+          <template x-if="requirements.length">
+            <th
+              scope="col"
+              class="sticky-header requirements-group"
+              :colspan="requirements.length"
+            >
+              Requirements
             </th>
           </template>
         </tr>
+        <template x-if="requirements.length">
+          <tr>
+            <template x-for="req in requirements" :key="req.id">
+              <th scope="col" class="sticky-header requirement-header">
+                <div class="requirement-head">
+                  <span class="requirement-name" x-text="req.name"></span>
+                  <span class="requirement-tag" x-show="req.defaultExpiryDays" x-text="req.defaultExpiryDays + 'd'"></span>
+                </div>
+              </th>
+            </template>
+          </tr>
+        </template>
       </thead>
       <tbody>
         <template x-for="employee in filteredEmployees" :key="employee.id">
@@ -59,7 +88,7 @@
                 @change="toggleEmployeeSelection(employee.id, $event.target.checked)"
               />
             </td>
-            <th scope="row" class="sticky-col">
+            <th scope="row" class="sticky-col sticky-col-name employee-info-cell">
               <div class="flex items-center gap-3">
                 <div class="relative">
                   <div
@@ -86,6 +115,25 @@
                 <button class="ml-auto text-slate-500 hover:text-slate-700" @click.stop="openProfile(employee.id)" title="Details">⋯</button>
               </div>
             </th>
+            <td class="sticky-col sticky-info-col sticky-col-info-1 employee-info-cell employee-info-cell-number">
+              <span
+                class="employee-info-meta"
+                x-text="employee.seniorityHours !== null && employee.seniorityHours !== '' ? Number(employee.seniorityHours).toLocaleString() : '—'"
+              ></span>
+            </td>
+            <td class="sticky-col sticky-info-col sticky-col-info-2 employee-info-cell">
+              <span class="employee-info-meta" x-text="employee.jobClass || '—'"></span>
+            </td>
+            <td class="sticky-col sticky-info-col sticky-col-info-3 employee-info-cell">
+              <span class="employee-info-meta" x-text="employee.jobTitle || employee.role || '—'"></span>
+            </td>
+            <td class="sticky-col sticky-info-col sticky-col-info-4 employee-info-cell">
+              <span class="employee-info-meta" x-text="employee.ranking || '—'"></span>
+            </td>
+            <td class="sticky-col sticky-info-col sticky-col-info-5 employee-info-cell">
+              <span class="employee-info-meta" x-text="employee.positionStatus || employee.status || '—'"></span>
+            </td>
+            <td class="requirements-divider sticky-divider" role="presentation" aria-hidden="true"></td>
             <template x-for="req in requirements" :key="req.id">
               <td x-data="{ cell: getRequirementCell(employee.id, req.id) }">
                 <div
