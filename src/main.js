@@ -1,50 +1,53 @@
 import './polyfills/async-function-call.js';
 import Alpine from 'alpinejs';
 import { qs } from './utils/dom.js';
+import miniAnalyticsTemplate from './v2/mini-analytics.html?raw';
 import requirementsGridTemplate from './v2/requirements-grid.html?raw';
+import importDrawerTemplate from './v2/import-drawer.html?raw';
+import addEmployeeModalTemplate from './v2/add-employee-modal.html?raw';
+import bulkActionsTemplate from './v2/bulk-actions.html?raw';
+import activityTimelineTemplate from './v2/activity-timeline.html?raw';
 const inlineEditTemplate = `
 <template>
-  <div x-teleport="body">
-    <div class="inline-overlay" x-show="activeEditor.open" x-transition.opacity @click="closeEditor" aria-hidden="true"></div>
-    <div
-      class="inline-panel"
-      x-show="activeEditor.open"
-      x-transition
-      :style="activeEditor.style"
-      role="dialog"
-      aria-modal="true"
-      :aria-label="editorTitle()"
-      @keydown.escape.window.stop.prevent="closeEditor"
-      @click.outside="closeEditor"
-    >
-      <form class="inline-form" @submit.prevent="saveActiveEditor">
-        <header class="inline-header">
-          <h2 class="inline-title" x-text="editorTitle()"></h2>
-        </header>
-        <div class="inline-body">
-          <label class="inline-field">
-            <span>Status</span>
-            <select class="input" x-ref="editorStatus" x-model="editorForm.status">
-              <template x-for="status in editorStatusOptions" :key="status">
-                <option :value="status" x-text="status"></option>
-              </template>
-            </select>
-          </label>
-          <label class="inline-field">
-            <span>Completed on</span>
-            <input type="date" class="input" x-model="editorForm.completedOn" />
-          </label>
-          <label class="inline-field">
-            <span>Expires on</span>
-            <input type="date" class="input" x-model="editorForm.expiresOn" />
-          </label>
-        </div>
-        <footer class="inline-footer">
-          <button type="button" class="btn ghost" @click="closeEditor">Cancel</button>
-          <button type="submit" class="btn primary">Save changes</button>
-        </footer>
-      </form>
-    </div>
+  <div class="inline-overlay" x-show="activeEditor.open" x-transition.opacity @click="closeEditor" aria-hidden="true"></div>
+  <div
+    class="inline-panel"
+    x-show="activeEditor.open"
+    x-transition
+    :style="activeEditor.style"
+    role="dialog"
+    aria-modal="true"
+    :aria-label="editorTitle()"
+    @keydown.escape.window.stop.prevent="closeEditor"
+    @click.outside="closeEditor"
+  >
+    <form class="inline-form" @submit.prevent="saveActiveEditor">
+      <header class="inline-header">
+        <h2 class="inline-title" x-text="editorTitle()"></h2>
+      </header>
+      <div class="inline-body">
+        <label class="inline-field">
+          <span>Status</span>
+          <select class="input" x-ref="editorStatus" x-model="editorForm.status">
+            <template x-for="status in editorStatusOptions" :key="status">
+              <option :value="status" x-text="status"></option>
+            </template>
+          </select>
+        </label>
+        <label class="inline-field">
+          <span>Completed on</span>
+          <input type="date" class="input" x-model="editorForm.completedOn" />
+        </label>
+        <label class="inline-field">
+          <span>Expires on</span>
+          <input type="date" class="input" x-model="editorForm.expiresOn" />
+        </label>
+      </div>
+      <footer class="inline-footer">
+        <button type="button" class="btn ghost" @click="closeEditor">Cancel</button>
+        <button type="submit" class="btn primary">Save changes</button>
+      </footer>
+    </form>
   </div>
 </template>
 `;
@@ -699,86 +702,53 @@ registerV2Component('v2DashboardApp', () => ({
     }
   },
   async loadPartials() {
-    await Promise.all([
-      (async () => {
-        try {
-          const response = await fetch('./src/v2/mini-analytics.html');
-          if (!response.ok) {
-            throw new Error(`Failed to load analytics summary (status ${response.status})`);
-          }
-          this.partials.miniAnalytics = await response.text();
-          this.hydrateMiniAnalytics();
-        } catch (error) {
-          console.error(error);
-          this.partials.miniAnalytics = '';
-        }
-      })(),
-      (async () => {
-        try {
-          const response = await fetch('./src/v2/requirements-grid.html');
-          if (!response.ok) {
-            throw new Error(`Failed to load requirements grid (status ${response.status})`);
-          }
-          this.partials.requirementsGrid = await response.text();
-          this.hydrateRequirementsGrid();
-        } catch (error) {
-          console.error(error);
-          this.partials.requirementsGrid = '';
-        }
-      })(),
-      (async () => {
-        try {
-          const response = await fetch('./src/v2/import-drawer.html');
-          if (!response.ok) {
-            throw new Error(`Failed to load import drawer (status ${response.status})`);
-          }
-          this.partials.importDrawer = await response.text();
-          this.hydrateImportDrawer();
-        } catch (error) {
-          console.error(error);
-          this.partials.importDrawer = '';
-        }
-      })(),
-      (async () => {
-        try {
-          const response = await fetch('./src/v2/add-employee-modal.html');
-          if (!response.ok) {
-            throw new Error(`Failed to load add employee modal (status ${response.status})`);
-          }
-          this.partials.addEmployeeModal = await response.text();
-          this.hydrateAddEmployeeModal();
-        } catch (error) {
-          console.error(error);
-          this.partials.addEmployeeModal = '';
-        }
-      })(),
-      (async () => {
-        try {
-          const response = await fetch('./src/v2/bulk-actions.html');
-          if (!response.ok) {
-            throw new Error(`Failed to load bulk actions (status ${response.status})`);
-          }
-          this.partials.bulkActions = await response.text();
-          this.hydrateBulkActions();
-        } catch (error) {
-          console.error(error);
-          this.partials.bulkActions = '';
-        }
-      })(),
-      (async () => {
-        try {
-          const response = await fetch('./src/v2/activity-timeline.html');
-          if (!response.ok) {
-            throw new Error(`Failed to load activity timeline (status ${response.status})`);
-          }
-          this.partials.activityTimeline = await response.text();
-          this.hydrateActivityTimeline();
-        } catch (error) {
-          console.error(error);
-          this.partials.activityTimeline = '';
-        }
-      })()
-    ]);
+    try {
+      this.partials.miniAnalytics = miniAnalyticsTemplate;
+      this.hydrateMiniAnalytics();
+    } catch (error) {
+      console.error(error);
+      this.partials.miniAnalytics = '';
+    }
+
+    try {
+      this.partials.requirementsGrid = requirementsGridTemplate;
+      this.hydrateRequirementsGrid();
+    } catch (error) {
+      console.error(error);
+      this.partials.requirementsGrid = '';
+    }
+
+    try {
+      this.partials.importDrawer = importDrawerTemplate;
+      this.hydrateImportDrawer();
+    } catch (error) {
+      console.error(error);
+      this.partials.importDrawer = '';
+    }
+
+    try {
+      this.partials.addEmployeeModal = addEmployeeModalTemplate;
+      this.hydrateAddEmployeeModal();
+    } catch (error) {
+      console.error(error);
+      this.partials.addEmployeeModal = '';
+    }
+
+    try {
+      this.partials.bulkActions = bulkActionsTemplate;
+      this.hydrateBulkActions();
+    } catch (error) {
+      console.error(error);
+      this.partials.bulkActions = '';
+    }
+
+    try {
+      this.partials.activityTimeline = activityTimelineTemplate;
+      this.hydrateActivityTimeline();
+    } catch (error) {
+      console.error(error);
+      this.partials.activityTimeline = '';
+    }
   },
   hydrateMiniAnalytics() {
     this.$nextTick(() => {
