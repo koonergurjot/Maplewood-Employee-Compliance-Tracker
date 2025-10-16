@@ -150,6 +150,11 @@ function normalizeDateInputValue(value) {
     if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
       const hasTimezoneOffset = trimmed.includes('T') && /[zZ]|[+-]\d{2}:?\d{2}$/.test(trimmed);
       if (hasTimezoneOffset) {
+        const isoDateMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (isoDateMatch) {
+          return isoDateMatch[1];
+        }
+
         const parsedWithTimezone = new Date(trimmed);
         if (!Number.isNaN(parsedWithTimezone.getTime())) {
           return formatDateToUTCYYYYMMDD(parsedWithTimezone);
