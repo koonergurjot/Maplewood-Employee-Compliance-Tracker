@@ -34,7 +34,7 @@ const initialHash = (() => {
 
 const currentCacheName = `cmatrix-${initialHash}`;
 
-const PRECACHE_URLS = ['/', '/manifest.webmanifest', '/icon-192.svg', '/icon-512.svg'];
+const PRECACHE_URLS = ['/', 'manifest.webmanifest', 'icon-192.svg', 'icon-512.svg'];
 const INDEX_URL = new URL('/', scopeUrl).toString();
 
 const cacheFirst = async (request) => {
