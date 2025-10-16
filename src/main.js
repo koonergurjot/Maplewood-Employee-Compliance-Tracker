@@ -2012,6 +2012,25 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     if (status === 'Completed') return '✔ Complete';
     return '○ Pending';
   },
+  requirementCellChipText(employeeId, requirementId) {
+    return this.chipText(this.getRequirementCell(employeeId, requirementId));
+  },
+  requirementCellSubtext(employeeId, requirementId) {
+    return this.cellSubtext(this.getRequirementCell(employeeId, requirementId));
+  },
+  requirementCellBadgeClasses(employeeId, requirementId) {
+    const cell = this.getRequirementCell(employeeId, requirementId);
+    const status = normalizeStatus(cell?.status || 'Pending');
+    const isCompleted = status === 'Completed' || status === 'Complete';
+    const expired = this.cellExpired(cell);
+    const warn = this.cellWarn(cell);
+    return {
+      'badge-green': isCompleted && !expired,
+      'badge-amber': isCompleted && warn,
+      'badge-rose': expired,
+      'badge-slate': !isCompleted && !expired
+    };
+  },
   requirementExpired(record) {
     if (!record) return false;
     return this.cellExpired({ expiresAt: record.expiresOn, raw: record });
