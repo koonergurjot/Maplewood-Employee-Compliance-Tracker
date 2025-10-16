@@ -1,122 +1,99 @@
 @media print {
-  @page {
-    margin: 12mm;
-  }
-
   :root {
     color-scheme: light;
   }
 
+  body,
+  #app-v2,
+  main,
+  .card {
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
+  }
+
   body {
-    background: #ffffff !important;
-    color: #111827 !important;
-    font-size: 11pt;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    margin: 0.5in;
+    font-size: 12pt;
   }
 
-  main {
-    padding: 0 !important;
-  }
-
-  .btn,
+  header,
+  .toolbar,
   .filters-card,
-  .filters-footer,
-  .filters-meta,
-  .bulk-actions-slot,
+  .filters-grid,
+  .btn,
+  button,
   .export-menu,
-  .toggle-row,
-  .toast-host,
-  #import-drawer,
-  #add-employee-modal,
-  .inline-overlay,
-  .inline-panel,
-  .activity-timeline,
-  #activity-timeline {
+  .drawer,
+  .drawer-backdrop,
+  [x-cloak],
+  [data-drawer],
+  [role="dialog"],
+  nav,
+  footer {
     display: none !important;
   }
 
-  .checkbox-input,
-  .toggle,
-  .bulk-actions-buttons,
-  .bulk-footer {
-    display: none !important;
+  a,
+  .link,
+  .text-muted,
+  .cell-sub {
+    color: #000 !important;
   }
 
-  .grid-scroll {
-    overflow: visible !important;
-  }
-
-  .requirements-table {
+  table {
+    width: 100% !important;
     border-collapse: collapse !important;
-    width: 100%;
     table-layout: fixed;
+    font-size: 11pt;
   }
 
-  .requirements-table thead th {
-    background: #f1f5f9 !important;
-    color: #0f172a !important;
-    font-size: 0.7rem !important;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+  thead {
+    display: table-header-group;
   }
 
-  .requirements-table th,
-  .requirements-table td {
-    border: 1px solid #9ca3af !important;
-    padding: 0.5rem !important;
-    background: #ffffff !important;
-    color: #111827 !important;
+  tbody tr {
+    page-break-inside: avoid;
+  }
+
+  th,
+  td {
+    border: 1px solid #000 !important;
+    padding: 6px 8px !important;
+    background: #fff !important;
+    color: #000 !important;
     vertical-align: top;
   }
 
-  .requirements-table tbody tr:nth-child(even) td {
-    background: #ffffff !important;
-  }
-
-  .requirements-table .checkbox-cell,
-  .requirements-table .sticky-select {
-    display: none !important;
-  }
-
-  button.cell {
-    pointer-events: none !important;
-    border: none !important;
-    background: transparent !important;
-    padding: 0 !important;
-    box-shadow: none !important;
-    gap: 0.3rem !important;
-  }
-
-  .cell-status {
-    background: #ffffff !important;
-    border: 1px solid #111827 !important;
-    color: #111827 !important;
+  th {
     font-weight: 700 !important;
-    letter-spacing: 0.04em !important;
   }
 
-  .cell-sub {
-    color: #374151 !important;
+  .cell {
+    gap: 0.25rem;
   }
 
-  .cell-indicator {
-    background: #111827 !important;
+  .badge,
+  .status-chip {
+    background: none !important;
+    color: #000 !important;
+    border: none !important;
+    box-shadow: none !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 700;
+    letter-spacing: normal;
+    text-transform: none;
+    font-family: 'Segoe UI', 'Noto Sans Symbols', sans-serif;
   }
 
-  .ring-track {
-    stroke: #d1d5db !important;
-  }
-
-  .ring-value {
-    stroke: #111827 !important;
-  }
-
-  .ring-label {
-    color: #111827 !important;
-  }
-
-  .employee-sub {
-    color: #374151 !important;
+  .badge span,
+  .badge strong,
+  .badge em,
+  .status-chip span,
+  .status-chip strong,
+  .status-chip em {
+    color: inherit !important;
   }
 }
