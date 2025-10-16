@@ -127,6 +127,8 @@
         </section>
       </template>
 
+      <div id="mini-analytics" x-show="!loadError" x-html="partials.miniAnalytics"></div>
+
       <section class="card" aria-label="Employee requirements grid">
         <div class="space-y-4">
           <section class="filters-card">
@@ -172,7 +174,7 @@
             </div>
             <div class="filters-footer">
               <button type="button" class="btn ghost" @click="resetFilters">Reset filters</button>
-              <div class="filters-meta" x-show="filters.roles.length || filters.status !== 'all' || filters.compliance !== 'all' || filters.expiringSoon || filters.search">
+              <div class="filters-meta" x-show="filters.roles.length || filters.status !== 'all' || filters.compliance !== 'all' || filters.expiringSoon || filters.search || filters.analytics">
                 <span class="text-muted">Filters active</span>
               </div>
             </div>

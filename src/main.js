@@ -52,6 +52,13 @@ import './styles/tailwind.css';
 import { openDatabase, generateId } from '../db.js';
 import { addEmployee as addEmployeeApi } from './v2/api.js';
 import { exportFilteredCSV, exportFilteredJSON } from './v2/exporter.js';
+import {
+  ANALYTICS_AT_RISK_WINDOW_DAYS,
+  ANALYTICS_EXPIRING_WINDOW_DAYS,
+  computeAnalyticsSummary,
+  evaluateRequirementState,
+  normalizeStatus
+} from './logic/analytics.js';
 
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
@@ -461,14 +468,6 @@ function normalizeLower(value) {
   return normalizeString(value).toLowerCase();
 }
 
-function normalizeStatus(status) {
-  const lowered = normalizeLower(status);
-  if (lowered === 'completed' || lowered === 'complete') return 'Completed';
-  if (lowered === 'exempt' || lowered === 'not required') return 'Exempt';
-  if (lowered === 'pending' || lowered === 'incomplete') return 'Pending';
-  return status ? normalizeString(status) : 'Pending';
-}
-
 window.Alpine = Alpine;
 
 const activityTimelineStore = createActivityTimelineStore();
@@ -478,6 +477,7 @@ registerV2Component('v2DashboardApp', () => ({
   db: null,
   activityLog: null,
   partials: {
+    miniAnalytics: '',
     requirementsGrid: '',
     importDrawer: '',
     addEmployeeModal: '',
@@ -493,6 +493,21 @@ registerV2Component('v2DashboardApp', () => ({
   requirements: [],
   employeeRequirements: [],
   employeeRequirementMap: new Map(),
+  analytics: {
+    generatedAt: null,
+    atRisk: [],
+    complianceByRole: [],
+    expiringThisWeek: [],
+    totals: {
+      atRiskAssignments: 0,
+      overdueAssignments: 0,
+      expiringThisWeek: 0
+    }
+  },
+  analyticsConfig: {
+    atRiskWindowDays: ANALYTICS_AT_RISK_WINDOW_DAYS,
+    expiringSoonDays: ANALYTICS_EXPIRING_WINDOW_DAYS
+  },
   filteredEmployees: [],
   selectedEmployees: [],
   bulk: {
@@ -508,7 +523,8 @@ registerV2Component('v2DashboardApp', () => ({
     status: 'all',
     compliance: 'all',
     expiringSoon: false,
-    search: ''
+    search: '',
+    analytics: null
   },
   complianceOptions: [
     { value: 'all', label: 'All compliance' },
@@ -614,6 +630,19 @@ registerV2Component('v2DashboardApp', () => ({
     await Promise.all([
       (async () => {
         try {
+          const response = await fetch('./src/v2/mini-analytics.html');
+          if (!response.ok) {
+            throw new Error(`Failed to load analytics summary (status ${response.status})`);
+          }
+          this.partials.miniAnalytics = await response.text();
+          this.hydrateMiniAnalytics();
+        } catch (error) {
+          console.error(error);
+          this.partials.miniAnalytics = '';
+        }
+      })(),
+      (async () => {
+        try {
           const response = await fetch('./src/v2/requirements-grid.html');
           if (!response.ok) {
             throw new Error(`Failed to load requirements grid (status ${response.status})`);
@@ -678,6 +707,15 @@ registerV2Component('v2DashboardApp', () => ({
         }
       })()
     ]);
+  },
+  hydrateMiniAnalytics() {
+    this.$nextTick(() => {
+      const container = document.getElementById('mini-analytics');
+      if (container && container.dataset.alpineInitialized !== 'true') {
+        Alpine.initTree(container);
+        container.dataset.alpineInitialized = 'true';
+      }
+    });
   },
   hydrateRequirementsGrid() {
     this.$nextTick(() => {
@@ -1119,6 +1157,7 @@ registerV2Component('v2DashboardApp', () => ({
     this.employeeRequirements = employeeRequirements;
     this.refreshRequirementMap();
     this.refreshEmployeeLookups();
+    this.refreshAnalytics();
   },
   refreshRequirementMap() {
     const nextMap = new Map();
@@ -1172,6 +1211,137 @@ registerV2Component('v2DashboardApp', () => ({
         this.addEmployeeModal.form.employmentType = employmentTypes[0] || '';
       }
     }
+  },
+  refreshAnalytics() {
+    this.analytics = computeAnalyticsSummary({
+      employees: this.employees,
+      requirements: this.requirements,
+      employeeRequirements: this.employeeRequirements,
+      options: {
+        atRiskWindowDays: this.analyticsConfig.atRiskWindowDays,
+        expiringSoonDays: this.analyticsConfig.expiringSoonDays
+      }
+    });
+  },
+  analyticsReferenceDate() {
+    const source = this.analytics?.generatedAt;
+    const reference = source ? new Date(source) : new Date();
+    return Number.isNaN(reference.getTime()) ? new Date() : reference;
+  },
+  analyticsChipClass(active) {
+    const base =
+      'inline-flex items-center justify-between gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2';
+    const offset = this.darkMode ? 'focus-visible:ring-offset-slate-900' : 'focus-visible:ring-offset-white';
+    const activeClasses =
+      'border-blue-500 bg-blue-50 text-blue-700 focus-visible:ring-blue-500 dark:border-blue-400 dark:bg-blue-500/20 dark:text-blue-100';
+    const inactiveClasses =
+      'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-slate-100 focus-visible:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:focus-visible:ring-slate-500';
+    return `${base} ${offset} ${active ? activeClasses : inactiveClasses}`;
+  },
+  applyRequirementRiskFilter(entry) {
+    if (!entry || !entry.requirementId) {
+      return;
+    }
+    if (this.isRequirementRiskFilterActive(entry.requirementId)) {
+      this.filters.analytics = null;
+    } else {
+      this.filters.analytics = {
+        type: 'requirement-risk',
+        requirementId: entry.requirementId
+      };
+    }
+    this.applyFilters();
+  },
+  isRequirementRiskFilterActive(requirementId) {
+    const filter = this.filters.analytics;
+    if (!filter || filter.type !== 'requirement-risk') {
+      return false;
+    }
+    return filter.requirementId === requirementId;
+  },
+  applyRoleFilterFromAnalytics(role) {
+    if (!role) {
+      return;
+    }
+    if (this.isRoleFilterActive(role)) {
+      this.filters.roles = [];
+    } else {
+      this.filters.roles = [role];
+    }
+    this.applyFilters();
+  },
+  isRoleFilterActive(role) {
+    if (!role || !Array.isArray(this.filters.roles)) {
+      return false;
+    }
+    return this.filters.roles.length === 1 && this.filters.roles[0] === role;
+  },
+  applyExpiringWeekFilter(requirementId = null) {
+    const normalized = requirementId || null;
+    if (this.isExpiringWeekFilterActive(normalized)) {
+      this.filters.analytics = null;
+    } else {
+      this.filters.analytics = {
+        type: 'expiring-week',
+        requirementId: normalized,
+        windowDays: this.analyticsConfig.expiringSoonDays
+      };
+    }
+    this.applyFilters();
+  },
+  isExpiringWeekFilterActive(requirementId = null) {
+    const filter = this.filters.analytics;
+    if (!filter || filter.type !== 'expiring-week') {
+      return false;
+    }
+    return (filter.requirementId || null) === (requirementId || null);
+  },
+  clearAnalyticsFilter() {
+    if (!this.filters.analytics) {
+      return;
+    }
+    this.filters.analytics = null;
+    this.applyFilters();
+  },
+  employeeHasRequirementRisk(employeeId, requirementId) {
+    if (!employeeId) {
+      return false;
+    }
+    const requirements = Array.isArray(this.requirements) ? this.requirements : [];
+    const referenceDate = this.analyticsReferenceDate();
+    const ids = requirementId ? [requirementId] : requirements.map(req => req?.id).filter(Boolean);
+    for (const id of ids) {
+      const record = this.getEmployeeRequirement(employeeId, id);
+      const state = evaluateRequirementState(record, {
+        today: referenceDate,
+        atRiskWindowDays: this.analyticsConfig.atRiskWindowDays,
+        expiringSoonDays: this.analyticsConfig.expiringSoonDays
+      });
+      if (state.atRisk) {
+        return true;
+      }
+    }
+    return false;
+  },
+  employeeHasExpiringWithinWindow(employeeId, requirementId = null, windowDays = this.analyticsConfig.expiringSoonDays) {
+    if (!employeeId) {
+      return false;
+    }
+    const requirements = Array.isArray(this.requirements) ? this.requirements : [];
+    const referenceDate = this.analyticsReferenceDate();
+    const ids = requirementId ? [requirementId] : requirements.map(req => req?.id).filter(Boolean);
+    for (const id of ids) {
+      const record = this.getEmployeeRequirement(employeeId, id);
+      const state = evaluateRequirementState(record, {
+        today: referenceDate,
+        atRiskWindowDays: this.analyticsConfig.atRiskWindowDays,
+        expiringSoonDays: windowDays
+      });
+      if (state.expiringThisWeek) {
+        return true;
+      }
+    }
+    return false;
   },
   ensureBulkRequirement() {
     if (!Array.isArray(this.requirements) || this.requirements.length === 0) {
@@ -1408,6 +1578,7 @@ registerV2Component('v2DashboardApp', () => ({
         });
       }
     }
+    this.refreshAnalytics();
     this.applyFilters();
     const store = this.$store?.app;
     this.bulkProcessing = false;
@@ -1588,6 +1759,7 @@ registerV2Component('v2DashboardApp', () => ({
     const complianceFilter = this.filters.compliance;
     const query = normalizeLower(this.filters.search);
     const expiring = !!this.filters.expiringSoon;
+    const analyticsFilter = this.filters.analytics;
     this.filteredEmployees = this.employees.filter(employee => {
       const role = normalizeLower(employee.role);
       if (roleFilter.length && !roleFilter.includes(role)) return false;
@@ -1605,6 +1777,26 @@ registerV2Component('v2DashboardApp', () => ({
         if (complianceFilter === 'mid' && (pct < 70 || pct > 89)) return false;
         if (complianceFilter === 'low' && pct >= 70) return false;
       }
+      if (analyticsFilter) {
+        if (analyticsFilter.type === 'requirement-risk') {
+          if (!this.employeeHasRequirementRisk(employee.id, analyticsFilter.requirementId)) {
+            return false;
+          }
+        } else if (analyticsFilter.type === 'expiring-week') {
+          const windowDays = Number.isFinite(analyticsFilter.windowDays)
+            ? analyticsFilter.windowDays
+            : this.analyticsConfig.expiringSoonDays;
+          if (
+            !this.employeeHasExpiringWithinWindow(
+              employee.id,
+              analyticsFilter.requirementId || null,
+              windowDays
+            )
+          ) {
+            return false;
+          }
+        }
+      }
       return true;
     });
     this.updateStoreFilteredEmployees();
@@ -1616,6 +1808,7 @@ registerV2Component('v2DashboardApp', () => ({
     this.filters.compliance = 'all';
     this.filters.expiringSoon = false;
     this.filters.search = '';
+    this.filters.analytics = null;
     this.applyFilters();
   },
   getEmployeeRequirement(employeeId, requirementId) {
@@ -1806,6 +1999,7 @@ registerV2Component('v2DashboardApp', () => ({
       });
     }
     this.setEmployeeRequirement(payload);
+    this.refreshAnalytics();
     this.closeEditor();
     this.applyFilters();
   },
