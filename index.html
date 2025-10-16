@@ -75,6 +75,84 @@
       background: var(--accent-soft);
       outline: none;
     }
+
+    .debug-hitbox-toggle {
+      position: fixed;
+      inset: auto 1.5rem 1.5rem auto;
+      z-index: 2000;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border: none;
+      border-radius: 9999px;
+      padding: 0.5rem 0.875rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: #f8fafc;
+      background: rgba(15, 23, 42, 0.78);
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.25);
+      cursor: pointer;
+      transition: background 150ms ease, transform 150ms ease;
+    }
+
+    .debug-hitbox-toggle:hover,
+    .debug-hitbox-toggle:focus-visible {
+      background: rgba(37, 99, 235, 0.9);
+      transform: translateY(-1px);
+      outline: none;
+    }
+
+    body.debug-hitboxes .debug-hitbox-toggle {
+      background: rgba(239, 68, 68, 0.92);
+    }
+
+    body.debug-hitboxes .debug-hitbox-toggle:hover,
+    body.debug-hitboxes .debug-hitbox-toggle:focus-visible {
+      background: rgba(239, 68, 68, 1);
+    }
+
+    body.debug-hitboxes * {
+      outline: 1px dashed rgba(37, 99, 235, 0.45);
+      outline-offset: -1px;
+    }
+
+    body.debug-hitboxes *:hover {
+      outline: 2px solid rgba(37, 99, 235, 0.85);
+      outline-offset: -2px;
+    }
+
+    body.debug-hitboxes .debug-hitbox-toggle,
+    body.debug-hitboxes .debug-hitbox-toggle * {
+      outline: none !important;
+    }
+
+    body.debug-hitboxes [data-hitbox-blocker] {
+      position: relative;
+      outline: 3px solid rgba(239, 68, 68, 0.85) !important;
+      background-image: repeating-linear-gradient(
+        135deg,
+        rgba(239, 68, 68, 0.12),
+        rgba(239, 68, 68, 0.12) 10px,
+        rgba(239, 68, 68, 0.05) 10px,
+        rgba(239, 68, 68, 0.05) 20px
+      );
+    }
+
+    body.debug-hitboxes [data-hitbox-blocker]::after {
+      content: 'Blocker ' attr(data-hitbox-blocker);
+      position: absolute;
+      top: 0;
+      left: 0;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #fff;
+      background: rgba(239, 68, 68, 0.95);
+      border-bottom-right-radius: 0.5rem;
+    }
   </style>
 </head>
 <body x-data="AppStore()" data-app="compliance-tracker">
@@ -210,6 +288,134 @@
   </div>
 
   <div id="app-legacy" x-show="!APP_FLAGS.USE_V2_MAIN"></div>
+
+  <button
+    type="button"
+    class="debug-hitbox-toggle"
+    x-data="{ active: false }"
+    x-init="
+      const sync = (event) => { active = !!(event.detail && event.detail.enabled); };
+      document.addEventListener('debug-hitboxes:toggled', sync);
+      active = document.body.classList.contains('debug-hitboxes');
+    "
+    @click="active = window.__debugHitboxes.toggle();"
+    :aria-pressed="active.toString()"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" width="16" height="16">
+      <path
+        d="M2.166 10.168a1 1 0 0 1 .002-.336c.19-1.052.76-2.05 1.698-2.988C5.51 5.2 7.614 4.25 10 4.25c2.386 0 4.49.95 6.134 2.594.938.938 1.508 1.936 1.698 2.988a1 1 0 0 1-.002.336c-.19 1.052-.76 2.05-1.698 2.988C14.49 14.8 12.386 15.75 10 15.75c-2.386 0-4.49-.95-6.134-2.594-.938-.938-1.508-1.936-1.698-2.988ZM10 6.25c-1.928 0-3.51.74-4.802 2.032a4.37 4.37 0 0 0-.934 1.718 4.37 4.37 0 0 0 .934 1.718C6.49 12.01 8.072 12.75 10 12.75c1.928 0 3.51-.74 4.802-2.032a4.37 4.37 0 0 0 .934-1.718 4.37 4.37 0 0 0-.934-1.718C13.51 6.99 11.928 6.25 10 6.25Zm0 1.75a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"
+      />
+    </svg>
+    <span x-text="active ? 'Hide hitboxes' : 'Show hitboxes'"></span>
+  </button>
+
+  <script>
+    (() => {
+      const body = document.body;
+      const blockerAttribute = 'data-hitbox-blocker';
+      let raf = null;
+      let enabled = false;
+
+      const clearBlockers = () => {
+        const active = body.querySelectorAll('[' + blockerAttribute + ']');
+        active.forEach((el) => {
+          el.removeAttribute(blockerAttribute);
+        });
+      };
+
+      const annotateBlockers = () => {
+        clearBlockers();
+        if (!enabled) return;
+
+        const viewportArea = window.innerWidth * window.innerHeight;
+        if (!viewportArea) return;
+
+        const elements = body.querySelectorAll('*');
+        elements.forEach((el) => {
+          if (!(el instanceof HTMLElement) || el === body) return;
+
+          const style = window.getComputedStyle(el);
+          if (
+            style.pointerEvents === 'none' ||
+            style.display === 'none' ||
+            style.visibility === 'hidden' ||
+            style.opacity === '0'
+          ) {
+            return;
+          }
+
+          const rect = el.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return;
+
+          const area = rect.width * rect.height;
+          if (area < viewportArea * 0.6) return;
+          if (rect.width < window.innerWidth * 0.6 || rect.height < window.innerHeight * 0.6) return;
+
+          const coverage = Math.min(100, Math.round((area / viewportArea) * 100));
+          el.setAttribute(blockerAttribute, coverage + '%');
+        });
+      };
+
+      const scheduleAnnotate = () => {
+        if (!enabled) return;
+        if (raf) cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+          raf = null;
+          annotateBlockers();
+        });
+      };
+
+      const dispatchToggleEvent = () => {
+        const event = new CustomEvent('debug-hitboxes:toggled', {
+          detail: { enabled }
+        });
+        document.dispatchEvent(event);
+      };
+
+      const toggle = (force) => {
+        const next = typeof force === 'boolean' ? force : !body.classList.contains('debug-hitboxes');
+        enabled = next;
+        body.classList.toggle('debug-hitboxes', enabled);
+        if (!enabled) {
+          clearBlockers();
+        } else {
+          annotateBlockers();
+        }
+        dispatchToggleEvent();
+        return enabled;
+      };
+
+      const observer = new MutationObserver(() => scheduleAnnotate());
+      observer.observe(body, {
+        attributes: true,
+        attributeFilter: ['style', 'class'],
+        childList: true,
+        subtree: true
+      });
+
+      window.__debugHitboxes = {
+        toggle,
+        isEnabled: () => enabled,
+        refresh: () => annotateBlockers()
+      };
+
+      window.addEventListener(
+        'keydown',
+        (event) => {
+          if (event.key.toLowerCase() === 'h' && event.altKey && event.shiftKey) {
+            event.preventDefault();
+            toggle();
+          }
+        },
+        { passive: false }
+      );
+
+      window.addEventListener('resize', scheduleAnnotate, true);
+      window.addEventListener('scroll', scheduleAnnotate, true);
+
+      dispatchToggleEvent();
+    })();
+  </script>
 
   <script type="module" src="/src/main.js"></script>
 </body>
