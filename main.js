@@ -14,6 +14,7 @@ import './styles.css';
 import './import-employees.js';
 import './onboarding.js';
 import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup, putEmployeeRecord, getDexie, openDatabase } from './db.js';
+import * as CompatAPI from './src/compat/index.js';
 
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
@@ -3901,29 +3902,50 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             const status = /inactive|leave/i.test(a.status||'') ? 'Inactive' : 'Active';
             incoming.push({ id:generateId(), firstName:a.first, lastName:a.last, role, employmentType:type, status, employeeId:a.empId, seniorityHours:a.hours, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
           }
-          if (!incoming.length) {
-            return { added: 0, updated: 0, skipped: skipped.length };
-          }
-          try{
-            const { ImportEmployees } = await import('./commands.js');
-            const command = new ImportEmployees(this.db, { employees: incoming });
-            const undoPayload = await command.execute();
-            const added = undoPayload.addedEmployees?.length || 0;
-            const updated = undoPayload.updatedSnapshots?.length || 0;
-            const targets = new Set();
-            (undoPayload.addedEmployees || []).forEach(emp => targets.add(emp.id));
-            (undoPayload.updatedSnapshots || []).forEach(emp => targets.add(emp.id));
-            if (added || updated) {
-              await this.recordActivity('ImportEmployees', Array.from(targets), {
-                added,
-                updated,
-                skipped: skipped.length,
-                mapping: this.getEmployeeImportMappingSnapshot(),
-                missingColumns: [...this.missingRequiredColumns],
-                sourceHeaders: [...this.importHeaders]
-              }, undoPayload);
+
+          const activityMetadata = {
+            mapping: this.getEmployeeImportMappingSnapshot(),
+            missingColumns: [...this.missingRequiredColumns],
+            sourceHeaders: [...this.importHeaders]
+          };
+
+          const LegacyAPI = {
+            importEmployees: async ({ employees, metadata, skipped: skippedCount }) => {
+              if (!employees.length) {
+                return { added: 0, updated: 0, skipped: skippedCount };
+              }
+              const { ImportEmployees } = await import('./commands.js');
+              const command = new ImportEmployees(this.db, { employees });
+              const undoPayload = await command.execute();
+              const added = undoPayload.addedEmployees?.length || 0;
+              const updated = undoPayload.updatedSnapshots?.length || 0;
+              const targets = new Set();
+              (undoPayload.addedEmployees || []).forEach(emp => targets.add(emp.id));
+              (undoPayload.updatedSnapshots || []).forEach(emp => targets.add(emp.id));
+              if (added || updated) {
+                await this.recordActivity('ImportEmployees', Array.from(targets), {
+                  ...metadata,
+                  added,
+                  updated,
+                  skipped: skippedCount
+                }, undoPayload);
+              }
+              return { added, updated, skipped: skippedCount };
             }
-            return { added, updated, skipped: skipped.length };
+          };
+
+          const API = window.APP_FLAGS.USE_V2_MAIN ? CompatAPI : LegacyAPI;
+
+          try{
+            return await API.importEmployees({
+              db: this.db,
+              activityLog: this.activityLog,
+              employees: incoming,
+              actor: 'user',
+              metadata: activityMetadata,
+              skipped: skipped.length,
+              supportsUndo: true
+            });
           }catch(error){
             const stage = error && typeof error === 'object' && error.importStage ? error.importStage : 'write';
             const stageLabel = stage === 'parse' ? 'Parse' : (stage === 'transform' ? 'Transform' : 'Write');
@@ -5245,18 +5267,35 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
             this.notify('First name and last name are required', 'var(--danger)');
             return;
           }
-          const emp = {
+          const employee = {
             id: generateId(),
             ...this.newEmployee,
             status: this.newEmployee.status || 'Active',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
+
+          const LegacyAPI = {
+            addEmployee: async ({ employee: legacyEmployee }) => {
+              const { AddEmployee } = await import('./commands.js');
+              const command = new AddEmployee(this.db, { employee: legacyEmployee });
+              const undoPayload = await command.execute();
+              await this.recordActivity('AddEmployee', [legacyEmployee.id], { employee: legacyEmployee }, undoPayload);
+              return { undoPayload };
+            }
+          };
+
+          const API = window.APP_FLAGS.USE_V2_MAIN ? CompatAPI : LegacyAPI;
+
           try{
-            const { AddEmployee } = await import('./commands.js');
-            const command = new AddEmployee(this.db, { employee: emp });
-            const undoPayload = await command.execute();
-            await this.recordActivity('AddEmployee', [emp.id], { employee: emp }, undoPayload);
+            await API.addEmployee({
+              db: this.db,
+              activityLog: this.activityLog,
+              employee,
+              actor: 'user',
+              metadata: { employee },
+              supportsUndo: true
+            });
             this.newEmployee = {firstName:'', lastName:'', role:'', employmentType:'FT', employeeId:'', seniorityHours:'', status:'Active'};
             this.showAddEmployeeModal = false;
             await this.loadData();
