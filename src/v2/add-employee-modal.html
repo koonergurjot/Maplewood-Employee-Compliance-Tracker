@@ -1,0 +1,163 @@
+<div
+  id="add-employee-modal-root"
+  x-cloak
+  x-show="addEmployeeModal.open"
+  x-transition.opacity.duration.150ms
+  class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="add-employee-title"
+  @keydown.escape.window="closeAddEmployeeModal()"
+>
+  <button
+    type="button"
+    class="absolute inset-0 h-full w-full cursor-default"
+    @click="closeAddEmployeeModal()"
+    aria-hidden="true"
+    tabindex="-1"
+  ></button>
+  <section
+    class="relative w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"
+    @click.stop
+  >
+    <header class="mb-6 flex items-start justify-between gap-4">
+      <div>
+        <h2 id="add-employee-title" class="text-lg font-semibold text-slate-900 dark:text-slate-50">
+          Add employee
+        </h2>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Provide the team member's details to seed requirements from their role template.
+        </p>
+      </div>
+      <button
+        type="button"
+        class="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        @click="closeAddEmployeeModal()"
+        aria-label="Close add employee modal"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path
+            fill-rule="evenodd"
+            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+            clip-rule="evenodd"
+          />
+        </svg>
+      </button>
+    </header>
+    <form class="space-y-5" @submit.prevent="submitAddEmployeeForm" novalidate>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+          First name
+          <input
+            type="text"
+            class="input"
+            x-model="addEmployeeModal.form.firstName"
+            x-ref="addEmployeeFirstName"
+            :aria-invalid="Boolean(addEmployeeModal.errors.firstName)"
+            required
+          />
+          <p class="text-xs text-red-600" x-show="addEmployeeModal.errors.firstName" x-text="addEmployeeModal.errors.firstName"></p>
+        </label>
+        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+          Last name
+          <input
+            type="text"
+            class="input"
+            x-model="addEmployeeModal.form.lastName"
+            x-ref="addEmployeeLastName"
+            :aria-invalid="Boolean(addEmployeeModal.errors.lastName)"
+            required
+          />
+          <p class="text-xs text-red-600" x-show="addEmployeeModal.errors.lastName" x-text="addEmployeeModal.errors.lastName"></p>
+        </label>
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+          Role
+          <select
+            class="input"
+            x-model="addEmployeeModal.form.role"
+            x-ref="addEmployeeRole"
+            :aria-invalid="Boolean(addEmployeeModal.errors.role)"
+            required
+          >
+            <template x-for="role in employeeLookups.roles" :key="role">
+              <option :value="role" x-text="role"></option>
+            </template>
+          </select>
+          <p class="text-xs text-red-600" x-show="addEmployeeModal.errors.role" x-text="addEmployeeModal.errors.role"></p>
+        </label>
+        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+          Status
+          <select
+            class="input"
+            x-model="addEmployeeModal.form.status"
+            x-ref="addEmployeeStatus"
+            :aria-invalid="Boolean(addEmployeeModal.errors.status)"
+            required
+          >
+            <template x-for="status in employeeLookups.statuses" :key="status">
+              <option :value="status" x-text="status"></option>
+            </template>
+          </select>
+          <p class="text-xs text-red-600" x-show="addEmployeeModal.errors.status" x-text="addEmployeeModal.errors.status"></p>
+        </label>
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+          Employment type
+          <select
+            class="input"
+            x-model="addEmployeeModal.form.employmentType"
+            x-ref="addEmployeeEmploymentType"
+            :aria-invalid="Boolean(addEmployeeModal.errors.employmentType)"
+            required
+          >
+            <template x-for="type in employeeLookups.employmentTypes" :key="type">
+              <option :value="type" x-text="type"></option>
+            </template>
+          </select>
+          <p
+            class="text-xs text-red-600"
+            x-show="addEmployeeModal.errors.employmentType"
+            x-text="addEmployeeModal.errors.employmentType"
+          ></p>
+        </label>
+        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+          Seniority hours
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            class="input"
+            x-model="addEmployeeModal.form.seniorityHours"
+            x-ref="addEmployeeSeniorityHours"
+            :aria-invalid="Boolean(addEmployeeModal.errors.seniorityHours)"
+            required
+          />
+          <p
+            class="text-xs text-red-600"
+            x-show="addEmployeeModal.errors.seniorityHours"
+            x-text="addEmployeeModal.errors.seniorityHours"
+          ></p>
+        </label>
+      </div>
+      <template x-if="addEmployeeModal.errors.form">
+        <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200" role="alert">
+          <span x-text="addEmployeeModal.errors.form"></span>
+        </p>
+      </template>
+      <footer class="flex justify-end gap-3">
+        <button type="button" class="btn ghost" @click="closeAddEmployeeModal()">Cancel</button>
+        <button type="submit" class="btn" :disabled="addEmployeeModal.saving">
+          <template x-if="addEmployeeModal.saving">
+            <span>Adding…</span>
+          </template>
+          <template x-if="!addEmployeeModal.saving">
+            <span>Add employee</span>
+          </template>
+        </button>
+      </footer>
+    </form>
+  </section>
+</div>

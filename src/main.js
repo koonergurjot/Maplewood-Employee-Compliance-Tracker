@@ -50,6 +50,11 @@ const inlineEditTemplate = `
 `;
 import './styles/tailwind.css';
 import { openDatabase, generateId } from '../db.js';
+import { addEmployee as addEmployeeApi } from './v2/api.js';
+
+const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
+const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
+const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
 
 const DEFAULT_APP_FLAGS = { USE_V2_MAIN: true };
 const USE_V2_STORAGE_KEY = 'USE_V2_MAIN';
@@ -402,9 +407,11 @@ window.Alpine = Alpine;
 
 registerV2Component('v2DashboardApp', () => ({
   db: null,
+  activityLog: null,
   partials: {
     requirementsGrid: '',
-    importDrawer: ''
+    importDrawer: '',
+    addEmployeeModal: ''
   },
   inlineTemplateMounted: false,
   loading: true,
@@ -436,6 +443,24 @@ registerV2Component('v2DashboardApp', () => ({
     { value: 'Inactive', label: 'Inactive' }
   ],
   editorStatusOptions: ['Completed', 'Pending', 'Exempt'],
+  employeeLookups: {
+    roles: [...DEFAULT_ROLE_LOOKUPS],
+    statuses: [...DEFAULT_STATUS_LOOKUPS],
+    employmentTypes: [...DEFAULT_EMPLOYMENT_TYPE_LOOKUPS]
+  },
+  addEmployeeModal: {
+    open: false,
+    saving: false,
+    form: {
+      firstName: '',
+      lastName: '',
+      role: '',
+      status: '',
+      employmentType: '',
+      seniorityHours: ''
+    },
+    errors: {}
+  },
   activeEditor: {
     open: false,
     employeeId: null,
@@ -478,6 +503,17 @@ registerV2Component('v2DashboardApp', () => ({
         }
       }
     );
+    this.$watch(
+      () => this.$store?.app?.showAddEmployeeModal,
+      value => {
+        if (value) {
+          this.openAddEmployeeModal();
+        } else if (value === false && this.addEmployeeModal.open) {
+          this.closeAddEmployeeModal({ silent: true });
+        }
+      }
+    );
+    this.resetAddEmployeeForm();
     this.bootstrap();
   },
   async bootstrap() {
@@ -485,6 +521,7 @@ registerV2Component('v2DashboardApp', () => ({
       this.loading = true;
       await this.loadPartials();
       this.db = await openDatabase();
+      await this.initActivityLog();
       await this.loadData();
       this.applyFilters();
     } catch (error) {
@@ -521,6 +558,19 @@ registerV2Component('v2DashboardApp', () => ({
           console.error(error);
           this.partials.importDrawer = '';
         }
+      })(),
+      (async () => {
+        try {
+          const response = await fetch('./src/v2/add-employee-modal.html');
+          if (!response.ok) {
+            throw new Error(`Failed to load add employee modal (status ${response.status})`);
+          }
+          this.partials.addEmployeeModal = await response.text();
+          this.hydrateAddEmployeeModal();
+        } catch (error) {
+          console.error(error);
+          this.partials.addEmployeeModal = '';
+        }
       })()
     ]);
   },
@@ -536,6 +586,15 @@ registerV2Component('v2DashboardApp', () => ({
   hydrateImportDrawer() {
     this.$nextTick(() => {
       const container = document.getElementById('import-drawer');
+      if (container && container.dataset.alpineInitialized !== 'true') {
+        Alpine.initTree(container);
+        container.dataset.alpineInitialized = 'true';
+      }
+    });
+  },
+  hydrateAddEmployeeModal() {
+    this.$nextTick(() => {
+      const container = document.getElementById('add-employee-modal');
       if (container && container.dataset.alpineInitialized !== 'true') {
         Alpine.initTree(container);
         container.dataset.alpineInitialized = 'true';
@@ -591,6 +650,157 @@ registerV2Component('v2DashboardApp', () => ({
     const state = this.importDrawer;
     const disabled = !state.file || !state.summary || state.dryRunLoading || state.commitLoading;
     state.commitDisabled = disabled;
+  },
+  async initActivityLog() {
+    if (!this.db || this.activityLog) {
+      return;
+    }
+    try {
+      const { default: ActivityLog } = await import('../activity-log.js');
+      this.activityLog = await ActivityLog.init(this.db);
+    } catch (error) {
+      console.error('Failed to initialize activity log', error);
+    }
+  },
+  openAddEmployeeModal() {
+    if (!this.addEmployeeModal.open) {
+      if (!this.addEmployeeModal.form.role) {
+        this.resetAddEmployeeForm();
+      }
+      this.addEmployeeModal.open = true;
+      const store = this.$store?.app;
+      if (store && store.showAddEmployeeModal !== true) {
+        store.showAddEmployeeModal = true;
+      }
+      this.hydrateAddEmployeeModal();
+      this.$nextTick(() => {
+        this.$refs.addEmployeeFirstName?.focus();
+      });
+    }
+  },
+  closeAddEmployeeModal(options = {}) {
+    const { silent = false, preserveForm = false, force = false } = options;
+    if (!this.addEmployeeModal.open && !force) {
+      return;
+    }
+    this.addEmployeeModal.open = false;
+    if (!preserveForm) {
+      this.resetAddEmployeeForm();
+    }
+    if (!silent) {
+      const store = this.$store?.app;
+      if (store && store.showAddEmployeeModal !== false) {
+        store.showAddEmployeeModal = false;
+      }
+    }
+  },
+  resetAddEmployeeForm() {
+    const lookups = this.employeeLookups || {
+      roles: DEFAULT_ROLE_LOOKUPS,
+      statuses: DEFAULT_STATUS_LOOKUPS,
+      employmentTypes: DEFAULT_EMPLOYMENT_TYPE_LOOKUPS
+    };
+    this.addEmployeeModal.form = {
+      firstName: '',
+      lastName: '',
+      role: lookups.roles?.[0] || '',
+      status: lookups.statuses?.[0] || '',
+      employmentType: lookups.employmentTypes?.[0] || '',
+      seniorityHours: ''
+    };
+    this.addEmployeeModal.errors = {};
+  },
+  validateAddEmployeeForm() {
+    const errors = {};
+    const fields = ['firstName', 'lastName', 'role', 'status', 'employmentType', 'seniorityHours'];
+    for (const field of fields) {
+      const value = this.addEmployeeModal.form[field];
+      const normalized = typeof value === 'string' ? value.trim() : value;
+      if (normalized === '' || normalized == null) {
+        errors[field] = 'This field is required.';
+      }
+    }
+    return {
+      valid: Object.keys(errors).length === 0,
+      errors
+    };
+  },
+  focusFirstInvalidAddEmployeeField(errors) {
+    const order = ['firstName', 'lastName', 'role', 'status', 'employmentType', 'seniorityHours'];
+    for (const field of order) {
+      if (!errors[field]) continue;
+      const refName =
+        field === 'seniorityHours'
+          ? 'addEmployeeSeniorityHours'
+          : `addEmployee${field.charAt(0).toUpperCase()}${field.slice(1)}`;
+      const target = this.$refs?.[refName];
+      if (target && typeof target.focus === 'function') {
+        target.focus();
+      }
+      break;
+    }
+  },
+  buildAddEmployeePayload() {
+    const form = this.addEmployeeModal.form;
+    const firstName = typeof form.firstName === 'string' ? form.firstName.trim() : '';
+    const lastName = typeof form.lastName === 'string' ? form.lastName.trim() : '';
+    const role = typeof form.role === 'string' ? form.role.trim() : '';
+    const status = typeof form.status === 'string' ? form.status.trim() : '';
+    const employmentType = typeof form.employmentType === 'string' ? form.employmentType.trim() : '';
+    const hoursValue = typeof form.seniorityHours === 'string' ? form.seniorityHours.trim() : form.seniorityHours;
+    const seniorityHours = Number.parseFloat(hoursValue);
+    const timestamp = new Date().toISOString();
+    return {
+      id: generateId(),
+      firstName,
+      lastName,
+      name: `${firstName} ${lastName}`.trim(),
+      role,
+      status,
+      employmentType,
+      position: role,
+      rank: employmentType,
+      seniorityHours: Number.isFinite(seniorityHours) ? seniorityHours : 0,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+  },
+  async submitAddEmployeeForm() {
+    if (!this.db || this.addEmployeeModal.saving) {
+      return;
+    }
+    const { valid, errors } = this.validateAddEmployeeForm();
+    this.addEmployeeModal.errors = errors;
+    if (!valid) {
+      this.$nextTick(() => this.focusFirstInvalidAddEmployeeField(errors));
+      return;
+    }
+    await this.initActivityLog();
+    const payload = this.buildAddEmployeePayload();
+    this.addEmployeeModal.saving = true;
+    try {
+      const { employee } = await addEmployeeApi({
+        db: this.db,
+        activityLog: this.activityLog,
+        employee: payload
+      });
+      this.closeAddEmployeeModal({ preserveForm: false });
+      await this.loadData();
+      this.applyFilters();
+      const store = this.$store?.app;
+      if (store && typeof store.showToast === 'function') {
+        const name = `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || 'Employee';
+        store.showToast({ type: 'success', message: `${name} added.` });
+      }
+    } catch (error) {
+      console.error('Failed to add employee', error);
+      this.addEmployeeModal.errors = {
+        ...this.addEmployeeModal.errors,
+        form: 'Unable to add employee. Please try again.'
+      };
+    } finally {
+      this.addEmployeeModal.saving = false;
+    }
   },
   downloadSampleCsv() {
     try {
@@ -762,9 +972,7 @@ registerV2Component('v2DashboardApp', () => ({
     this.requirements = requirements;
     this.employeeRequirements = employeeRequirements;
     this.refreshRequirementMap();
-    this.roleOptions = Array.from(new Set(this.employees.map(emp => normalizeString(emp.role)).filter(Boolean))).sort((a, b) =>
-      a.localeCompare(b)
-    );
+    this.refreshEmployeeLookups();
   },
   refreshRequirementMap() {
     const nextMap = new Map();
@@ -774,6 +982,50 @@ registerV2Component('v2DashboardApp', () => ({
       nextMap.set(key, { ...record });
     }
     this.employeeRequirementMap = nextMap;
+  },
+  refreshEmployeeLookups() {
+    const collect = (defaults, accessor) => {
+      const values = new Map();
+      const addValue = value => {
+        if (typeof value !== 'string') return;
+        const trimmed = value.trim();
+        if (!trimmed) return;
+        const key = trimmed.toLowerCase();
+        if (!values.has(key)) {
+          values.set(key, trimmed);
+        }
+      };
+      defaults.forEach(addValue);
+      for (const employee of this.employees) {
+        addValue(accessor(employee));
+      }
+      return Array.from(values.values()).sort((a, b) => a.localeCompare(b));
+    };
+
+    const roles = collect(DEFAULT_ROLE_LOOKUPS, employee => employee?.role);
+    const statuses = collect(DEFAULT_STATUS_LOOKUPS, employee => employee?.status);
+    const employmentTypes = collect(DEFAULT_EMPLOYMENT_TYPE_LOOKUPS, employee => employee?.employmentType);
+
+    this.roleOptions = roles;
+    this.employeeLookups = {
+      roles,
+      statuses,
+      employmentTypes
+    };
+    if (!this.addEmployeeModal.open) {
+      if (!this.addEmployeeModal.form.role || !roles.includes(this.addEmployeeModal.form.role)) {
+        this.addEmployeeModal.form.role = roles[0] || '';
+      }
+      if (!this.addEmployeeModal.form.status || !statuses.includes(this.addEmployeeModal.form.status)) {
+        this.addEmployeeModal.form.status = statuses[0] || '';
+      }
+      if (
+        !this.addEmployeeModal.form.employmentType ||
+        !employmentTypes.includes(this.addEmployeeModal.form.employmentType)
+      ) {
+        this.addEmployeeModal.form.employmentType = employmentTypes[0] || '';
+      }
+    }
   },
   buildRequirementKey(employeeId, requirementId) {
     return `${employeeId ?? ''}::${requirementId ?? ''}`;
