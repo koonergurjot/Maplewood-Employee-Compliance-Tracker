@@ -1,0 +1,48 @@
+<div class="bulk-bar" x-show="selectedEmployees.length" x-transition x-cloak>
+  <div class="bulk-summary">
+    <div class="bulk-count">
+      <span x-text="`${selectedEmployees.length} selected`"></span>
+      <button type="button" class="btn ghost" @click="clearSelectedEmployees">Clear selection</button>
+    </div>
+    <div class="bulk-detail" x-text="bulkSelectionDetail()"></div>
+  </div>
+  <form class="bulk-controls" @submit.prevent="runBulkUpdate">
+    <label class="bulk-field">
+      <span>Requirement</span>
+      <select class="input" x-model="bulk.requirementId" :disabled="!requirements.length">
+        <template x-if="!requirements.length">
+          <option value="">No requirements</option>
+        </template>
+        <template x-for="req in requirements" :key="req.id">
+          <option :value="req.id" x-text="req.name"></option>
+        </template>
+      </select>
+    </label>
+    <label class="bulk-field">
+      <span>Action</span>
+      <select class="input" x-model="bulk.action" @change="onBulkActionChanged">
+        <option value="">Choose an action</option>
+        <option value="complete">Mark complete</option>
+        <option value="set-expiry">Set expiry</option>
+        <option value="exempt">Mark exempt</option>
+        <option value="clear">Clear progress</option>
+      </select>
+    </label>
+    <template x-if="bulkActionRequiresDate(bulk.action)">
+      <label class="bulk-field">
+        <span x-text="bulkDateLabel()"></span>
+        <input type="date" class="input" x-model="bulk.date" />
+      </label>
+    </template>
+    <template x-if="bulkActionRequiresReason(bulk.action)">
+      <label class="bulk-field">
+        <span>Reason</span>
+        <input type="text" class="input" placeholder="Add a note" x-model="bulk.reason" />
+      </label>
+    </template>
+    <div class="bulk-actions-buttons">
+      <button type="button" class="btn ghost" @click="resetBulkForm({ preserveRequirement: true })">Reset</button>
+      <button type="submit" class="btn primary" :disabled="bulkActionDisabled()" x-text="bulkActionButtonLabel()"></button>
+    </div>
+  </form>
+</div>

@@ -1,8 +1,21 @@
+<div id="bulk-actions" class="bulk-actions-slot" x-html="partials.bulkActions"></div>
 <div class="grid-container">
   <div class="grid-scroll" role="region" aria-label="Scrollable requirements table">
-    <table class="requirements-table">
+    <table class="requirements-table has-selection-column">
       <thead>
         <tr>
+          <th scope="col" class="sticky-select sticky-header checkbox-cell">
+            <span class="sr-only">Select all employees</span>
+            <input
+              type="checkbox"
+              class="checkbox-input"
+              x-ref="selectAllCheckbox"
+              :checked="areAllVisibleSelected()"
+              @change="toggleSelectAll($event.target.checked)"
+              aria-label="Select all filtered employees"
+              x-effect="if ($refs.selectAllCheckbox) { $refs.selectAllCheckbox.indeterminate = hasSomeVisibleSelected() && !areAllVisibleSelected(); }"
+            />
+          </th>
           <th scope="col" class="sticky-col sticky-header">
             <span>Employee</span>
           </th>
@@ -19,6 +32,7 @@
       <tbody>
         <template x-if="loading">
           <tr>
+            <td class="sticky-select checkbox-cell"></td>
             <td class="sticky-col">
               <div class="empty-state">Loading employees…</div>
             </td>
@@ -29,6 +43,7 @@
         </template>
         <template x-if="!loading && !filteredEmployees.length">
           <tr>
+            <td class="sticky-select checkbox-cell"></td>
             <td class="sticky-col">
               <div class="empty-state">No employees found</div>
             </td>
@@ -38,7 +53,16 @@
           </tr>
         </template>
         <template x-for="employee in filteredEmployees" :key="employee.id">
-          <tr>
+          <tr :class="{ 'row-selected': isEmployeeSelected(employee.id) }">
+            <td class="sticky-select checkbox-cell">
+              <input
+                type="checkbox"
+                class="checkbox-input"
+                :aria-label="`Select ${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Select employee'"
+                :checked="isEmployeeSelected(employee.id)"
+                @change="toggleEmployeeSelection(employee.id, $event.target.checked)"
+              />
+            </td>
             <th scope="row" class="sticky-col">
               <div class="employee-cell">
                 <div class="ring-wrapper" :class="progressStrokeClass(employeeCompliancePercent(employee.id))">
