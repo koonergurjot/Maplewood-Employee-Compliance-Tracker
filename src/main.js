@@ -1,5 +1,4 @@
 import Alpine from 'alpinejs';
-import requirementsGridTemplate from './components/requirements-grid.html?raw';
 import inlineEditTemplate from './components/inline-edit.html?raw';
 import './styles/tailwind.css';
 import { openDatabase, generateId } from '../db.js';
@@ -22,7 +21,6 @@ function replaceTemplate(targetId, html) {
   }
 }
 
-replaceTemplate('requirements-grid-template', requirementsGridTemplate);
 replaceTemplate('inline-edit-template', inlineEditTemplate);
 
 function normalizeString(value) {
@@ -45,6 +43,10 @@ window.Alpine = Alpine;
 
 Alpine.data('dashboardApp', () => ({
   db: null,
+  partials: {
+    requirementsGrid: ''
+  },
+  inlineTemplateMounted: false,
   loading: true,
   loadError: null,
   darkMode: false,
@@ -85,13 +87,14 @@ Alpine.data('dashboardApp', () => ({
     expiresOn: ''
   },
   init() {
-    this.mountTemplates();
+    this.mountInlineTemplate();
     this.initializeDarkMode();
     this.bootstrap();
   },
   async bootstrap() {
     try {
       this.loading = true;
+      await this.loadPartials();
       this.db = await openDatabase();
       await this.loadData();
       this.applyFilters();
@@ -101,6 +104,28 @@ Alpine.data('dashboardApp', () => ({
     } finally {
       this.loading = false;
     }
+  },
+  async loadPartials() {
+    try {
+      const response = await fetch('./src/components/requirements-grid.html');
+      if (!response.ok) {
+        throw new Error(`Failed to load requirements grid (status ${response.status})`);
+      }
+      this.partials.requirementsGrid = await response.text();
+      this.hydrateRequirementsGrid();
+    } catch (error) {
+      console.error(error);
+      this.partials.requirementsGrid = '';
+    }
+  },
+  hydrateRequirementsGrid() {
+    this.$nextTick(() => {
+      const container = document.getElementById('requirements-grid');
+      if (container && container.dataset.alpineInitialized !== 'true') {
+        Alpine.initTree(container);
+        container.dataset.alpineInitialized = 'true';
+      }
+    });
   },
   async loadData() {
     if (!this.db) return;
@@ -134,19 +159,16 @@ Alpine.data('dashboardApp', () => ({
   buildRequirementKey(employeeId, requirementId) {
     return `${employeeId ?? ''}::${requirementId ?? ''}`;
   },
-  mountTemplates() {
-    const host = this.$refs.gridHost;
-    if (!host || host.dataset.mounted === 'true') return;
-    const gridTpl = document.getElementById('requirements-grid-template');
-    if (gridTpl) {
-      host.appendChild(gridTpl.content.cloneNode(true));
-    }
+  mountInlineTemplate() {
+    if (this.inlineTemplateMounted) return;
     const inlineTpl = document.getElementById('inline-edit-template');
-    if (inlineTpl) {
-      host.appendChild(inlineTpl.content.cloneNode(true));
-    }
-    host.dataset.mounted = 'true';
-    this.$nextTick(() => Alpine.initTree(host));
+    if (!inlineTpl) return;
+    const host = document.createElement('div');
+    host.style.display = 'contents';
+    host.appendChild(inlineTpl.content.cloneNode(true));
+    inlineTpl.replaceWith(host);
+    Alpine.initTree(host);
+    this.inlineTemplateMounted = true;
   },
   initializeDarkMode() {
     const stored = localStorage.getItem(DARK_MODE_KEY);
