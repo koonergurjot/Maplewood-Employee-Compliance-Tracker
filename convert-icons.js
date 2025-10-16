@@ -1,4 +1,5 @@
 import './styles.css';
+import { qsAll } from './src/utils/dom.js';
 
 (function() {
       const fileInput = document.getElementById('source-image');
@@ -7,10 +8,10 @@ import './styles.css';
       const previewPlaceholder = document.getElementById('preview-placeholder');
       const previewMeta = document.getElementById('preview-meta');
       const status = document.getElementById('helper-status');
-      const downloadButtons = document.querySelectorAll('[data-download]');
+      const downloadButtons = qsAll(document, '[data-download]');
       const backgroundInput = document.getElementById('background-color');
       const backgroundToggle = document.getElementById('apply-background');
-      const colorButtons = document.querySelectorAll('button[data-color], button[data-transparent]');
+      const colorButtons = qsAll(document, 'button[data-color], button[data-transparent]');
 
       let sourceImage = null;
 

@@ -9,6 +9,7 @@ import Sortable from 'sortablejs';
 import Fuse from 'fuse.js';
 import { safeFeatherReplace } from './feather-utils.js';
 import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
+import { qs } from './src/utils/dom.js';
 
 import './styles.css';
 import './import-employees.js';
@@ -4636,7 +4637,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               selector = `[data-requirement-header="${id}"]`;
             }
             if(!selector) return;
-            const target = document.querySelector(selector);
+            const target = qs(document, selector);
             if(!target) return;
 
             if(target.dataset && target.dataset.searchFocusTimeout){
@@ -5579,7 +5580,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
       document.addEventListener('alpine:init', replaceFeatherIcons);
 
       document.addEventListener('employee:added', event => {
-        const root = document.querySelector('[x-data="app"]');
+        const root = qs(document, '[x-data="app"]');
         if (!root) {
           return;
         }
@@ -5608,7 +5609,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
       window.addEventListener('employee-import:missing-columns', (event) => {
         const detail = event?.detail;
         const columns = Array.isArray(detail?.columns) ? detail.columns : [];
-        const root = document.querySelector('[x-data="app"]');
+        const root = qs(document, '[x-data="app"]');
         const component = root && root.__x ? root.__x.$data : null;
         if (component && typeof component.handleExternalMissingColumns === 'function'){
           component.handleExternalMissingColumns(columns);
