@@ -2,6 +2,60 @@ import Dexie from 'dexie';
 
 const DB_NAME = 'ComplianceMatrixDB';
 
+export const POSITION_STATUS_VALUES = ['FT', 'PT', 'Casual'];
+
+const POSITION_STATUS_ALIAS_MAP = new Map([
+  ['FT', 'FT'],
+  ['FTE', 'FT'],
+  ['FULLTIME', 'FT'],
+  ['FULLTIMEEMPLOYEE', 'FT'],
+  ['FULLTIMEEQUIVALENT', 'FT'],
+  ['PARTTIME', 'PT'],
+  ['PARTTIMEEMPLOYEE', 'PT'],
+  ['PT', 'PT'],
+  ['PTE', 'PT'],
+  ['PARTTIMEEQUIVALENT', 'PT'],
+  ['CASUAL', 'Casual'],
+  ['CASUALEMPLOYEE', 'Casual']
+]);
+
+function normalizeStatusKey(value) {
+  if (value == null) {
+    return '';
+  }
+  const stringValue = typeof value === 'string' ? value.trim() : String(value).trim();
+  if (!stringValue) {
+    return '';
+  }
+  return stringValue.replace(/[^a-z0-9]/gi, '').toUpperCase();
+}
+
+export function normalizePositionStatus(value) {
+  const key = normalizeStatusKey(value);
+  if (!key) {
+    return '';
+  }
+  const mapped = POSITION_STATUS_ALIAS_MAP.get(key);
+  if (mapped) {
+    return mapped;
+  }
+  if (key === 'CASUAL') {
+    return 'Casual';
+  }
+  return '';
+}
+
+export function mapPositionStatus(value, fallback = '') {
+  const normalized = normalizePositionStatus(value);
+  if (normalized) {
+    return normalized;
+  }
+  if (fallback) {
+    return normalizePositionStatus(fallback);
+  }
+  return '';
+}
+
 export const BULK_OPERATION_CHUNK_SIZE = 300;
 
 let DexieRef = Dexie ?? null;
@@ -174,6 +228,12 @@ function defineSchema(db) {
     employees: 'id, employeeId, lastName, firstName, role, employmentType, status, seniorityHours, [employeeId+lastName+firstName]'
   };
 
+  const v13Stores = {
+    ...v12Stores,
+    employees:
+      'id, employeeId, lastName, firstName, role, employmentType, status, seniorityHours, jobClass, jobTitle, ranking, positionStatus, [employeeId+lastName+firstName]'
+  };
+
   db.version(8).stores(v8Stores);
   db.version(9).stores(v9Stores);
   db.version(10).stores(v10Stores).upgrade(async tx => {
@@ -281,6 +341,63 @@ function defineSchema(db) {
   });
 
   db.version(12).stores(v12Stores);
+
+  db.version(13)
+    .stores(v13Stores)
+    .upgrade(async tx => {
+      const employeesTable = tx.table('employees');
+      if (!employeesTable || typeof employeesTable.toCollection !== 'function') {
+        return;
+      }
+
+      const hasOwn = (target, key) => Object.prototype.hasOwnProperty.call(target, key);
+
+      try {
+        await employeesTable.toCollection().modify(employee => {
+          if (!hasOwn(employee, 'seniorityHours')) {
+            employee.seniorityHours = null;
+          } else if (employee.seniorityHours == null || employee.seniorityHours === '') {
+            employee.seniorityHours = null;
+          } else if (typeof employee.seniorityHours !== 'number') {
+            const parsedHours = Number.parseFloat(employee.seniorityHours);
+            employee.seniorityHours = Number.isFinite(parsedHours) ? parsedHours : null;
+          }
+
+          if (!hasOwn(employee, 'jobClass')) {
+            employee.jobClass = '';
+          } else if (typeof employee.jobClass !== 'string') {
+            employee.jobClass = employee.jobClass == null ? '' : String(employee.jobClass).trim();
+          }
+
+          if (!hasOwn(employee, 'jobTitle')) {
+            employee.jobTitle = '';
+          } else if (typeof employee.jobTitle !== 'string') {
+            employee.jobTitle = employee.jobTitle == null ? '' : String(employee.jobTitle).trim();
+          }
+
+          if (!hasOwn(employee, 'ranking')) {
+            employee.ranking = null;
+          } else if (employee.ranking == null || employee.ranking === '') {
+            employee.ranking = null;
+          } else if (typeof employee.ranking !== 'number') {
+            const parsedRanking = Number.parseFloat(employee.ranking);
+            employee.ranking = Number.isFinite(parsedRanking) ? parsedRanking : null;
+          }
+
+          const normalizedStatus = mapPositionStatus(employee.positionStatus);
+          if (normalizedStatus) {
+            employee.positionStatus = normalizedStatus;
+          } else if (!hasOwn(employee, 'positionStatus')) {
+            employee.positionStatus =
+              mapPositionStatus(employee.employmentType ?? employee.rank ?? '') || '';
+          } else {
+            employee.positionStatus = '';
+          }
+        });
+      } catch (error) {
+        console.warn('Failed to backfill employee seniority fields', error);
+      }
+    });
 
   db.on('populate', tx => {
     tx.table('requirements').bulkAdd(getDefaultRequirementSeeds());
