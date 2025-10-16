@@ -1226,24 +1226,29 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
   },
   async loadData() {
     if (!this.db) return;
-    const [employees, requirements, employeeRequirements] = await Promise.all([
-      this.db.table('employees').toArray(),
-      this.db.table('requirements').orderBy('name').toArray(),
-      this.db.table('employeeRequirements').toArray()
-    ]);
-    employees.sort((a, b) => {
-      const last = normalizeLower(a?.lastName).localeCompare(normalizeLower(b?.lastName));
-      if (last !== 0) return last;
-      return normalizeLower(a?.firstName).localeCompare(normalizeLower(b?.firstName));
-    });
-    this.employees = employees;
-    this.updateStoreEmployees();
-    this.requirements = requirements;
-    this.ensureBulkRequirement();
-    this.employeeRequirements = employeeRequirements;
-    this.refreshRequirementMap();
-    this.refreshEmployeeLookups();
-    this.refreshAnalytics();
+    this.loading = true;
+    try {
+      const [employees, requirements, employeeRequirements] = await Promise.all([
+        this.db.table('employees').toArray(),
+        this.db.table('requirements').orderBy('name').toArray(),
+        this.db.table('employeeRequirements').toArray()
+      ]);
+      employees.sort((a, b) => {
+        const last = normalizeLower(a?.lastName).localeCompare(normalizeLower(b?.lastName));
+        if (last !== 0) return last;
+        return normalizeLower(a?.firstName).localeCompare(normalizeLower(b?.firstName));
+      });
+      this.employees = employees;
+      this.updateStoreEmployees();
+      this.requirements = requirements;
+      this.ensureBulkRequirement();
+      this.employeeRequirements = employeeRequirements;
+      this.refreshRequirementMap();
+      this.refreshEmployeeLookups();
+      this.refreshAnalytics();
+    } finally {
+      this.loading = false;
+    }
   },
   refreshRequirementMap() {
     const nextMap = new Map();

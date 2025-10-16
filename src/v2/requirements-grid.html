@@ -31,17 +31,52 @@
       </thead>
       <tbody>
         <template x-if="loading">
+          <template x-for="index in [0, 1, 2, 3]" :key="`loading-${index}`">
+            <tr>
+              <td class="sticky-select checkbox-cell">
+                <span class="skeleton" aria-hidden="true" style="display: block; width: 1.25rem; height: 1.25rem; border-radius: 0.35rem;"></span>
+              </td>
+              <td class="sticky-col">
+                <div class="employee-cell">
+                  <span class="skeleton" aria-hidden="true" style="display: block; width: 3.25rem; height: 3.25rem; border-radius: 9999px;"></span>
+                  <div class="employee-meta" style="width: 100%; gap: 0.45rem;">
+                    <span class="skeleton" aria-hidden="true" style="display: block; height: 0.75rem; width: 70%;"></span>
+                    <span class="skeleton" aria-hidden="true" style="display: block; height: 0.65rem; width: 55%;"></span>
+                    <span class="skeleton" aria-hidden="true" style="display: block; height: 0.65rem; width: 45%;"></span>
+                  </div>
+                </div>
+              </td>
+              <template x-for="req in requirements" :key="req.id">
+                <td>
+                  <span class="skeleton" aria-hidden="true" style="display: block; height: 2.4rem; border-radius: 0.75rem;"></span>
+                </td>
+              </template>
+              <template x-if="!requirements.length">
+                <td>
+                  <span class="skeleton" aria-hidden="true" style="display: block; height: 2.4rem; border-radius: 0.75rem;"></span>
+                </td>
+              </template>
+            </tr>
+          </template>
+        </template>
+        <template x-if="!loading && !employees.length">
           <tr>
             <td class="sticky-select checkbox-cell"></td>
-            <td class="sticky-col">
-              <div class="empty-state">Loading employees…</div>
-            </td>
-            <td :colspan="Math.max(requirements.length, 1)">
-              <div class="empty-state muted">Preparing compliance data</div>
+            <td :colspan="Math.max(requirements.length, 1) + 1">
+              <div style="padding: 2.5rem 0; display: flex; flex-direction: column; gap: 1rem; align-items: flex-start;">
+                <div>
+                  <div class="empty-state" style="font-size: 1.05rem;">Import your first employees</div>
+                  <p class="empty-state muted" style="margin: 0; font-weight: 400; max-width: 32rem;">Bring employees into Maplewood to start tracking compliance.</p>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+                  <button type="button" class="btn primary" @click="openImportDrawer">Open Import</button>
+                  <button type="button" class="btn ghost" @click="downloadSampleCsv">Download Sample CSV</button>
+                </div>
+              </div>
             </td>
           </tr>
         </template>
-        <template x-if="!loading && !filteredEmployees.length">
+        <template x-if="!loading && employees.length && !filteredEmployees.length">
           <tr>
             <td class="sticky-select checkbox-cell"></td>
             <td class="sticky-col">
@@ -52,48 +87,50 @@
             </td>
           </tr>
         </template>
-        <template x-for="employee in filteredEmployees" :key="employee.id">
-          <tr :class="{ 'row-selected': isEmployeeSelected(employee.id) }">
-            <td class="sticky-select checkbox-cell">
-              <input
-                type="checkbox"
-                class="checkbox-input"
-                :aria-label="`Select ${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Select employee'"
-                :checked="isEmployeeSelected(employee.id)"
-                @change="toggleEmployeeSelection(employee.id, $event.target.checked)"
-              />
-            </td>
-            <th scope="row" class="sticky-col">
-              <div class="employee-cell">
-                <div class="ring-wrapper" :class="progressStrokeClass(employeeCompliancePercent(employee.id))">
-                  <svg viewBox="0 0 36 36" class="ring">
-                    <circle class="ring-track" cx="18" cy="18" r="16" />
-                    <circle class="ring-value" cx="18" cy="18" r="16" :stroke-dasharray="progressRingDash(employeeCompliancePercent(employee.id))"></circle>
-                  </svg>
-                  <span class="ring-label" x-text="employeeCompliancePercent(employee.id) + '%'"></span>
-                </div>
-                <div class="employee-meta">
-                  <div class="employee-name" x-text="`${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Unnamed employee'"></div>
-                  <div class="employee-sub" x-text="employee.role || 'Role unavailable'"></div>
-                  <div class="employee-sub" x-text="employee.status"></div>
-                </div>
-              </div>
-            </th>
-            <template x-for="req in requirements" :key="req.id">
-              <td>
-                <button
-                  type="button"
-                  class="cell"
-                  @click="openEditor(employee.id, req.id, $event)"
-                  :aria-label="`Edit ${req.name} for ${employee.firstName || ''} ${employee.lastName || ''}`"
-                >
-                  <span class="cell-status" :class="statusBadgeClass(employee.id, req.id)" x-text="cellStatusLabel(employee.id, req.id)"></span>
-                  <span class="cell-sub" x-text="cellSubtext(employee.id, req.id)"></span>
-                  <span class="cell-indicator" x-show="isRequirementExpiring(getEmployeeRequirement(employee.id, req.id))"></span>
-                </button>
+        <template x-if="!loading && filteredEmployees.length">
+          <template x-for="employee in filteredEmployees" :key="employee.id">
+            <tr :class="{ 'row-selected': isEmployeeSelected(employee.id) }">
+              <td class="sticky-select checkbox-cell">
+                <input
+                  type="checkbox"
+                  class="checkbox-input"
+                  :aria-label="`Select ${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Select employee'"
+                  :checked="isEmployeeSelected(employee.id)"
+                  @change="toggleEmployeeSelection(employee.id, $event.target.checked)"
+                />
               </td>
-            </template>
-          </tr>
+              <th scope="row" class="sticky-col">
+                <div class="employee-cell">
+                  <div class="ring-wrapper" :class="progressStrokeClass(employeeCompliancePercent(employee.id))">
+                    <svg viewBox="0 0 36 36" class="ring">
+                      <circle class="ring-track" cx="18" cy="18" r="16" />
+                      <circle class="ring-value" cx="18" cy="18" r="16" :stroke-dasharray="progressRingDash(employeeCompliancePercent(employee.id))"></circle>
+                    </svg>
+                    <span class="ring-label" x-text="employeeCompliancePercent(employee.id) + '%'"></span>
+                  </div>
+                  <div class="employee-meta">
+                    <div class="employee-name" x-text="`${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Unnamed employee'"></div>
+                    <div class="employee-sub" x-text="employee.role || 'Role unavailable'"></div>
+                    <div class="employee-sub" x-text="employee.status"></div>
+                  </div>
+                </div>
+              </th>
+              <template x-for="req in requirements" :key="req.id">
+                <td>
+                  <button
+                    type="button"
+                    class="cell"
+                    @click="openEditor(employee.id, req.id, $event)"
+                    :aria-label="`Edit ${req.name} for ${employee.firstName || ''} ${employee.lastName || ''}`"
+                  >
+                    <span class="cell-status" :class="statusBadgeClass(employee.id, req.id)" x-text="cellStatusLabel(employee.id, req.id)"></span>
+                    <span class="cell-sub" x-text="cellSubtext(employee.id, req.id)"></span>
+                    <span class="cell-indicator" x-show="isRequirementExpiring(getEmployeeRequirement(employee.id, req.id))"></span>
+                  </button>
+                </td>
+              </template>
+            </tr>
+          </template>
         </template>
       </tbody>
     </table>
