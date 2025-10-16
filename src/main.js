@@ -231,6 +231,7 @@ Alpine.data('dashboardApp', () => ({
     for (const requirement of this.requirements) {
       const record = this.getEmployeeRequirement(employeeId, requirement.id);
       if (!record) continue;
+      if (this.requirementExpired(record)) continue;
       const status = normalizeStatus(record.status);
       if (status === 'Completed' || status === 'Exempt') {
         completed += 1;
