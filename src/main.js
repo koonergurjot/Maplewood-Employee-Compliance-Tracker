@@ -1,4 +1,5 @@
 import './polyfills/async-function-call.js';
+import './import/import-employees.js';
 import Alpine from 'alpinejs';
 import { qs } from './utils/dom.js';
 import miniAnalyticsTemplate from './v2/mini-analytics.html?raw';
