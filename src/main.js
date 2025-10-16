@@ -487,7 +487,20 @@ registerV2Component('v2DashboardApp', () => ({
     if (!inlineTpl) return;
     const host = document.createElement('div');
     host.style.display = 'contents';
-    host.appendChild(inlineTpl.content.cloneNode(true));
+    const templateContent = inlineTpl.content instanceof DocumentFragment ? inlineTpl.content : null;
+    let cloned;
+
+    if (templateContent && typeof templateContent.cloneNode === 'function') {
+      cloned = templateContent.cloneNode(true);
+    } else if (typeof inlineTpl.cloneNode === 'function') {
+      cloned = inlineTpl.cloneNode(true);
+    } else {
+      console.warn('Inline edit template unavailable; skipping mount.');
+      this.inlineTemplateMounted = true;
+      return;
+    }
+
+    host.appendChild(cloned);
     inlineTpl.replaceWith(host);
     Alpine.initTree(host);
     this.inlineTemplateMounted = true;
