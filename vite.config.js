@@ -24,6 +24,7 @@ export default defineConfig({
     target: 'es2015',
     outDir: 'dist',
     emptyOutDir: true,
+    sourcemap: true,
     manifest: true,
     rollupOptions: {
       input: {
