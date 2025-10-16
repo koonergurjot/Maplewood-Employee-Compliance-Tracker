@@ -1,6 +1,7 @@
 // Consolidated application initialization script extracted from index.html
 // Ensures bundler processes the entire dashboard logic.
 
+import './src/polyfills/async-function-call.js';
 import Alpine from '@alpinejs/csp';
 import Papa from 'papaparse';
 import Chart from 'chart.js/auto';
