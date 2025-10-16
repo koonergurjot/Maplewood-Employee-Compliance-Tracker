@@ -403,7 +403,8 @@ window.Alpine = Alpine;
 registerV2Component('v2DashboardApp', () => ({
   db: null,
   partials: {
-    requirementsGrid: ''
+    requirementsGrid: '',
+    importDrawer: ''
   },
   inlineTemplateMounted: false,
   loading: true,
@@ -446,6 +447,20 @@ registerV2Component('v2DashboardApp', () => ({
     completedOn: '',
     expiresOn: ''
   },
+  importDrawer: {
+    open: false,
+    file: null,
+    fileName: '',
+    dryRunLoading: false,
+    commitLoading: false,
+    summary: null,
+    mapping: null,
+    previewRows: [],
+    previewColumns: [],
+    previewTotal: 0,
+    error: '',
+    commitDisabled: true
+  },
   init() {
     if (!window.APP_FLAGS?.USE_V2_MAIN) {
       console.info('Legacy dashboard active; skipping v2 bootstrap.');
@@ -453,6 +468,16 @@ registerV2Component('v2DashboardApp', () => ({
     }
     this.mountInlineTemplate();
     this.initializeDarkMode();
+    this.$watch(
+      () => this.$store?.app?.showImportModal,
+      value => {
+        if (value) {
+          this.openImportDrawer();
+        } else if (value === false && this.importDrawer.open) {
+          this.closeImportDrawer({ silent: true });
+        }
+      }
+    );
     this.bootstrap();
   },
   async bootstrap() {
@@ -470,17 +495,34 @@ registerV2Component('v2DashboardApp', () => ({
     }
   },
   async loadPartials() {
-    try {
-      const response = await fetch('./src/v2/requirements-grid.html');
-      if (!response.ok) {
-        throw new Error(`Failed to load requirements grid (status ${response.status})`);
-      }
-      this.partials.requirementsGrid = await response.text();
-      this.hydrateRequirementsGrid();
-    } catch (error) {
-      console.error(error);
-      this.partials.requirementsGrid = '';
-    }
+    await Promise.all([
+      (async () => {
+        try {
+          const response = await fetch('./src/v2/requirements-grid.html');
+          if (!response.ok) {
+            throw new Error(`Failed to load requirements grid (status ${response.status})`);
+          }
+          this.partials.requirementsGrid = await response.text();
+          this.hydrateRequirementsGrid();
+        } catch (error) {
+          console.error(error);
+          this.partials.requirementsGrid = '';
+        }
+      })(),
+      (async () => {
+        try {
+          const response = await fetch('./src/v2/import-drawer.html');
+          if (!response.ok) {
+            throw new Error(`Failed to load import drawer (status ${response.status})`);
+          }
+          this.partials.importDrawer = await response.text();
+          this.hydrateImportDrawer();
+        } catch (error) {
+          console.error(error);
+          this.partials.importDrawer = '';
+        }
+      })()
+    ]);
   },
   hydrateRequirementsGrid() {
     this.$nextTick(() => {
@@ -490,6 +532,218 @@ registerV2Component('v2DashboardApp', () => ({
         container.dataset.alpineInitialized = 'true';
       }
     });
+  },
+  hydrateImportDrawer() {
+    this.$nextTick(() => {
+      const container = document.getElementById('import-drawer');
+      if (container && container.dataset.alpineInitialized !== 'true') {
+        Alpine.initTree(container);
+        container.dataset.alpineInitialized = 'true';
+      }
+    });
+  },
+  openImportDrawer() {
+    if (!this.importDrawer.open) {
+      this.importDrawer.open = true;
+      const store = this.$store?.app;
+      if (store && store.showImportModal !== true) {
+        store.showImportModal = true;
+      }
+      this.hydrateImportDrawer();
+      this.$nextTick(() => {
+        this.$refs.importFileInput?.focus();
+      });
+    }
+  },
+  closeImportDrawer(options = {}) {
+    if (!this.importDrawer.open && !options.force) {
+      return;
+    }
+    const { silent = false, preserveState = false } = options;
+    this.importDrawer.open = false;
+    if (!preserveState) {
+      this.resetImportDrawerState();
+    }
+    if (!silent) {
+      const store = this.$store?.app;
+      if (store && store.showImportModal !== false) {
+        store.showImportModal = false;
+      }
+    }
+  },
+  resetImportDrawerState() {
+    this.importDrawer.file = null;
+    this.importDrawer.fileName = '';
+    this.importDrawer.dryRunLoading = false;
+    this.importDrawer.commitLoading = false;
+    this.importDrawer.summary = null;
+    this.importDrawer.mapping = null;
+    this.importDrawer.previewRows = [];
+    this.importDrawer.previewColumns = [];
+    this.importDrawer.previewTotal = 0;
+    this.importDrawer.error = '';
+    this.updateImportDrawerCommitState();
+    if (this.$refs.importFileInput) {
+      this.$refs.importFileInput.value = '';
+    }
+  },
+  updateImportDrawerCommitState() {
+    const state = this.importDrawer;
+    const disabled = !state.file || !state.summary || state.dryRunLoading || state.commitLoading;
+    state.commitDisabled = disabled;
+  },
+  downloadSampleCsv() {
+    try {
+      window.open('/sample-employees.csv', '_blank', 'noopener');
+    } catch (error) {
+      console.error('Failed to open sample CSV', error);
+      this.setImportDrawerError('Unable to open the sample CSV.', { toast: false });
+    }
+  },
+  setImportDrawerError(message, options = {}) {
+    const { toast = true } = options;
+    const safeMessage = message ? String(message) : 'Import failed.';
+    this.importDrawer.error = safeMessage;
+    this.updateImportDrawerCommitState();
+    if (toast) {
+      const store = this.$store?.app;
+      if (store && typeof store.showToast === 'function') {
+        store.showToast({ type: 'error', message: safeMessage, duration: 8000 });
+      }
+    }
+  },
+  normalizeImportSummary(payload) {
+    if (!payload || typeof payload !== 'object') {
+      return { added: 0, updated: 0, skipped: 0 };
+    }
+    const source = typeof payload.summary === 'object' && payload.summary !== null ? payload.summary : payload;
+    return {
+      added: Number(source.added) || 0,
+      updated: Number(source.updated) || 0,
+      skipped: Number(source.skipped) || 0
+    };
+  },
+  applyDryRunPreview(result) {
+    const summary = this.normalizeImportSummary(result);
+    this.importDrawer.summary = summary;
+    const mapping = result && typeof result.mapping === 'object' ? result.mapping : (result && typeof result.columns === 'object' ? result.columns : null);
+    this.importDrawer.mapping = mapping;
+    let previewRows = [];
+    let previewColumns = [];
+    let total = 0;
+    if (result && typeof result === 'object') {
+      const preview = result.preview;
+      if (preview && typeof preview === 'object') {
+        if (Array.isArray(preview.rows)) {
+          previewRows = preview.rows;
+        }
+        if (Array.isArray(preview.columns)) {
+          previewColumns = preview.columns;
+        }
+        if (typeof preview.total === 'number' && Number.isFinite(preview.total)) {
+          total = preview.total;
+        }
+      }
+      if (!previewRows.length && Array.isArray(result.previewRows)) {
+        previewRows = result.previewRows;
+      }
+      if (!previewColumns.length && Array.isArray(result.previewColumns)) {
+        previewColumns = result.previewColumns;
+      }
+      if (!previewRows.length && Array.isArray(result.rows)) {
+        previewRows = result.rows;
+      }
+      if (!previewColumns.length && Array.isArray(result.columns)) {
+        previewColumns = result.columns;
+      }
+      if (!total && typeof result.total === 'number' && Number.isFinite(result.total)) {
+        total = result.total;
+      }
+    }
+    const normalizedRows = Array.isArray(previewRows)
+      ? previewRows.filter(row => row && typeof row === 'object').slice(0, 10)
+      : [];
+    let normalizedColumns = Array.isArray(previewColumns)
+      ? previewColumns.map(col => String(col))
+      : [];
+    if (!normalizedColumns.length && normalizedRows.length) {
+      normalizedColumns = Object.keys(normalizedRows[0]);
+    }
+    this.importDrawer.previewRows = normalizedRows;
+    this.importDrawer.previewColumns = normalizedColumns;
+    this.importDrawer.previewTotal = total || normalizedRows.length;
+    this.importDrawer.error = '';
+    this.updateImportDrawerCommitState();
+  },
+  async onImportFileChange(event) {
+    const file = event?.target?.files?.[0] || null;
+    this.importDrawer.file = file;
+    this.importDrawer.fileName = file ? file.name : '';
+    this.importDrawer.summary = null;
+    this.importDrawer.mapping = null;
+    this.importDrawer.previewRows = [];
+    this.importDrawer.previewColumns = [];
+    this.importDrawer.previewTotal = 0;
+    this.importDrawer.error = '';
+    this.updateImportDrawerCommitState();
+    if (file) {
+      await this.runImportDryRun(file);
+    }
+  },
+  async runImportDryRun(file) {
+    const targetFile = file || this.importDrawer.file;
+    if (!targetFile) {
+      this.setImportDrawerError('Select a file to start the dry-run.', { toast: false });
+      return;
+    }
+    const dryRunFn = window.importEmployeesDryRun;
+    if (typeof dryRunFn !== 'function') {
+      this.setImportDrawerError('Employee importer is unavailable. Please reload the page.');
+      return;
+    }
+    this.importDrawer.dryRunLoading = true;
+    this.updateImportDrawerCommitState();
+    try {
+      const result = await dryRunFn(targetFile);
+      this.applyDryRunPreview(result || {});
+    } catch (error) {
+      console.error('Dry-run failed', error);
+      const message = error?.message ? String(error.message) : 'Dry-run failed. Check the console for details.';
+      this.setImportDrawerError(message);
+    } finally {
+      this.importDrawer.dryRunLoading = false;
+      this.updateImportDrawerCommitState();
+    }
+  },
+  async commitImport() {
+    if (this.importDrawer.commitDisabled) {
+      return;
+    }
+    const commitFn = window.importEmployeesCommit;
+    if (typeof commitFn !== 'function') {
+      this.setImportDrawerError('Employee importer is unavailable. Please reload the page.');
+      return;
+    }
+    this.importDrawer.commitLoading = true;
+    this.updateImportDrawerCommitState();
+    try {
+      const result = await commitFn();
+      const summary = this.normalizeImportSummary(result || {});
+      await this.loadData();
+      this.closeImportDrawer();
+      const store = this.$store?.app;
+      const message = `Employees: ${summary.added} added, ${summary.updated} updated, ${summary.skipped} skipped.`;
+      if (store && typeof store.showToast === 'function') {
+        store.showToast({ type: 'success', message });
+      }
+    } catch (error) {
+      console.error('Import commit failed', error);
+      const message = error?.message ? String(error.message) : 'Commit failed. Check the console for details.';
+      this.setImportDrawerError(message);
+    } finally {
+      this.importDrawer.commitLoading = false;
+      this.updateImportDrawerCommitState();
+    }
   },
   async loadData() {
     if (!this.db) return;

@@ -94,7 +94,7 @@
             <p class="text-sm text-muted">Use filters to narrow results and click any requirement cell to update progress.</p>
           </div>
           <div class="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" class="btn ghost" @click="$store.app.showImportModal = true">Import</button>
+            <button type="button" class="btn ghost" @click="openImportDrawer">Import</button>
             <button type="button" class="btn ghost" @click="$store.app.showAddEmployeeModal = true">Add Employee</button>
             <div class="relative" @click.outside="showExportMenu = false">
               <button type="button" class="btn ghost" @click="showExportMenu = !showExportMenu">Export</button>
@@ -181,6 +181,8 @@
         </div>
       </section>
     </main>
+
+    <div id="import-drawer" x-html="partials.importDrawer"></div>
 
     <template id="inline-edit-template"></template>
   </div>
