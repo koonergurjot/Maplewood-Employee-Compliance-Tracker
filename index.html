@@ -104,8 +104,8 @@
                 @click.outside="open=false"
                 class="export-menu absolute right-0 mt-2 w-48 rounded-lg border bg-white shadow"
               >
-                <button type="button" class="menu-item" @click="exportCSV(); open=false">Export CSV</button>
-                <button type="button" class="menu-item" @click="exportJSON(); open=false">Export JSON</button>
+                <button type="button" class="menu-item" @click="$parent.exportCSV(); open=false">Export CSV</button>
+                <button type="button" class="menu-item" @click="$parent.exportJSON(); open=false">Export JSON</button>
                 <button type="button" class="menu-item" @click="window.print(); open=false">Print view</button>
               </div>
             </div>
