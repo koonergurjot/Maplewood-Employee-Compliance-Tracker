@@ -180,6 +180,19 @@
           <div id="requirements-grid" x-html="partials.requirementsGrid"></div>
         </div>
       </section>
+
+      <section class="card" aria-label="Recent activity">
+        <div
+          id="activity-timeline"
+          x-html="partials.activityTimeline"
+          class="activity-timeline"
+        >
+          <div class="space-y-3" style="padding:1.25rem 1.5rem;">
+            <h2 class="text-lg font-semibold leading-tight">Recent activity</h2>
+            <p class="text-sm text-muted">Updates you make will appear here.</p>
+          </div>
+        </div>
+      </section>
     </main>
 
     <div id="import-drawer" x-html="partials.importDrawer"></div>

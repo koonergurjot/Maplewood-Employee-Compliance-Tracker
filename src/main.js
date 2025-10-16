@@ -59,6 +59,7 @@ const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
 const DEFAULT_APP_FLAGS = { USE_V2_MAIN: true };
 const USE_V2_STORAGE_KEY = 'USE_V2_MAIN';
 const V2_COMPONENT_REGISTRY_KEY = '__V2_ALPINE_COMPONENTS__';
+const ACTIVITY_TIMELINE_LIMIT = 100;
 
 function getV2ComponentRegistry() {
   if (typeof window === 'undefined') {
@@ -78,6 +79,70 @@ function registerV2Component(name, definition) {
     registry.add(name);
   }
   return Alpine.data(name, definition);
+}
+
+function formatActivityTimestamp(date) {
+  try {
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  } catch (error) {
+    console.warn('Failed to format activity timestamp', error);
+    return date.toISOString();
+  }
+}
+
+function createActivityTimelineStore() {
+  return {
+    items: [],
+    record(entry) {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+
+      let timestamp = null;
+      if (typeof entry.timestamp === 'number' && Number.isFinite(entry.timestamp)) {
+        timestamp = entry.timestamp;
+      } else if (typeof entry.timestamp === 'string') {
+        const parsed = Date.parse(entry.timestamp);
+        if (Number.isFinite(parsed)) {
+          timestamp = parsed;
+        }
+      }
+
+      const date = new Date(Number.isFinite(timestamp) ? timestamp : Date.now());
+      if (Number.isNaN(date.getTime())) {
+        date.setTime(Date.now());
+      }
+
+      const type = (entry.type || entry.actionType || 'Activity').toString();
+      const summary = typeof entry.summary === 'string' && entry.summary.trim()
+        ? entry.summary.trim()
+        : type;
+      const normalized = {
+        id: entry.id || entry.key || generateId(),
+        actionType: entry.actionType || null,
+        type,
+        summary,
+        timestamp: date.getTime(),
+        timestampIso: date.toISOString(),
+        timeLabel: formatActivityTimestamp(date),
+        metadata: entry.metadata || null,
+        targets: entry.targets || null
+      };
+
+      const nextItems = (Array.isArray(this.items) ? this.items : []).filter(item => item && item.id !== normalized.id);
+      nextItems.unshift(normalized);
+      if (nextItems.length > ACTIVITY_TIMELINE_LIMIT) {
+        nextItems.length = ACTIVITY_TIMELINE_LIMIT;
+      }
+      this.items = nextItems;
+      return normalized;
+    }
+  };
 }
 const existingFlags = typeof window.APP_FLAGS === 'object' && window.APP_FLAGS !== null ? window.APP_FLAGS : {};
 const appFlagsTarget = { ...DEFAULT_APP_FLAGS, ...existingFlags };
@@ -405,6 +470,9 @@ function normalizeStatus(status) {
 
 window.Alpine = Alpine;
 
+const activityTimelineStore = createActivityTimelineStore();
+Alpine.store('activityLog', activityTimelineStore);
+
 registerV2Component('v2DashboardApp', () => ({
   db: null,
   activityLog: null,
@@ -412,7 +480,8 @@ registerV2Component('v2DashboardApp', () => ({
     requirementsGrid: '',
     importDrawer: '',
     addEmployeeModal: '',
-    bulkActions: ''
+    bulkActions: '',
+    activityTimeline: ''
   },
   inlineTemplateMounted: false,
   loading: true,
@@ -593,6 +662,19 @@ registerV2Component('v2DashboardApp', () => ({
           console.error(error);
           this.partials.bulkActions = '';
         }
+      })(),
+      (async () => {
+        try {
+          const response = await fetch('./src/v2/activity-timeline.html');
+          if (!response.ok) {
+            throw new Error(`Failed to load activity timeline (status ${response.status})`);
+          }
+          this.partials.activityTimeline = await response.text();
+          this.hydrateActivityTimeline();
+        } catch (error) {
+          console.error(error);
+          this.partials.activityTimeline = '';
+        }
       })()
     ]);
   },
@@ -618,6 +700,15 @@ registerV2Component('v2DashboardApp', () => ({
   hydrateBulkActions() {
     this.$nextTick(() => {
       const container = document.getElementById('bulk-actions');
+      if (container && container.dataset.alpineInitialized !== 'true') {
+        Alpine.initTree(container);
+        container.dataset.alpineInitialized = 'true';
+      }
+    });
+  },
+  hydrateActivityTimeline() {
+    this.$nextTick(() => {
+      const container = document.getElementById('activity-timeline');
       if (container && container.dataset.alpineInitialized !== 'true') {
         Alpine.initTree(container);
         container.dataset.alpineInitialized = 'true';
@@ -824,6 +915,17 @@ registerV2Component('v2DashboardApp', () => ({
         const name = `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || 'Employee';
         store.showToast({ type: 'success', message: `${name} added.` });
       }
+      const timelineStore = this.$store?.activityLog;
+      if (timelineStore && typeof timelineStore.record === 'function') {
+        const name = `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || 'Employee';
+        timelineStore.record({
+          type: 'Add employee',
+          actionType: 'AddEmployee',
+          summary: `${name} added`,
+          timestamp: Date.now(),
+          metadata: { employeeId: employee?.id || payload.id }
+        });
+      }
     } catch (error) {
       console.error('Failed to add employee', error);
       this.addEmployeeModal.errors = {
@@ -977,6 +1079,16 @@ registerV2Component('v2DashboardApp', () => ({
       const message = `Employees: ${summary.added} added, ${summary.updated} updated, ${summary.skipped} skipped.`;
       if (store && typeof store.showToast === 'function') {
         store.showToast({ type: 'success', message });
+      }
+      const timelineStore = this.$store?.activityLog;
+      if (timelineStore && typeof timelineStore.record === 'function') {
+        timelineStore.record({
+          type: 'Import',
+          actionType: 'ImportEmployees',
+          summary: message,
+          timestamp: Date.now(),
+          metadata: summary
+        });
       }
     } catch (error) {
       console.error('Import commit failed', error);
@@ -1253,9 +1365,10 @@ registerV2Component('v2DashboardApp', () => ({
       this.setEmployeeRequirement(record);
     }
     await this.initActivityLog();
+    let activityEntry = null;
     if (this.activityLog) {
       try {
-        await this.activityLog.record({
+        activityEntry = await this.activityLog.record({
           actionType: 'bulk-update-requirement',
           actor: 'user',
           targets: employeeIds.map(id => ({ type: 'employee', id })),
@@ -1266,10 +1379,32 @@ registerV2Component('v2DashboardApp', () => ({
             count: updates.length,
             date: dateValue || null,
             reason: reason || null
-          }
+          },
+          supportsUndo: false
         });
       } catch (error) {
         console.error('Failed to record bulk activity', error);
+      }
+    }
+    if (updates.length) {
+      const timelineStore = this.$store?.activityLog;
+      if (timelineStore && typeof timelineStore.record === 'function') {
+        const actionLabel = this.bulkActionLabel(action);
+        const summary = `${actionLabel} · ${requirement.name} (${updates.length} ${updates.length === 1 ? 'employee' : 'employees'})`;
+        timelineStore.record({
+          ...(activityEntry || {}),
+          type: 'Bulk update',
+          summary,
+          timestamp: activityEntry?.timestamp ?? Date.now(),
+          metadata: {
+            requirementId,
+            requirementName: requirement.name,
+            action,
+            count: updates.length,
+            date: dateValue || null,
+            reason: reason || null
+          }
+        });
       }
     }
     this.applyFilters();
@@ -1575,6 +1710,48 @@ registerV2Component('v2DashboardApp', () => ({
       payload.id = generateId();
       payload.createdAt = new Date().toISOString();
       await table.put(payload);
+    }
+    await this.initActivityLog();
+    let activityEntry = null;
+    if (this.activityLog) {
+      try {
+        activityEntry = await this.activityLog.record({
+          actionType: 'update-requirement',
+          actor: 'user',
+          targets: [{ type: 'employee', id: employeeId }],
+          metadata: {
+            requirementId,
+            status: payload.status,
+            completedOn: payload.completedOn,
+            expiresOn: payload.expiresOn
+          },
+          supportsUndo: false
+        });
+      } catch (error) {
+        console.error('Failed to record inline edit activity', error);
+      }
+    }
+    const timelineStore = this.$store?.activityLog;
+    if (timelineStore && typeof timelineStore.record === 'function') {
+      const employee = this.employees.find(emp => emp.id === employeeId);
+      const requirement = this.requirements.find(req => req.id === requirementId);
+      const employeeName = `${normalizeString(employee?.firstName)} ${normalizeString(employee?.lastName)}`.trim() || 'Employee';
+      const requirementName = requirement?.name || 'Requirement';
+      const statusLabel = normalizeStatus(payload.status);
+      const summary = `${requirementName} updated for ${employeeName} (${statusLabel})`;
+      timelineStore.record({
+        ...(activityEntry || {}),
+        type: 'Requirement',
+        summary,
+        timestamp: activityEntry?.timestamp ?? Date.now(),
+        metadata: {
+          requirementId,
+          status: statusLabel,
+          completedOn: payload.completedOn,
+          expiresOn: payload.expiresOn,
+          employeeId
+        }
+      });
     }
     this.setEmployeeRequirement(payload);
     this.closeEditor();
