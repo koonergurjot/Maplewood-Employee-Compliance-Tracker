@@ -1,5 +1,6 @@
 import './polyfills/async-function-call.js';
 import Alpine from 'alpinejs';
+import { qs } from './utils/dom.js';
 import requirementsGridTemplate from './v2/requirements-grid.html?raw';
 const inlineEditTemplate = `
 <template>
@@ -326,7 +327,7 @@ function replaceTemplate(targetId, html) {
   if (!placeholder) return;
   const wrapper = document.createElement('div');
   wrapper.innerHTML = html.trim();
-  const templateEl = wrapper.querySelector('template');
+  const templateEl = qs(wrapper, 'template');
   if (templateEl) {
     templateEl.id = targetId;
     placeholder.replaceWith(templateEl);

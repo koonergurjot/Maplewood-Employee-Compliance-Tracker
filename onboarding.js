@@ -1,4 +1,5 @@
 import { warnOnce } from './src/compat/deprecations.js';
+import { qs, qsAll } from './src/utils/dom.js';
 
 const hasWindowObject = typeof window !== 'undefined';
 const skipLegacyOnboarding = hasWindowObject && Boolean(window.APP_FLAGS?.USE_V2_MAIN);
@@ -49,7 +50,7 @@ function startTour(){
   function cleanup(reason='completed'){
     if(cleaning) return;
     cleaning = true;
-    document.querySelectorAll('.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));
+    qsAll(document, '.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));
     overlay.remove();
     tooltip.remove();
     window.dispatchEvent(new CustomEvent('tour:ended', { detail: { reason } }));
@@ -61,13 +62,13 @@ function startTour(){
       return;
     }
     const step = steps[index];
-    const el = document.querySelector(step.element);
+    const el = qs(document, step.element);
     if(!el){
       index++;
       showStep();
       return;
     }
-    document.querySelectorAll('.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));
+    qsAll(document, '.tour-highlight').forEach(e=>e.classList.remove('tour-highlight'));
     el.classList.add('tour-highlight');
     el.scrollIntoView({behavior:'smooth', block:'center'});
     const rect = el.getBoundingClientRect();
