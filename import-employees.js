@@ -228,6 +228,37 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
     return false;
   }
 
+  function dispatchEmployeeAddedEvent(){
+    if (typeof document === 'undefined'){
+      return;
+    }
+    try {
+      document.dispatchEvent(new CustomEvent('employee:added', {
+        detail: { source: 'importer' }
+      }));
+    } catch (error) {
+      console.error('Failed to dispatch employee:added event', error);
+    }
+  }
+
+  function requestAppRefreshAfterImport(){
+    if (isAlpineReady()){
+      dispatchEmployeeAddedEvent();
+      return;
+    }
+
+    if (typeof document === 'undefined'){
+      return;
+    }
+
+    const handleAlpineReady = () => {
+      document.removeEventListener('alpine:initialized', handleAlpineReady);
+      dispatchEmployeeAddedEvent();
+    };
+
+    document.addEventListener('alpine:initialized', handleAlpineReady, { once: true });
+  }
+
   let legacySpinnerCache = null;
   function getLegacySpinnerElements(){
     if (legacySpinnerCache) return legacySpinnerCache;
@@ -1651,6 +1682,7 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
 
       showToastMessage(message, skippedCount ? 'info' : 'success');
       toggleImportModal(false);
+      requestAppRefreshAfterImport();
     } catch (e) {
       finalizeProgress();
       const stage = e && typeof e === 'object' && e.importStage ? e.importStage : 'transform';
