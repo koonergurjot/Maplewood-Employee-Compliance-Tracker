@@ -436,9 +436,23 @@ if (typeof window !== 'undefined') {
     if (typeof document !== 'undefined') {
       const el = document.getElementById('app-v2') || document.body;
       if (el) {
+        const rawMessage = error && (error.stack || error.message) ? (error.stack || error.message) : error;
+        const safeMessage = String(rawMessage ?? 'Unknown error').replace(/[&<>]/g, (character) => {
+          switch (character) {
+            case '&':
+              return '&amp;';
+            case '<':
+              return '&lt;';
+            case '>':
+              return '&gt;';
+            default:
+              return character;
+          }
+        });
+
         el.innerHTML = `<div style="padding:16px;font-family:system-ui">
     <h2>App failed to start</h2>
-    <pre style="white-space:pre-wrap;background:#f6f8fa;padding:12px;border-radius:8px">${(error.stack || error.message || error)}</pre>
+    <pre style="white-space:pre-wrap;background:#f6f8fa;padding:12px;border-radius:8px">${safeMessage}</pre>
   </div>`;
       }
     }
