@@ -1,5 +1,6 @@
 import Alpine from 'alpinejs';
 import inlineEditTemplate from './components/inline-edit.html?raw';
+import requirementsGridTemplate from './components/requirements-grid.html?raw';
 import './styles/tailwind.css';
 import { openDatabase, generateId } from '../db.js';
 
@@ -107,12 +108,10 @@ Alpine.data('dashboardApp', () => ({
   },
   async loadPartials() {
     try {
-      const response = await fetch('./src/components/requirements-grid.html');
-      if (!response.ok) {
-        throw new Error(`Failed to load requirements grid (status ${response.status})`);
+      this.partials.requirementsGrid = requirementsGridTemplate ?? '';
+      if (this.partials.requirementsGrid) {
+        this.hydrateRequirementsGrid();
       }
-      this.partials.requirementsGrid = await response.text();
-      this.hydrateRequirementsGrid();
     } catch (error) {
       console.error(error);
       this.partials.requirementsGrid = '';
