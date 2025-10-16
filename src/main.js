@@ -29,7 +29,13 @@ const inlineEditTemplate = `
       <div class="inline-body">
         <label class="inline-field">
           <span>Status</span>
-          <select class="input" x-ref="editorStatus" x-model="editorForm.status" data-autofocus>
+          <select
+            class="input"
+            name="status"
+            x-ref="editorStatus"
+            x-model="editorForm.status"
+            data-autofocus
+          >
             <template x-for="status in editorStatusOptions" :key="status">
               <option :value="status" x-text="status"></option>
             </template>
@@ -37,11 +43,11 @@ const inlineEditTemplate = `
         </label>
         <label class="inline-field">
           <span>Completed on</span>
-          <input type="date" class="input" x-model="editorForm.completedOn" />
+          <input type="date" class="input" name="completedOn" x-model="editorForm.completedOn" />
         </label>
         <label class="inline-field">
           <span>Expires on</span>
-          <input type="date" class="input" x-model="editorForm.expiresOn" />
+          <input type="date" class="input" name="expiresOn" x-model="editorForm.expiresOn" />
         </label>
       </div>
       <footer class="inline-footer">

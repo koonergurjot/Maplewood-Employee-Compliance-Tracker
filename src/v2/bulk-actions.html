@@ -9,7 +9,12 @@
   <form class="bulk-controls" @submit.prevent="runBulkUpdate">
     <label class="bulk-field">
       <span>Requirement</span>
-      <select class="input" x-model="bulk.requirementId" :disabled="!requirements.length">
+      <select
+        class="input"
+        name="requirementId"
+        x-model="bulk.requirementId"
+        :disabled="!requirements.length"
+      >
         <template x-if="!requirements.length">
           <option value="">No requirements</option>
         </template>
@@ -20,7 +25,12 @@
     </label>
     <label class="bulk-field">
       <span>Action</span>
-      <select class="input" x-model="bulk.action" @change="onBulkActionChanged">
+      <select
+        class="input"
+        name="action"
+        x-model="bulk.action"
+        @change="onBulkActionChanged"
+      >
         <option value="">Choose an action</option>
         <option value="complete">Mark complete</option>
         <option value="set-expiry">Set expiry</option>
@@ -31,13 +41,19 @@
     <template x-if="bulkActionRequiresDate(bulk.action)">
       <label class="bulk-field">
         <span x-text="bulkDateLabel()"></span>
-        <input type="date" class="input" x-model="bulk.date" />
+        <input type="date" class="input" name="bulkDate" x-model="bulk.date" />
       </label>
     </template>
     <template x-if="bulkActionRequiresReason(bulk.action)">
       <label class="bulk-field">
         <span>Reason</span>
-        <input type="text" class="input" placeholder="Add a note" x-model="bulk.reason" />
+        <input
+          type="text"
+          class="input"
+          name="bulkReason"
+          placeholder="Add a note"
+          x-model="bulk.reason"
+        />
       </label>
     </template>
     <div class="bulk-actions-buttons">

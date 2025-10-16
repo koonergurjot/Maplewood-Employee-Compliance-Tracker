@@ -59,6 +59,7 @@
           <input
             type="text"
             class="input"
+            name="firstName"
             x-model="addEmployeeModal.form.firstName"
             x-ref="addEmployeeFirstName"
             :aria-invalid="Boolean(addEmployeeModal.errors.firstName)"
@@ -71,6 +72,7 @@
           <input
             type="text"
             class="input"
+            name="lastName"
             x-model="addEmployeeModal.form.lastName"
             x-ref="addEmployeeLastName"
             :aria-invalid="Boolean(addEmployeeModal.errors.lastName)"
@@ -84,6 +86,7 @@
           Role
           <select
             class="input"
+            name="role"
             x-model="addEmployeeModal.form.role"
             x-ref="addEmployeeRole"
             :aria-invalid="Boolean(addEmployeeModal.errors.role)"
@@ -99,6 +102,7 @@
           Status
           <select
             class="input"
+            name="status"
             x-model="addEmployeeModal.form.status"
             x-ref="addEmployeeStatus"
             :aria-invalid="Boolean(addEmployeeModal.errors.status)"
@@ -116,6 +120,7 @@
           Employment type
           <select
             class="input"
+            name="employmentType"
             x-model="addEmployeeModal.form.employmentType"
             x-ref="addEmployeeEmploymentType"
             :aria-invalid="Boolean(addEmployeeModal.errors.employmentType)"
@@ -138,6 +143,7 @@
             min="0"
             step="0.01"
             class="input"
+            name="seniorityHours"
             x-model="addEmployeeModal.form.seniorityHours"
             x-ref="addEmployeeSeniorityHours"
             :aria-invalid="Boolean(addEmployeeModal.errors.seniorityHours)"
