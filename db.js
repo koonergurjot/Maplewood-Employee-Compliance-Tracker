@@ -84,6 +84,67 @@ export function* chunkArray(items, chunkSize = BULK_OPERATION_CHUNK_SIZE) {
   }
 }
 
+const DEFAULT_REQUIREMENTS = [
+  { name: 'Resume', defaultExpiryDays: null, color: '#e0e7ff' },
+  { name: 'References', defaultExpiryDays: null, color: '#f0f9ff' },
+  { name: 'First Aid', defaultExpiryDays: 1095, color: '#fef3c7' },
+  { name: 'CPR', defaultExpiryDays: 365, color: '#dcfce7' },
+  { name: 'FoodSafe', defaultExpiryDays: 1825, color: '#fce7f3' },
+  { name: 'Violence Prevention', defaultExpiryDays: 365, color: '#f3e8ff' },
+  { name: 'Background Check', defaultExpiryDays: 1095, color: '#fef2f2' },
+  { name: 'Drug Test', defaultExpiryDays: 365, color: '#fffbeb' },
+  { name: 'TB Test', defaultExpiryDays: 365, color: '#f0fdf4' },
+  { name: 'Immunization', defaultExpiryDays: 365, color: '#ecfdf5' }
+];
+
+function getDefaultRequirementSeeds() {
+  const now = new Date().toISOString();
+  return DEFAULT_REQUIREMENTS.map(({ name, defaultExpiryDays, color }) => ({
+    id: generateId(),
+    name,
+    defaultExpiryDays,
+    color,
+    createdAt: now,
+    updatedAt: now
+  }));
+}
+
+async function seedInitialDataIfNeeded(db) {
+  if (!db) {
+    return;
+  }
+
+  const requirementsTable = db.table('requirements');
+  const requirementCount = await requirementsTable.count();
+
+  if (requirementCount === 0) {
+    try {
+      await requirementsTable.bulkAdd(getDefaultRequirementSeeds());
+    } catch (error) {
+      console.warn('Failed to seed default requirements', error);
+    }
+  }
+
+  const settingsTable = db.table('settings');
+
+  const ensureSetting = async (id, value) => {
+    try {
+      const existing = await settingsTable.get(id);
+      if (!existing) {
+        await settingsTable.put({ id, ...value });
+      }
+    } catch (error) {
+      console.warn(`Failed to ensure default setting: ${id}`, error);
+    }
+  };
+
+  await Promise.all([
+    ensureSetting('app', { darkMode: false }),
+    ensureSetting('hasSeenTour', { value: false }),
+    ensureSetting('roleRequirementProfiles', { value: [] })
+  ]);
+}
+
 function defineSchema(db) {
   const v8Stores = {
     employees: 'id, lastName, firstName, role, employmentType, status, employeeId, seniorityHours',
@@ -222,28 +283,7 @@ function defineSchema(db) {
   db.version(12).stores(v12Stores);
 
   db.on('populate', tx => {
-    const now = new Date().toISOString();
-    const seed = (name, days = null, color = '#fef3c7') => ({
-      id: generateId(),
-      name,
-      defaultExpiryDays: days,
-      color,
-      createdAt: now,
-      updatedAt: now
-    });
-
-    tx.table('requirements').bulkAdd([
-      seed('Resume', null, '#e0e7ff'),
-      seed('References', null, '#f0f9ff'),
-      seed('First Aid', 1095, '#fef3c7'),
-      seed('CPR', 365, '#dcfce7'),
-      seed('FoodSafe', 1825, '#fce7f3'),
-      seed('Violence Prevention', 365, '#f3e8ff'),
-      seed('Background Check', 1095, '#fef2f2'),
-      seed('Drug Test', 365, '#fffbeb'),
-      seed('TB Test', 365, '#f0fdf4'),
-      seed('Immunization', 365, '#ecfdf5')
-    ]);
+    tx.table('requirements').bulkAdd(getDefaultRequirementSeeds());
 
     tx.table('settings').put({ id: 'app', darkMode: false });
     tx.table('settings').put({ id: 'hasSeenTour', value: false });
@@ -269,6 +309,7 @@ export async function createDatabase() {
 export async function openDatabase() {
   const db = await createDatabase();
   await db.open();
+  await seedInitialDataIfNeeded(db);
   return db;
 }
 
