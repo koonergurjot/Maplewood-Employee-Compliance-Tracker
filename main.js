@@ -20,6 +20,29 @@ const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
 const THEME_STORAGE_KEY = 'maplewood:theme';
 const COLUMN_VISIBILITY_STORAGE_KEY = 'maplewood:employeeTable:visibleColumns';
+const V2_COMPONENT_REGISTRY_KEY = '__V2_ALPINE_COMPONENTS__';
+const legacyComponentWarnings = new Set();
+
+function registerLegacyComponent(name, definition) {
+  if (!name || typeof name !== 'string') {
+    Alpine.data(name, definition);
+    return;
+  }
+
+  const hasWindow = typeof window !== 'undefined' && window !== null;
+  const registry = hasWindow ? window[V2_COMPONENT_REGISTRY_KEY] : null;
+  const useV2Main = hasWindow && !!(window.APP_FLAGS && window.APP_FLAGS.USE_V2_MAIN);
+
+  if (useV2Main && registry && typeof registry.has === 'function' && registry.has(name)) {
+    if (!legacyComponentWarnings.has(name)) {
+      console.warn(`Skipping legacy Alpine component "${name}" because the v2 dashboard is active.`);
+      legacyComponentWarnings.add(name);
+    }
+    return;
+  }
+
+  Alpine.data(name, definition);
+}
 const DEFAULT_SORT_FIELD = 'seniorityHours';
 const DEFAULT_SORT_DIRECTION = 'desc';
 const EMPLOYEE_SORT_STORAGE_KEY = 'maplewood:employeeTable:sort';
@@ -5451,12 +5474,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
       });
 
-    Alpine.data('modalStateBinding', modalStateBinding);
-    Alpine.data('modalStoreBinding', modalStoreBinding);
-    Alpine.data('mappingPanel', mappingPanel);
-    Alpine.data('activityTimeline', activityTimeline);
-    Alpine.data('addEmployeeModal', addEmployeeModal);
-    Alpine.data('app', app);
+    registerLegacyComponent('modalStateBinding', modalStateBinding);
+    registerLegacyComponent('modalStoreBinding', modalStoreBinding);
+    registerLegacyComponent('mappingPanel', mappingPanel);
+    registerLegacyComponent('activityTimeline', activityTimeline);
+    registerLegacyComponent('addEmployeeModal', addEmployeeModal);
+    registerLegacyComponent('app', app);
 
     function showFallback() {
       document.body?.removeAttribute('x-cloak');

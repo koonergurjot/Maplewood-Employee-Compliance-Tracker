@@ -1,11 +1,32 @@
 import './polyfills/async-function-call.js';
 import Alpine from 'alpinejs';
-import requirementsGridTemplate from './components/requirements-grid.html?raw';
+import requirementsGridTemplate from './v2/requirements-grid.html?raw';
 import inlineEditTemplate from './components/inline-edit.html?raw';
 import './styles/tailwind.css';
 import { openDatabase, generateId } from '../db.js';
 
 const DEFAULT_APP_FLAGS = { USE_V2_MAIN: true };
+const V2_COMPONENT_REGISTRY_KEY = '__V2_ALPINE_COMPONENTS__';
+
+function getV2ComponentRegistry() {
+  if (typeof window === 'undefined') {
+    return new Set();
+  }
+
+  if (!window[V2_COMPONENT_REGISTRY_KEY]) {
+    window[V2_COMPONENT_REGISTRY_KEY] = new Set();
+  }
+
+  return window[V2_COMPONENT_REGISTRY_KEY];
+}
+
+function registerV2Component(name, definition) {
+  const registry = getV2ComponentRegistry();
+  if (typeof name === 'string' && name) {
+    registry.add(name);
+  }
+  return Alpine.data(name, definition);
+}
 const existingFlags = typeof window.APP_FLAGS === 'object' && window.APP_FLAGS !== null ? window.APP_FLAGS : {};
 const appFlagsTarget = { ...DEFAULT_APP_FLAGS, ...existingFlags };
 
@@ -75,7 +96,7 @@ function normalizeStatus(status) {
 
 window.Alpine = Alpine;
 
-Alpine.data('dashboardApp', () => ({
+registerV2Component('v2DashboardApp', () => ({
   db: null,
   partials: {
     requirementsGrid: ''
@@ -145,7 +166,7 @@ Alpine.data('dashboardApp', () => ({
   },
   async loadPartials() {
     try {
-      const response = await fetch('./src/components/requirements-grid.html');
+      const response = await fetch('./src/v2/requirements-grid.html');
       if (!response.ok) {
         throw new Error(`Failed to load requirements grid (status ${response.status})`);
       }
