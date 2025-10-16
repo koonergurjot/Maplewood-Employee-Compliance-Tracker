@@ -42,18 +42,130 @@ window.APP_FLAGS = new Proxy(appFlagsTarget, {
   }
 });
 
-window.AppStore = window.AppStore || function AppStore() {
-  const state = {
-    APP_FLAGS: { ...window.APP_FLAGS }
+function createAppStore() {
+  const store = {
+    APP_FLAGS: { ...window.APP_FLAGS },
+    showImportModal: false,
+    showLookupModal: null,
+    toast: null,
+    _toastTimer: null,
+    showToast(message, type = 'info', options = {}) {
+      if (this._toastTimer) {
+        clearTimeout(this._toastTimer);
+        this._toastTimer = null;
+      }
+
+      const payload = typeof message === 'object' && message !== null ? { ...message } : { message };
+      payload.type = typeof payload.type === 'string' && payload.type ? payload.type : type;
+
+      if (typeof payload.message !== 'string') {
+        payload.message = String(payload.message ?? '');
+      }
+
+      if (typeof options === 'object' && options !== null) {
+        Object.assign(payload, options);
+      }
+
+      this.toast = payload;
+
+      if (payload.type === 'progress') {
+        return;
+      }
+
+      const duration = typeof payload.duration === 'number' && Number.isFinite(payload.duration)
+        ? Math.max(0, payload.duration)
+        : 3500;
+
+      if (duration > 0) {
+        this._toastTimer = setTimeout(() => {
+          if (!this.toast || this.toast.type !== 'progress') {
+            this.toast = null;
+          }
+          this._toastTimer = null;
+        }, duration);
+      }
+    },
+    hideToast() {
+      if (this._toastTimer) {
+        clearTimeout(this._toastTimer);
+        this._toastTimer = null;
+      }
+      this.toast = null;
+    },
+    hasToastAction() {
+      const toast = this.toast;
+      return Boolean(toast && toast.action && typeof toast.action.handler === 'function');
+    },
+    toastActionLabel() {
+      const toast = this.toast;
+      if (!toast || !toast.action) {
+        return 'Undo';
+      }
+      const label = toast.action.label;
+      return typeof label === 'string' && label.trim() ? label.trim() : 'Undo';
+    },
+    isProgressToast() {
+      return this.toast?.type === 'progress';
+    },
+    toastProgressPercent() {
+      if (!this.toast || typeof this.toast.percent !== 'number') {
+        return 0;
+      }
+      const percent = Math.round(this.toast.percent);
+      return Math.max(0, Math.min(100, percent));
+    },
+    async runToastAction() {
+      if (!this.hasToastAction()) {
+        return;
+      }
+
+      const action = this.toast.action;
+      try {
+        await action.handler();
+      } catch (error) {
+        console.error('Toast action failed', error);
+      } finally {
+        if (action.dismiss !== false) {
+          this.hideToast();
+        }
+      }
+    },
+    setProgress(percent) {
+      if (this._toastTimer) {
+        clearTimeout(this._toastTimer);
+        this._toastTimer = null;
+      }
+
+      const normalized = typeof percent === 'number' && Number.isFinite(percent) ? percent : 0;
+      const clamped = Math.max(0, Math.min(100, Math.round(normalized)));
+
+      this.toast = {
+        type: 'progress',
+        message: 'Importing…',
+        percent: clamped
+      };
+    },
+    setToast(toast) {
+      this.toast = toast ?? null;
+    }
   };
 
   const handleFlagChange = () => {
-    state.APP_FLAGS = { ...window.APP_FLAGS };
+    store.APP_FLAGS = { ...window.APP_FLAGS };
   };
 
   document.addEventListener('app-flags:changed', handleFlagChange);
 
-  return state;
+  return store;
+}
+
+const existingAppStore = typeof window.AppStore === 'function' ? window.AppStore() : null;
+const appStore = existingAppStore && typeof existingAppStore === 'object' ? existingAppStore : createAppStore();
+
+Alpine.store('app', appStore);
+
+window.AppStore = function AppStore() {
+  return appStore;
 };
 
 const DARK_MODE_KEY = 'maplewood:dashboard:dark-mode';
