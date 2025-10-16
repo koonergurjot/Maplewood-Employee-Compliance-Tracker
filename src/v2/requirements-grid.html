@@ -136,27 +136,26 @@
             <td class="requirements-divider sticky-divider" role="presentation" aria-hidden="true"></td>
             <template x-for="req in requirements" :key="req.id">
               <td x-data="{ cell: getRequirementCell(employee.id, req.id) }">
-                <div
-                  class="cell"
-                  @click="openEditor($event, employee.id, req.id)"
-                >
-                  <span
-                    class="badge"
-                    :class="{
-                      'badge-green': (cell.status==='Completed' || cell.status==='Complete') && !cellExpired(cell),
-                      'badge-amber': (cell.status==='Completed' || cell.status==='Complete') && cellWarn(cell),
-                      'badge-rose':  cellExpired(cell),
-                      'badge-slate': (cell.status!=='Completed' && cell.status!=='Complete') && !cellExpired(cell)
-                    }"
-                    x-text="chipText(cell)"
-                    role="button"
-                    tabindex="0"
+                <div class="cell">
+                  <label class="inline-flex items-center gap-2 cursor-pointer" @click.stop>
+                    <input
+                      type="checkbox"
+                      class="checkbox-input"
+                      :checked="cell.status==='Complete' || cell.status==='Completed'"
+                      @change.stop="toggleRequirement(employee.id, req.id, $event.target.checked)"
+                    />
+                    <span
+                      x-text="cell.status==='Exempt' ? 'Exempt' : (cell.status==='Complete' || cell.status==='Completed' ? 'Done' : 'Not done')"
+                    ></span>
+                  </label>
+                  <button
+                    type="button"
+                    class="cell-sub text-left bg-transparent border-0 p-0 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500"
                     :aria-label="`Edit ${req.name} for ${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Edit requirement'"
-                    @click.stop="openEditor($event, employee.id, req.id)"
-                    @keydown.enter.prevent="openEditor($event, employee.id, req.id)"
-                    @keydown.space.prevent="openEditor($event, employee.id, req.id)"
-                  ></span>
-                  <span class="cell-sub" x-text="cellSubtext(cell)"></span>
+                    @click="openEditor($event, employee.id, req.id)"
+                  >
+                    <span x-text="cellSubtext(cell)"></span>
+                  </button>
                 </div>
               </td>
             </template>
