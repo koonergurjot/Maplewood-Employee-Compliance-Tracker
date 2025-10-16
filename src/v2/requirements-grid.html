@@ -100,19 +100,30 @@
                 />
               </td>
               <th scope="row" class="sticky-col">
-                <div class="employee-cell">
-                  <div class="ring-wrapper" :class="progressStrokeClass(employeeCompliancePercent(employee.id))">
-                    <svg viewBox="0 0 36 36" class="ring">
-                      <circle class="ring-track" cx="18" cy="18" r="16" />
-                      <circle class="ring-value" cx="18" cy="18" r="16" :stroke-dasharray="progressRingDash(employeeCompliancePercent(employee.id))"></circle>
+                <div class="flex items-center gap-3">
+                  <div class="relative">
+                    <div
+                      class="h-8 w-8 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-semibold"
+                      x-text="(employee.firstName?.[0]||'') + (employee.lastName?.[0]||'')"
+                    ></div>
+                    <svg viewBox="0 0 24 24" class="absolute -bottom-1 -right-1 h-5 w-5">
+                      <circle cx="12" cy="12" r="10" stroke-width="3" fill="none" class="stroke-slate-200"></circle>
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke-width="3"
+                        fill="none"
+                        :style="`stroke-dasharray:${(employeeCompliancePercent(employee.id)/100)*62.83} 62.83;transition:stroke-dasharray .25s`"
+                        :class="employeeCompliancePercent(employee.id)>=90?'stroke-emerald-500':employeeCompliancePercent(employee.id)>=70?'stroke-amber-500':'stroke-rose-500'"
+                      ></circle>
                     </svg>
-                    <span class="ring-label" x-text="employeeCompliancePercent(employee.id) + '%'"></span>
                   </div>
-                  <div class="employee-meta">
-                    <div class="employee-name" x-text="`${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Unnamed employee'"></div>
-                    <div class="employee-sub" x-text="employee.role || 'Role unavailable'"></div>
-                    <div class="employee-sub" x-text="employee.status"></div>
+                  <div>
+                    <div class="font-medium" x-text="employee.fullName || (employee.firstName+' '+employee.lastName)"></div>
+                    <div class="text-xs text-slate-500" x-text="(employee.role||'—') + ' • ' + (employee.status||'—')"></div>
                   </div>
+                  <button class="ml-auto text-slate-500 hover:text-slate-700" @click.stop="openProfile(employee.id)" title="Details">⋯</button>
                 </div>
               </th>
               <template x-for="req in requirements" :key="req.id">
