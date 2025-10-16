@@ -840,6 +840,20 @@ registerV2Component('v2DashboardApp', () => ({
     const disabled = !state.file || !state.summary || state.dryRunLoading || state.commitLoading;
     state.commitDisabled = disabled;
   },
+  downloadSampleCSV() {
+    const csv = `First Name,Last Name,Role,Status,Employment Type,Seniority Hours
+Ravneet,KAUR,LPN,Active,Full-Time,1123
+Tirth,SINGH,HCA,Active,Casual,456
+Mehak,BRAICH,LPN,Active,Part-Time,988
+`;
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'sample-employees.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  },
   async initActivityLog() {
     if (!this.db || this.activityLog) {
       return;
