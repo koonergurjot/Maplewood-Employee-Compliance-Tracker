@@ -2099,15 +2099,19 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
           });
 
           if ('serviceWorker' in navigator) {
-            if (location.hostname.endsWith('.pages.dev') || location.hostname === 'YOUR_CUSTOM_DOMAIN') {
+            if (window.__SW_REGISTERED__) {
+              console.info('SW registration skipped (already registered).');
+            } else if (location.hostname.endsWith('.pages.dev') || location.hostname === 'YOUR_CUSTOM_DOMAIN') {
               const swUrl = `sw.js?build=${BUILD_HASH}`;
-              navigator.serviceWorker?.register(swUrl, { scope: './' })
+              navigator.serviceWorker
+                ?.register(swUrl, { scope: './' })
                 .then((registration) => {
                   console.info('SW registered', registration.scope);
                 })
                 .catch((error) => {
                   console.info('SW disabled (register failed):', error);
                 });
+              window.__SW_REGISTERED__ = true;
             } else {
               // Service Worker registration is disabled unless running on Pages; not required for importer.
               console.info('SW disabled (non-Pages host).');
