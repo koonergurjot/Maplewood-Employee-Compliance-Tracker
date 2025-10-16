@@ -434,31 +434,12 @@ if (typeof window !== 'undefined') {
     };
 
     if (typeof document !== 'undefined') {
-      const host = document.getElementById('app-v2') || document.body;
-      if (host) {
-        const message = error && (error.stack || error.message) ? error.stack || error.message : String(error);
-        const safeMessage = String(message).replace(/[&<>"']/g, char => {
-          switch (char) {
-            case '&':
-              return '&amp;';
-            case '<':
-              return '&lt;';
-            case '>':
-              return '&gt;';
-            case '"':
-              return '&quot;';
-            case "'":
-              return '&#39;';
-            default:
-              return char;
-          }
-        });
-
-        host.innerHTML = `
-    <div style="padding:16px;font-family:system-ui">
-      <h2>Something went wrong starting the app</h2>
-      <pre style="white-space:pre-wrap;background:#f6f8fa;padding:12px;border-radius:8px">${safeMessage}</pre>
-    </div>`;
+      const el = document.getElementById('app-v2') || document.body;
+      if (el) {
+        el.innerHTML = `<div style="padding:16px;font-family:system-ui">
+    <h2>App failed to start</h2>
+    <pre style="white-space:pre-wrap;background:#f6f8fa;padding:12px;border-radius:8px">${(error.stack || error.message || error)}</pre>
+  </div>`;
       }
     }
   }
