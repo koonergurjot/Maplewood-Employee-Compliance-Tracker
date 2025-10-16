@@ -411,7 +411,8 @@ registerV2Component('v2DashboardApp', () => ({
   partials: {
     requirementsGrid: '',
     importDrawer: '',
-    addEmployeeModal: ''
+    addEmployeeModal: '',
+    bulkActions: ''
   },
   inlineTemplateMounted: false,
   loading: true,
@@ -423,6 +424,14 @@ registerV2Component('v2DashboardApp', () => ({
   employeeRequirements: [],
   employeeRequirementMap: new Map(),
   filteredEmployees: [],
+  selectedEmployees: [],
+  bulk: {
+    requirementId: '',
+    action: '',
+    date: '',
+    reason: ''
+  },
+  bulkProcessing: false,
   roleOptions: [],
   filters: {
     roles: [],
@@ -571,6 +580,19 @@ registerV2Component('v2DashboardApp', () => ({
           console.error(error);
           this.partials.addEmployeeModal = '';
         }
+      })(),
+      (async () => {
+        try {
+          const response = await fetch('./src/v2/bulk-actions.html');
+          if (!response.ok) {
+            throw new Error(`Failed to load bulk actions (status ${response.status})`);
+          }
+          this.partials.bulkActions = await response.text();
+          this.hydrateBulkActions();
+        } catch (error) {
+          console.error(error);
+          this.partials.bulkActions = '';
+        }
       })()
     ]);
   },
@@ -581,11 +603,21 @@ registerV2Component('v2DashboardApp', () => ({
         Alpine.initTree(container);
         container.dataset.alpineInitialized = 'true';
       }
+      this.hydrateBulkActions();
     });
   },
   hydrateImportDrawer() {
     this.$nextTick(() => {
       const container = document.getElementById('import-drawer');
+      if (container && container.dataset.alpineInitialized !== 'true') {
+        Alpine.initTree(container);
+        container.dataset.alpineInitialized = 'true';
+      }
+    });
+  },
+  hydrateBulkActions() {
+    this.$nextTick(() => {
+      const container = document.getElementById('bulk-actions');
       if (container && container.dataset.alpineInitialized !== 'true') {
         Alpine.initTree(container);
         container.dataset.alpineInitialized = 'true';
@@ -970,6 +1002,7 @@ registerV2Component('v2DashboardApp', () => ({
     this.employees = employees;
     this.updateStoreEmployees();
     this.requirements = requirements;
+    this.ensureBulkRequirement();
     this.employeeRequirements = employeeRequirements;
     this.refreshRequirementMap();
     this.refreshEmployeeLookups();
@@ -1026,6 +1059,267 @@ registerV2Component('v2DashboardApp', () => ({
         this.addEmployeeModal.form.employmentType = employmentTypes[0] || '';
       }
     }
+  },
+  ensureBulkRequirement() {
+    if (!Array.isArray(this.requirements) || this.requirements.length === 0) {
+      this.bulk.requirementId = '';
+      return;
+    }
+    if (!this.bulk.requirementId || !this.requirements.some(req => req.id === this.bulk.requirementId)) {
+      this.bulk.requirementId = this.requirements[0].id;
+    }
+  },
+  selectedRequirementName() {
+    const requirement = this.requirements.find(req => req.id === this.bulk.requirementId);
+    return requirement ? requirement.name : 'Select a requirement';
+  },
+  syncSelectedEmployees() {
+    if (!Array.isArray(this.selectedEmployees) || this.selectedEmployees.length === 0) {
+      this.selectedEmployees = [];
+      return;
+    }
+    const visibleIds = new Set(this.filteredEmployees.map(employee => employee.id));
+    const next = this.selectedEmployees.filter(id => visibleIds.has(id));
+    if (next.length !== this.selectedEmployees.length) {
+      this.selectedEmployees = next;
+    }
+  },
+  isEmployeeSelected(employeeId) {
+    return this.selectedEmployees.includes(employeeId);
+  },
+  toggleEmployeeSelection(employeeId, checked) {
+    if (checked) {
+      if (!this.isEmployeeSelected(employeeId)) {
+        this.selectedEmployees = [...this.selectedEmployees, employeeId];
+      }
+    } else if (this.isEmployeeSelected(employeeId)) {
+      this.selectedEmployees = this.selectedEmployees.filter(id => id !== employeeId);
+    }
+  },
+  toggleSelectAll(checked) {
+    const visibleIds = this.filteredEmployees.map(employee => employee.id);
+    if (checked) {
+      const unique = new Set([...this.selectedEmployees, ...visibleIds]);
+      this.selectedEmployees = Array.from(unique);
+    } else if (visibleIds.length) {
+      const visibleSet = new Set(visibleIds);
+      this.selectedEmployees = this.selectedEmployees.filter(id => !visibleSet.has(id));
+    }
+  },
+  areAllVisibleSelected() {
+    if (!this.filteredEmployees.length) {
+      return false;
+    }
+    return this.filteredEmployees.every(employee => this.isEmployeeSelected(employee.id));
+  },
+  hasSomeVisibleSelected() {
+    if (!this.filteredEmployees.length) {
+      return false;
+    }
+    return this.filteredEmployees.some(employee => this.isEmployeeSelected(employee.id));
+  },
+  clearSelectedEmployees() {
+    if (!this.selectedEmployees.length) {
+      return;
+    }
+    this.selectedEmployees = [];
+    this.resetBulkForm({ preserveRequirement: true });
+  },
+  resetBulkForm(options = {}) {
+    const { preserveRequirement = false } = options;
+    if (!preserveRequirement) {
+      this.ensureBulkRequirement();
+    } else if (this.bulk.requirementId && !this.requirements.some(req => req.id === this.bulk.requirementId)) {
+      this.ensureBulkRequirement();
+    }
+    this.bulk.action = '';
+    this.bulk.date = '';
+    this.bulk.reason = '';
+  },
+  bulkActionRequiresDate(action) {
+    return action === 'complete' || action === 'set-expiry';
+  },
+  bulkActionRequiresReason(action) {
+    return action === 'exempt';
+  },
+  bulkDateLabel() {
+    if (this.bulk.action === 'complete') {
+      return 'Completed on';
+    }
+    if (this.bulk.action === 'set-expiry') {
+      return 'Expires on';
+    }
+    return 'Date';
+  },
+  bulkActionLabel(action) {
+    switch (action) {
+      case 'complete':
+        return 'Mark complete';
+      case 'set-expiry':
+        return 'Set expiry';
+      case 'exempt':
+        return 'Mark exempt';
+      case 'clear':
+        return 'Clear progress';
+      default:
+        return 'Apply updates';
+    }
+  },
+  bulkActionButtonLabel() {
+    return this.bulkProcessing ? 'Applying…' : this.bulkActionLabel(this.bulk.action || 'apply');
+  },
+  bulkSelectionDetail() {
+    const actionLabel = this.bulk.action ? this.bulkActionLabel(this.bulk.action) : 'Choose an action';
+    return `${actionLabel} · ${this.selectedRequirementName()}`;
+  },
+  bulkActionDisabled() {
+    if (this.bulkProcessing) {
+      return true;
+    }
+    if (!this.selectedEmployees.length || !this.bulk.requirementId || !this.bulk.action) {
+      return true;
+    }
+    if (this.bulkActionRequiresDate(this.bulk.action) && !this.bulk.date) {
+      return true;
+    }
+    if (this.bulkActionRequiresReason(this.bulk.action)) {
+      const reason = typeof this.bulk.reason === 'string' ? this.bulk.reason.trim() : '';
+      if (!reason) {
+        return true;
+      }
+    }
+    return false;
+  },
+  onBulkActionChanged() {
+    if (!this.bulkActionRequiresDate(this.bulk.action)) {
+      this.bulk.date = '';
+    }
+    if (!this.bulkActionRequiresReason(this.bulk.action)) {
+      this.bulk.reason = '';
+    }
+  },
+  async runBulkUpdate() {
+    if (this.bulkActionDisabled()) {
+      return;
+    }
+    if (!this.db) {
+      return;
+    }
+    const requirementId = this.bulk.requirementId;
+    const requirement = this.requirements.find(req => req.id === requirementId);
+    if (!requirement) {
+      const store = this.$store?.app;
+      store?.showToast?.({ type: 'error', message: 'Select a requirement before applying.' });
+      return;
+    }
+    const employeeIds = [...this.selectedEmployees];
+    if (!employeeIds.length) {
+      return;
+    }
+    const action = this.bulk.action;
+    const dateValue = this.bulkActionRequiresDate(action) ? this.bulk.date : '';
+    const reason = this.bulkActionRequiresReason(action)
+      ? (typeof this.bulk.reason === 'string' ? this.bulk.reason.trim() : '')
+      : '';
+    const timestamp = new Date().toISOString();
+    const table = this.db.table('employeeRequirements');
+    const updates = [];
+    this.bulkProcessing = true;
+    try {
+      await this.db.transaction('rw', table, async () => {
+        for (const employeeId of employeeIds) {
+          const existing = this.getEmployeeRequirement(employeeId, requirementId);
+          const baseRecord = existing
+            ? { ...existing }
+            : { id: generateId(), employeeId, requirementId, createdAt: timestamp };
+          const nextRecord = this.buildBulkRequirementRecord(baseRecord, {
+            action,
+            dateValue,
+            reason,
+            timestamp
+          });
+          await table.put(nextRecord);
+          updates.push(nextRecord);
+        }
+      });
+    } catch (error) {
+      console.error('Bulk update failed', error);
+      const store = this.$store?.app;
+      store?.showToast?.({ type: 'error', message: 'Bulk update failed. Please try again.' });
+      this.bulkProcessing = false;
+      return;
+    }
+    for (const record of updates) {
+      this.setEmployeeRequirement(record);
+    }
+    await this.initActivityLog();
+    if (this.activityLog) {
+      try {
+        await this.activityLog.record({
+          actionType: 'bulk-update-requirement',
+          actor: 'user',
+          targets: employeeIds.map(id => ({ type: 'employee', id })),
+          metadata: {
+            requirementId,
+            requirementName: requirement.name,
+            action,
+            count: updates.length,
+            date: dateValue || null,
+            reason: reason || null
+          }
+        });
+      } catch (error) {
+        console.error('Failed to record bulk activity', error);
+      }
+    }
+    this.applyFilters();
+    const store = this.$store?.app;
+    this.bulkProcessing = false;
+    store?.showToast?.({ type: 'success', message: `${updates.length} updated` });
+  },
+  buildBulkRequirementRecord(baseRecord, context) {
+    const { action, dateValue, reason, timestamp } = context;
+    const next = { ...baseRecord, updatedAt: timestamp };
+    if (!next.createdAt) {
+      next.createdAt = timestamp;
+    }
+    const normalizedDate = dateValue ? dateValue : null;
+    switch (action) {
+      case 'complete':
+        next.status = 'Completed';
+        next.completedOn = normalizedDate;
+        if (typeof next.expiresOn === 'undefined') {
+          next.expiresOn = null;
+        }
+        next.notes = null;
+        break;
+      case 'set-expiry':
+        if (!next.status) {
+          next.status = 'Pending';
+        }
+        next.expiresOn = normalizedDate;
+        break;
+      case 'exempt':
+        next.status = 'Exempt';
+        next.completedOn = null;
+        next.expiresOn = null;
+        next.notes = reason || null;
+        break;
+      case 'clear':
+        next.status = 'Pending';
+        next.completedOn = null;
+        next.expiresOn = null;
+        next.notes = null;
+        break;
+      default:
+        break;
+    }
+    if (action !== 'exempt' && action !== 'clear') {
+      if (!reason) {
+        next.notes = next.notes || null;
+      }
+    }
+    return next;
   },
   buildRequirementKey(employeeId, requirementId) {
     return `${employeeId ?? ''}::${requirementId ?? ''}`;
@@ -1127,6 +1421,7 @@ registerV2Component('v2DashboardApp', () => ({
       return true;
     });
     this.updateStoreFilteredEmployees();
+    this.syncSelectedEmployees();
   },
   resetFilters() {
     this.filters.roles = [];
