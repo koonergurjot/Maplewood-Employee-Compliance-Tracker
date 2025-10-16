@@ -765,6 +765,7 @@ registerV2Component('v2DashboardApp', () => ({
     this.roleOptions = Array.from(new Set(this.employees.map(emp => normalizeString(emp.role)).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b)
     );
+    this.applyFilters();
   },
   refreshRequirementMap() {
     const nextMap = new Map();
