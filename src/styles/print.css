@@ -73,6 +73,11 @@
     gap: 0.25rem;
   }
 
+  .grid-scroll {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
   .badge,
   .status-chip {
     background: none !important;
