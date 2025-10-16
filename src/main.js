@@ -496,6 +496,9 @@ registerV2Component('v2DashboardApp', () => ({
   loadError: null,
   darkMode: false,
   showExportMenu: false,
+  showAddEmployeeModal: false,
+  exporter: null,
+  _exportRowsCache: null,
   employees: [],
   requirements: [],
   employeeRequirements: [],
@@ -640,6 +643,22 @@ registerV2Component('v2DashboardApp', () => ({
     );
     this.mountInlineTemplate();
     this.initializeDarkMode();
+    this.exporter = {
+      exportFilteredCSV: (employees, requirements, employeeRequirements) => {
+        const rows = Array.isArray(employeeRequirements) && employeeRequirements.every(entry => Array.isArray(entry?.requirements))
+          ? employeeRequirements
+          : this._exportRowsCache || this.buildExportRows(employees, requirements, employeeRequirements);
+        this._exportRowsCache = null;
+        return exportFilteredCSV(employees, requirements, rows);
+      },
+      exportFilteredJSON: (employees, requirements, employeeRequirements) => {
+        const rows = Array.isArray(employeeRequirements) && employeeRequirements.every(entry => Array.isArray(entry?.requirements))
+          ? employeeRequirements
+          : this._exportRowsCache || this.buildExportRows(employees, requirements, employeeRequirements);
+        this._exportRowsCache = null;
+        return exportFilteredJSON(employees, requirements, rows);
+      }
+    };
     this.$watch(
       () => this.$store?.app?.showImportModal,
       value => {
@@ -891,12 +910,21 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       console.error('Failed to initialize activity log', error);
     }
   },
+  openAddEmployee() {
+    this.showAddEmployeeModal = true;
+    const store = this.$store?.app;
+    if (store && store.showAddEmployeeModal !== true) {
+      store.showAddEmployeeModal = true;
+    }
+    this.openAddEmployeeModal();
+  },
   openAddEmployeeModal() {
     if (!this.addEmployeeModal.open) {
       if (!this.addEmployeeModal.form.role) {
         this.resetAddEmployeeForm();
       }
       this.addEmployeeModal.open = true;
+      this.showAddEmployeeModal = true;
       const store = this.$store?.app;
       if (store && store.showAddEmployeeModal !== true) {
         store.showAddEmployeeModal = true;
@@ -913,6 +941,7 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       return;
     }
     this.addEmployeeModal.open = false;
+    this.showAddEmployeeModal = false;
     if (!preserveForm) {
       this.resetAddEmployeeForm();
     }
@@ -1780,25 +1809,37 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     appStore.filteredEmployees = Array.isArray(this.filteredEmployees) ? this.filteredEmployees : [];
   },
-  buildExportRows() {
-    const source = Array.isArray(this.filteredEmployees) ? this.filteredEmployees : [];
-    return source.filter(Boolean).map(employee => {
+  buildExportRows(
+    employees = this.filteredEmployees,
+    requirements = this.requirements,
+    employeeRequirements = this.employeeRequirements
+  ) {
+    const source = Array.isArray(employees) ? employees.filter(Boolean) : [];
+    const requirementList = Array.isArray(requirements) ? requirements.filter(Boolean) : [];
+    const requirementMap = new Map();
+    if (Array.isArray(employeeRequirements)) {
+      for (const record of employeeRequirements) {
+        if (!record) continue;
+        const key = this.buildRequirementKey(record.employeeId, record.requirementId);
+        requirementMap.set(key, record);
+      }
+    }
+    return source.map(employee => {
       const firstName = normalizeString(employee?.firstName);
       const lastName = normalizeString(employee?.lastName);
       const combinedName = `${firstName} ${lastName}`.trim();
-      const requirementEntries = (Array.isArray(this.requirements) ? this.requirements : [])
-        .filter(Boolean)
-        .map(requirement => {
-          const record = this.getEmployeeRequirement(employee.id, requirement.id);
-          return {
-            requirementId: requirement.id,
-            requirementName: requirement.name,
-            status: normalizeStatus(record?.status || 'Pending'),
-            completedOn: record?.completedOn || null,
-            expiresOn: record?.expiresOn || null,
-            notes: record?.notes ?? null
-          };
-        });
+      const requirementEntries = requirementList.map(requirement => {
+        const key = this.buildRequirementKey(employee?.id, requirement?.id);
+        const record = requirementMap.get(key) || null;
+        return {
+          requirementId: requirement?.id ?? null,
+          requirementName: requirement?.name ?? '',
+          status: normalizeStatus(record?.status || 'Pending'),
+          completedOn: record?.completedOn || null,
+          expiresOn: record?.expiresOn || null,
+          notes: record?.notes ?? null
+        };
+      });
       return {
         employeeId: employee?.id ?? null,
         firstName,
@@ -1807,31 +1848,60 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
         role: normalizeString(employee?.role),
         status: normalizeString(employee?.status),
         employmentType: normalizeString(employee?.employmentType),
-        compliancePercent: this.employeeCompliancePercent(employee.id),
+        compliancePercent: this.employeeCompliancePercent(employee?.id),
         requirements: requirementEntries
       };
     });
   },
-  triggerExport(format) {
+  exportCSV() {
     this.showExportMenu = false;
-    const normalized = typeof format === 'string' ? format.toLowerCase() : '';
-    const rows = this.buildExportRows();
+    const rows = this.buildExportRows(this.filteredEmployees, this.requirements, this.employeeRequirements);
     if (!rows.length) {
       this.$store?.app?.showToast?.({ type: 'info', message: 'No employees match the current filters.' });
       return;
     }
+    this._exportRowsCache = rows;
+    const success = this.exporter?.exportFilteredCSV?.(
+      this.filteredEmployees,
+      this.requirements,
+      this.employeeRequirements
+    );
+    if (!this.exporter?.exportFilteredCSV) {
+      this._exportRowsCache = null;
+    }
+    if (!success) {
+      this.$store?.app?.showToast?.({ type: 'error', message: 'Unable to export CSV. Please try again.' });
+    }
+  },
+  exportJSON() {
+    this.showExportMenu = false;
+    const rows = this.buildExportRows(this.filteredEmployees, this.requirements, this.employeeRequirements);
+    if (!rows.length) {
+      this.$store?.app?.showToast?.({ type: 'info', message: 'No employees match the current filters.' });
+      return;
+    }
+    this._exportRowsCache = rows;
+    const success = this.exporter?.exportFilteredJSON?.(
+      this.filteredEmployees,
+      this.requirements,
+      this.employeeRequirements
+    );
+    if (!this.exporter?.exportFilteredJSON) {
+      this._exportRowsCache = null;
+    }
+    if (!success) {
+      this.$store?.app?.showToast?.({ type: 'error', message: 'Unable to export JSON. Please try again.' });
+    }
+  },
+  triggerExport(format) {
+    this.showExportMenu = false;
+    const normalized = typeof format === 'string' ? format.toLowerCase() : '';
     if (normalized === 'csv') {
-      const success = exportFilteredCSV(this.filteredEmployees, this.requirements, rows);
-      if (!success) {
-        this.$store?.app?.showToast?.({ type: 'error', message: 'Unable to export CSV. Please try again.' });
-      }
+      this.exportCSV();
       return;
     }
     if (normalized === 'json') {
-      const success = exportFilteredJSON(this.filteredEmployees, this.requirements, rows);
-      if (!success) {
-        this.$store?.app?.showToast?.({ type: 'error', message: 'Unable to export JSON. Please try again.' });
-      }
+      this.exportJSON();
       return;
     }
     console.info(`Unsupported export format requested: ${normalized}`);

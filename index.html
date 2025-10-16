@@ -95,19 +95,18 @@
             <p class="text-sm text-muted">Use filters to narrow results and click any requirement cell to update progress.</p>
           </div>
           <div class="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" class="btn ghost" @click="openImportDrawer">Import</button>
-            <button type="button" class="btn ghost" @click="$store.app.showAddEmployeeModal = true">Add Employee</button>
-            <div class="relative" @click.outside="showExportMenu = false">
-              <button type="button" class="btn ghost" @click="showExportMenu = !showExportMenu">Export</button>
+            <button type="button" class="btn btn-primary" @click="openImportDrawer()">Import</button>
+            <button type="button" class="btn" @click="openAddEmployee()">Add Employee</button>
+            <div class="relative" x-data="{open:false}">
+              <button type="button" class="btn" @click="open=!open">Export</button>
               <div
-                class="export-menu"
-                x-show="showExportMenu"
-                x-transition.opacity
-                style="min-width: 10rem; position: absolute; right: 0; margin-top: 0.5rem;"
+                x-show="open"
+                @click.outside="open=false"
+                class="export-menu absolute right-0 mt-2 w-48 rounded-lg border bg-white shadow"
               >
-                <button type="button" @click="triggerExport('csv')">Export CSV</button>
-                <button type="button" @click="triggerExport('json')">Export JSON</button>
-                <button type="button" @click="printReport">Print</button>
+                <button type="button" class="menu-item" @click="exportCSV(); open=false">Export CSV</button>
+                <button type="button" class="menu-item" @click="exportJSON(); open=false">Export JSON</button>
+                <button type="button" class="menu-item" @click="window.print(); open=false">Print view</button>
               </div>
             </div>
             <button type="button" class="btn" @click="toggleDarkMode" aria-label="Toggle dark mode">
