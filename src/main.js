@@ -112,6 +112,37 @@ function toggleUseV2MainFlag() {
   window.location.reload();
 }
 
+function normalizeDateInputValue(value) {
+  if (!value) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return '';
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+      return trimmed.slice(0, 10);
+    }
+
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10);
+    }
+
+    return '';
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
 function isTextInput(element) {
   if (!element || element.nodeType !== 1) {
     return false;
@@ -595,8 +626,8 @@ registerV2Component('v2DashboardApp', () => ({
   openEditor(employeeId, requirementId, event) {
     const record = this.getEmployeeRequirement(employeeId, requirementId);
     this.editorForm.status = normalizeStatus(record?.status || 'Pending');
-    this.editorForm.completedOn = record?.completedOn ? record.completedOn.slice(0, 10) : '';
-    this.editorForm.expiresOn = record?.expiresOn ? record.expiresOn.slice(0, 10) : '';
+    this.editorForm.completedOn = normalizeDateInputValue(record?.completedOn);
+    this.editorForm.expiresOn = normalizeDateInputValue(record?.expiresOn);
     this.activeEditor.employeeId = employeeId;
     this.activeEditor.requirementId = requirementId;
     this.activeEditor.style = this.computePopoverStyle(event.currentTarget);
