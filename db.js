@@ -85,44 +85,42 @@ export function* chunkArray(items, chunkSize = BULK_OPERATION_CHUNK_SIZE) {
 }
 
 const DEFAULT_REQUIREMENTS = [
-  { name: 'Resume', defaultExpiryDays: null, color: '#e0e7ff' },
-  { name: 'References', defaultExpiryDays: null, color: '#f0f9ff' },
-  { name: 'First Aid', defaultExpiryDays: 1095, color: '#fef3c7' },
-  { name: 'CPR', defaultExpiryDays: 365, color: '#dcfce7' },
-  { name: 'FoodSafe', defaultExpiryDays: 1825, color: '#fce7f3' },
-  { name: 'Violence Prevention', defaultExpiryDays: 365, color: '#f3e8ff' },
-  { name: 'Background Check', defaultExpiryDays: 1095, color: '#fef2f2' },
-  { name: 'Drug Test', defaultExpiryDays: 365, color: '#fffbeb' },
-  { name: 'TB Test', defaultExpiryDays: 365, color: '#f0fdf4' },
-  { name: 'Immunization', defaultExpiryDays: 365, color: '#ecfdf5' }
+  { key: 'CRC', name: 'Criminal Record Check (CRC)', color: '#fee2e2', defaultExpiryDays: 730 },
+  { key: 'FA', name: 'First Aid / CPR', color: '#e0e7ff', defaultExpiryDays: 1095 },
+  { key: 'FS', name: 'FoodSafe', color: '#dcfce7', defaultExpiryDays: 1825 },
+  { key: 'N95', name: 'N95 Fit Test', color: '#fef9c3', defaultExpiryDays: 365 },
+  { key: 'TB', name: 'TB Test', color: '#dbeafe', defaultExpiryDays: 1825 },
+  { key: 'IMM', name: 'Immunizations', color: '#fae8ff', defaultExpiryDays: null },
+  { key: 'PRV', name: 'Privacy & Confidentiality', color: '#fde68a', defaultExpiryDays: 365 }
 ];
 
-function getDefaultRequirementSeeds() {
-  const now = new Date().toISOString();
-  return DEFAULT_REQUIREMENTS.map(({ name, defaultExpiryDays, color }) => ({
-    id: generateId(),
-    name,
-    defaultExpiryDays,
-    color,
-    createdAt: now,
-    updatedAt: now
-  }));
-}
-
-async function seedInitialDataIfNeeded(db) {
+export async function ensureSeedRequirements(db) {
   if (!db) {
     return;
   }
 
   const requirementsTable = db.table('requirements');
-  const requirementCount = await requirementsTable.count();
+  const count = await requirementsTable.count();
+  if (count) {
+    return;
+  }
 
-  if (requirementCount === 0) {
-    try {
-      await requirementsTable.bulkAdd(getDefaultRequirementSeeds());
-    } catch (error) {
-      console.warn('Failed to seed default requirements', error);
-    }
+  const now = new Date().toISOString();
+  const seed = DEFAULT_REQUIREMENTS.map(requirement => ({
+    id: generateId(),
+    createdAt: now,
+    updatedAt: now,
+    ...requirement
+  }));
+
+  await db.transaction('rw', requirementsTable, async () => {
+    await requirementsTable.bulkAdd(seed);
+  });
+}
+
+async function seedInitialDataIfNeeded(db) {
+  if (!db) {
+    return;
   }
 
   const settingsTable = db.table('settings');
@@ -283,8 +281,6 @@ function defineSchema(db) {
   db.version(12).stores(v12Stores);
 
   db.on('populate', tx => {
-    tx.table('requirements').bulkAdd(getDefaultRequirementSeeds());
-
     tx.table('settings').put({ id: 'app', darkMode: false });
     tx.table('settings').put({ id: 'hasSeenTour', value: false });
     tx.table('settings').put({ id: 'roleRequirementProfiles', value: [] });
@@ -310,6 +306,7 @@ export async function openDatabase() {
   const db = await createDatabase();
   await db.open();
   await seedInitialDataIfNeeded(db);
+  await ensureSeedRequirements(db);
   return db;
 }
 
