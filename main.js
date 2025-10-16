@@ -15,6 +15,15 @@ import './import-employees.js';
 import './onboarding.js';
 import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup, putEmployeeRecord, getDexie, openDatabase } from './db.js';
 import * as CompatAPI from './src/compat/index.js';
+import { warnOnce } from './src/compat/deprecations.js';
+
+const hasWindowObject = typeof window !== 'undefined';
+
+if (hasWindowObject && window.APP_FLAGS?.USE_V2_MAIN) {
+  warnOnce('legacy-dashboard', 'Legacy dashboard loaded but v2 is active; not mounting.');
+}
+
+const skipLegacyBootstrap = hasWindowObject && Boolean(window.APP_FLAGS?.USE_V2_MAIN);
 
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
@@ -22,7 +31,6 @@ const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
 const THEME_STORAGE_KEY = 'maplewood:theme';
 const COLUMN_VISIBILITY_STORAGE_KEY = 'maplewood:employeeTable:visibleColumns';
 const V2_COMPONENT_REGISTRY_KEY = '__V2_ALPINE_COMPONENTS__';
-const legacyComponentWarnings = new Set();
 
 function registerLegacyComponent(name, definition) {
   if (!name || typeof name !== 'string') {
@@ -35,10 +43,7 @@ function registerLegacyComponent(name, definition) {
   const useV2Main = hasWindow && !!(window.APP_FLAGS && window.APP_FLAGS.USE_V2_MAIN);
 
   if (useV2Main && registry && typeof registry.has === 'function' && registry.has(name)) {
-    if (!legacyComponentWarnings.has(name)) {
-      console.warn(`Skipping legacy Alpine component "${name}" because the v2 dashboard is active.`);
-      legacyComponentWarnings.add(name);
-    }
+    warnOnce(name, `Skipping legacy Alpine component "${name}" because the v2 dashboard is active.`);
     return;
   }
 
@@ -5517,99 +5522,104 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
       });
 
-    registerLegacyComponent('modalStateBinding', modalStateBinding);
-    registerLegacyComponent('modalStoreBinding', modalStoreBinding);
-    registerLegacyComponent('mappingPanel', mappingPanel);
-    registerLegacyComponent('activityTimeline', activityTimeline);
-    registerLegacyComponent('addEmployeeModal', addEmployeeModal);
-    registerLegacyComponent('app', app);
+    if (!skipLegacyBootstrap) {
+      registerLegacyComponent('modalStateBinding', modalStateBinding);
+      registerLegacyComponent('modalStoreBinding', modalStoreBinding);
+      registerLegacyComponent('mappingPanel', mappingPanel);
+      registerLegacyComponent('activityTimeline', activityTimeline);
+      registerLegacyComponent('addEmployeeModal', addEmployeeModal);
+      registerLegacyComponent('app', app);
 
-    function showFallback() {
-      document.body?.removeAttribute('x-cloak');
+      function showFallback() {
+        document.body?.removeAttribute('x-cloak');
 
-      const dashboard = document.getElementById('dashboard-app');
-      if (dashboard) {
-        dashboard.setAttribute('hidden', '');
-      }
-
-      const fallback = document.getElementById('alpine-fallback');
-      if (fallback) {
-        fallback.removeAttribute('hidden');
-      }
-    }
-
-    function hideFallback() {
-      const fallback = document.getElementById('alpine-fallback');
-      if (fallback && !fallback.hasAttribute('hidden')) {
-        fallback.setAttribute('hidden', '');
-      }
-
-      const dashboard = document.getElementById('dashboard-app');
-      if (dashboard) {
-        dashboard.removeAttribute('hidden');
-      }
-    }
-
-    document.addEventListener('alpine:initialized', () => {
-      hideFallback();
-    });
-
-    window.addEventListener('load', () => {
-      setTimeout(() => {
-        const rootStack = document.body ? document.body._x_dataStack : null;
-        const alpineReady = Boolean(window.Alpine) && Array.isArray(rootStack) && rootStack.length > 0;
-
-        if (!alpineReady) {
-          console.error('Alpine.js failed to initialize');
-          showFallback();
+        const dashboard = document.getElementById('dashboard-app');
+        if (dashboard) {
+          dashboard.setAttribute('hidden', '');
         }
-      }, 1200);
-    });
-    const replaceFeatherIcons = () => {
-      safeFeatherReplace();
-    };
 
-    document.addEventListener('DOMContentLoaded', replaceFeatherIcons);
-    document.addEventListener('alpine:init', replaceFeatherIcons);
-
-    document.addEventListener('employee:added', event => {
-      const root = document.querySelector('[x-data="app"]');
-      if (!root) {
-        return;
+        const fallback = document.getElementById('alpine-fallback');
+        if (fallback) {
+          fallback.removeAttribute('hidden');
+        }
       }
 
-      const target = event?.target ?? null;
-      if (target && target !== document && target !== window && root.contains(target)) {
-        return;
+      function hideFallback() {
+        const fallback = document.getElementById('alpine-fallback');
+        if (fallback && !fallback.hasAttribute('hidden')) {
+          fallback.setAttribute('hidden', '');
+        }
+
+        const dashboard = document.getElementById('dashboard-app');
+        if (dashboard) {
+          dashboard.removeAttribute('hidden');
+        }
       }
 
-      const component = root.__x?.$data;
-      if (!component || typeof component.loadData !== 'function') {
-        return;
-      }
+      document.addEventListener('alpine:initialized', () => {
+        hideFallback();
+      });
 
-      Promise.resolve(component.loadData())
-        .then(() => {
-          if (typeof component.refreshFeatherIcons === 'function') {
-            component.refreshFeatherIcons();
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          const rootStack = document.body ? document.body._x_dataStack : null;
+          const alpineReady = Boolean(window.Alpine) && Array.isArray(rootStack) && rootStack.length > 0;
+
+          if (!alpineReady) {
+            console.error('Alpine.js failed to initialize');
+            showFallback();
           }
-        })
-        .catch(error => {
-          console.error('Failed to refresh employees after external addition', error);
-        });
+        }, 1200);
+      });
+      const replaceFeatherIcons = () => {
+        safeFeatherReplace();
+      };
+
+      document.addEventListener('DOMContentLoaded', replaceFeatherIcons);
+      document.addEventListener('alpine:init', replaceFeatherIcons);
+
+      document.addEventListener('employee:added', event => {
+        const root = document.querySelector('[x-data="app"]');
+        if (!root) {
+          return;
+        }
+
+        const target = event?.target ?? null;
+        if (target && target !== document && target !== window && root.contains(target)) {
+          return;
+        }
+
+        const component = root.__x?.$data;
+        if (!component || typeof component.loadData !== 'function') {
+          return;
+        }
+
+        Promise.resolve(component.loadData())
+          .then(() => {
+            if (typeof component.refreshFeatherIcons === 'function') {
+              component.refreshFeatherIcons();
+            }
+          })
+          .catch(error => {
+            console.error('Failed to refresh employees after external addition', error);
+          });
+      });
+
+      window.addEventListener('employee-import:missing-columns', (event) => {
+        const detail = event?.detail;
+        const columns = Array.isArray(detail?.columns) ? detail.columns : [];
+        const root = document.querySelector('[x-data="app"]');
+        const component = root && root.__x ? root.__x.$data : null;
+        if (component && typeof component.handleExternalMissingColumns === 'function'){
+          component.handleExternalMissingColumns(columns);
+        }
+      });
+    }
+
+  if (!skipLegacyBootstrap) {
+    window.addEventListener('DOMContentLoaded', ()=> {
+      if (window.__initImportUI) window.__initImportUI();
     });
 
-    window.addEventListener('employee-import:missing-columns', (event) => {
-      const detail = event?.detail;
-      const columns = Array.isArray(detail?.columns) ? detail.columns : [];
-      const root = document.querySelector('[x-data="app"]');
-      const component = root && root.__x ? root.__x.$data : null;
-      if (component && typeof component.handleExternalMissingColumns === 'function'){
-        component.handleExternalMissingColumns(columns);
-      }
-    });
-  window.addEventListener('DOMContentLoaded', ()=> {
-    if (window.__initImportUI) window.__initImportUI();
-  });
-
-  Alpine.start();
+    Alpine.start();
+  }
