@@ -250,3 +250,15 @@ body.dark .inline-panel { background: var(--bg-card-dark); border-color: var(--b
 .inline-footer { display: flex; justify-content: flex-end; gap: 0.75rem; padding: 0.75rem 1.25rem 1.1rem; border-top: 1px solid var(--border-soft); }
 body.dark .inline-header, body.dark .inline-footer { border-color: var(--border-soft-dark); }
 .inline-form span { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.btn { @apply inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium shadow-sm hover:bg-slate-50 active:scale-[.99]; }
+.btn-primary { @apply border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700; }
+.menu-item { @apply w-full text-left px-3 py-2 text-sm hover:bg-slate-50; }
+
+.badge { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+.badge-green { @apply bg-emerald-100 text-emerald-700; }
+.badge-amber { @apply bg-amber-100 text-amber-700; }
+.badge-rose  { @apply bg-rose-100 text-rose-700; }
+.badge-slate { @apply bg-slate-100 text-slate-700; }
+
+.card    { @apply rounded-2xl border border-slate-200 bg-white shadow-sm; }
+.toolbar { @apply sticky top-[56px] z-20 bg-white/70 backdrop-blur border-b; }
