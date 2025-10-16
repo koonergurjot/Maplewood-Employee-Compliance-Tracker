@@ -124,6 +124,18 @@ function formatDateToLocalYYYYMMDD(date) {
   return `${year}-${month}-${day}`;
 }
 
+function formatDateToUTCYYYYMMDD(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
 function normalizeDateInputValue(value) {
   if (!value) {
     return '';
@@ -136,6 +148,14 @@ function normalizeDateInputValue(value) {
     }
 
     if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+      const hasTimezoneOffset = trimmed.includes('T') && /[zZ]|[+-]\d{2}:?\d{2}$/.test(trimmed);
+      if (hasTimezoneOffset) {
+        const parsedWithTimezone = new Date(trimmed);
+        if (!Number.isNaN(parsedWithTimezone.getTime())) {
+          return formatDateToUTCYYYYMMDD(parsedWithTimezone);
+        }
+      }
+
       return trimmed.slice(0, 10);
     }
 
