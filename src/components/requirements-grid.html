@@ -1,0 +1,130 @@
+<template>
+  <div class="space-y-4">
+    <section class="filters-card">
+      <div class="filters-grid">
+        <label class="filter-field" aria-label="Filter by role">
+          <span class="filter-label">Role</span>
+          <select multiple size="4" class="input" x-model="filters.roles" @change="applyFilters">
+            <template x-if="!roleOptions.length">
+              <option disabled value="">No roles available</option>
+            </template>
+            <template x-for="role in roleOptions" :key="role">
+              <option :value="role" x-text="role"></option>
+            </template>
+          </select>
+        </label>
+        <label class="filter-field" aria-label="Filter by employee status">
+          <span class="filter-label">Status</span>
+          <select class="input" x-model="filters.status" @change="applyFilters">
+            <template x-for="option in statusOptions" :key="option.value">
+              <option :value="option.value" x-text="option.label"></option>
+            </template>
+          </select>
+        </label>
+        <label class="filter-field" aria-label="Filter by compliance percentage">
+          <span class="filter-label">Compliance %</span>
+          <select class="input" x-model="filters.compliance" @change="applyFilters">
+            <template x-for="option in complianceOptions" :key="option.value">
+              <option :value="option.value" x-text="option.label"></option>
+            </template>
+          </select>
+        </label>
+        <label class="filter-field" aria-label="Filter by expiration window">
+          <span class="filter-label">Expiring soon</span>
+          <div class="toggle-row">
+            <input id="expiring-toggle" type="checkbox" class="toggle" x-model="filters.expiringSoon" @change="applyFilters" />
+            <label class="toggle-label" for="expiring-toggle">Within 30 days</label>
+          </div>
+        </label>
+        <label class="filter-field filter-wide" aria-label="Search employees">
+          <span class="filter-label">Search</span>
+          <input type="search" class="input" placeholder="Search by name" x-model="filters.search" @input.debounce.200ms="applyFilters" />
+        </label>
+      </div>
+      <div class="filters-footer">
+        <button type="button" class="btn ghost" @click="resetFilters">Reset filters</button>
+        <div class="filters-meta" x-show="filters.roles.length || filters.status !== 'all' || filters.compliance !== 'all' || filters.expiringSoon || filters.search">
+          <span class="text-muted">Filters active</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid-container">
+      <div class="grid-scroll" role="region" aria-label="Scrollable requirements table">
+        <table class="requirements-table">
+          <thead>
+            <tr>
+              <th scope="col" class="sticky-col sticky-header">
+                <span>Employee</span>
+              </th>
+              <template x-for="req in requirements" :key="req.id">
+                <th scope="col" class="sticky-header">
+                  <div class="requirement-head">
+                    <span class="requirement-name" x-text="req.name"></span>
+                    <span class="requirement-tag" x-show="req.defaultExpiryDays" x-text="req.defaultExpiryDays + 'd'"></span>
+                  </div>
+                </th>
+              </template>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-if="loading">
+              <tr>
+                <td class="sticky-col">
+                  <div class="empty-state">Loading employees…</div>
+                </td>
+                <td :colspan="Math.max(requirements.length, 1)">
+                  <div class="empty-state muted">Preparing compliance data</div>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!loading && !filteredEmployees.length">
+              <tr>
+                <td class="sticky-col">
+                  <div class="empty-state">No employees found</div>
+                </td>
+                <td :colspan="Math.max(requirements.length, 1)">
+                  <div class="empty-state muted">Adjust your filters or clear the search to see more results.</div>
+                </td>
+              </tr>
+            </template>
+            <template x-for="employee in filteredEmployees" :key="employee.id">
+              <tr>
+                <th scope="row" class="sticky-col">
+                  <div class="employee-cell">
+                    <div class="ring-wrapper" :class="progressStrokeClass(employeeCompliancePercent(employee.id))">
+                      <svg viewBox="0 0 36 36" class="ring">
+                        <circle class="ring-track" cx="18" cy="18" r="16" />
+                        <circle class="ring-value" cx="18" cy="18" r="16" :stroke-dasharray="progressRingDash(employeeCompliancePercent(employee.id))"></circle>
+                      </svg>
+                      <span class="ring-label" x-text="employeeCompliancePercent(employee.id) + '%'"></span>
+                    </div>
+                    <div class="employee-meta">
+                      <div class="employee-name" x-text="`${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Unnamed employee'"></div>
+                      <div class="employee-sub" x-text="employee.role || 'Role unavailable'"></div>
+                      <div class="employee-sub" x-text="employee.status"></div>
+                    </div>
+                  </div>
+                </th>
+                <template x-for="req in requirements" :key="req.id">
+                  <td>
+                    <button
+                      type="button"
+                      class="cell"
+                      @click="openEditor(employee.id, req.id, $event)"
+                      :aria-label="`Edit ${req.name} for ${employee.firstName || ''} ${employee.lastName || ''}`"
+                    >
+                      <span class="cell-status" :class="statusBadgeClass(employee.id, req.id)" x-text="cellStatusLabel(employee.id, req.id)"></span>
+                      <span class="cell-sub" x-text="cellSubtext(employee.id, req.id)"></span>
+                      <span class="cell-indicator" x-show="isRequirementExpiring(getEmployeeRequirement(employee.id, req.id))"></span>
+                    </button>
+                  </td>
+                </template>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</template>

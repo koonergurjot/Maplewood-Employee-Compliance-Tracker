@@ -55,6 +55,11 @@ Read the full project overview in [docs/OVERVIEW.md](docs/OVERVIEW.md).
 
    Serving the repository root directly (for example, via `npx serve .`) will break Dexie, XLSX, and Alpine imports because the bare module specifiers are only resolved by Vite's dev server or the bundled build. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for more deployment details.
 
+## Dashboard Tips
+
+- **Filter quickly:** Role, status, compliance buckets, the “Expiring soon” toggle, and the search field all work together. Adjust any combination to update the grid instantly—use the Reset button to clear everything.
+- **Inline updates:** Click any requirement cell to open the inline editor. Choose a new status, optionally enter completed/expiry dates, and press **Save changes** (or hit **Esc** to cancel). Updates persist to IndexedDB and the compliance ring refreshes automatically.
+
 ## Backup & Restore
 
 The dashboard now supports a dedicated backup workflow:
