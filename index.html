@@ -88,7 +88,9 @@
     x-effect="document.body.classList.toggle('dark', darkMode)"
   >
     <main class="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-      <header class="space-y-2">
+      <header
+        class="space-y-2 sticky top-0 z-30 bg-white/70 backdrop-blur border-b bg-[radial-gradient(1000px_200px_at_50%_-100px,rgba(99,102,241,.12),transparent)]"
+      >
         <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 class="text-2xl font-semibold leading-tight">Employee Compliance Overview</h1>
@@ -130,9 +132,10 @@
 
       <section class="card" aria-label="Employee requirements grid">
         <div class="space-y-4">
-          <section class="filters-card">
-            <div class="filters-grid">
-              <label class="filter-field" aria-label="Filter by role">
+          <div class="toolbar">
+            <section class="filters-card">
+              <div class="filters-grid">
+                <label class="filter-field" aria-label="Filter by role">
                 <span class="filter-label">Role</span>
                 <select multiple size="4" class="input" x-model="filters.roles" @change="applyFilters">
                   <template x-if="!roleOptions.length">
@@ -170,14 +173,15 @@
                 <span class="filter-label">Search</span>
                 <input type="search" class="input" placeholder="Search by name" x-model="filters.search" @input.debounce.200ms="applyFilters" />
               </label>
-            </div>
-            <div class="filters-footer">
-              <button type="button" class="btn ghost" @click="resetFilters">Reset filters</button>
-              <div class="filters-meta" x-show="filters.roles.length || filters.status !== 'all' || filters.compliance !== 'all' || filters.expiringSoon || filters.search || filters.analytics">
-                <span class="text-muted">Filters active</span>
               </div>
-            </div>
-          </section>
+              <div class="filters-footer">
+                <button type="button" class="btn ghost" @click="resetFilters">Reset filters</button>
+                <div class="filters-meta" x-show="filters.roles.length || filters.status !== 'all' || filters.compliance !== 'all' || filters.expiringSoon || filters.search || filters.analytics">
+                  <span class="text-muted">Filters active</span>
+                </div>
+              </div>
+            </section>
+          </div>
 
           <div id="requirements-grid" x-html="partials.requirementsGrid"></div>
         </div>
