@@ -54,7 +54,13 @@
           />
           <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
             <span x-text="importDrawer.fileName || 'CSV files are recommended.'"></span>
-            <button type="button" class="text-blue-600 hover:underline dark:text-blue-400" @click="downloadSampleCsv">Download sample CSV</button>
+            <button
+              type="button"
+              class="text-blue-600 hover:underline dark:text-blue-400"
+              @click="downloadSampleCSV()"
+            >
+              Download Sample CSV
+            </button>
           </div>
         </div>
 
