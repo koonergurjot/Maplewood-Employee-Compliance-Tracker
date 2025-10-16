@@ -656,6 +656,14 @@ body {
   position: sticky;
 }
 
+.pointer-events-none {
+  pointer-events: none;
+}
+
+.pointer-events-auto {
+  pointer-events: auto;
+}
+
 .inset-0 {
   top: 0;
   right: 0;
