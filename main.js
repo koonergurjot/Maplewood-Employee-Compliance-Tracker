@@ -5522,6 +5522,32 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
         },
       });
 
+    function showFallback() {
+      document.body?.removeAttribute('x-cloak');
+
+      const dashboard = document.getElementById('dashboard-app');
+      if (dashboard) {
+        dashboard.setAttribute('hidden', '');
+      }
+
+      const fallback = document.getElementById('alpine-fallback');
+      if (fallback) {
+        fallback.removeAttribute('hidden');
+      }
+    }
+
+    function hideFallback() {
+      const fallback = document.getElementById('alpine-fallback');
+      if (fallback && !fallback.hasAttribute('hidden')) {
+        fallback.setAttribute('hidden', '');
+      }
+
+      const dashboard = document.getElementById('dashboard-app');
+      if (dashboard) {
+        dashboard.removeAttribute('hidden');
+      }
+    }
+
     if (!skipLegacyBootstrap) {
       registerLegacyComponent('modalStateBinding', modalStateBinding);
       registerLegacyComponent('modalStoreBinding', modalStoreBinding);
@@ -5529,32 +5555,6 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
       registerLegacyComponent('activityTimeline', activityTimeline);
       registerLegacyComponent('addEmployeeModal', addEmployeeModal);
       registerLegacyComponent('app', app);
-
-      function showFallback() {
-        document.body?.removeAttribute('x-cloak');
-
-        const dashboard = document.getElementById('dashboard-app');
-        if (dashboard) {
-          dashboard.setAttribute('hidden', '');
-        }
-
-        const fallback = document.getElementById('alpine-fallback');
-        if (fallback) {
-          fallback.removeAttribute('hidden');
-        }
-      }
-
-      function hideFallback() {
-        const fallback = document.getElementById('alpine-fallback');
-        if (fallback && !fallback.hasAttribute('hidden')) {
-          fallback.setAttribute('hidden', '');
-        }
-
-        const dashboard = document.getElementById('dashboard-app');
-        if (dashboard) {
-          dashboard.removeAttribute('hidden');
-        }
-      }
 
       document.addEventListener('alpine:initialized', () => {
         hideFallback();
