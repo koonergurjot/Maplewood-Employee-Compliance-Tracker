@@ -44,7 +44,7 @@ if (
         return Promise.resolve(result);
       }
 
-      return Promise.resolve(result);
+      return result;
     };
   }
 }
