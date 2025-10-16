@@ -7,7 +7,7 @@ if (AsyncFunction && AsyncFunction.prototype && !AsyncFunction.prototype.__maple
       configurable: true
     });
     AsyncFunction.prototype.call = function patchedAsyncCall(context, ...args) {
-      const result = originalCall.call(this, context, ...args);
+      const result = Reflect.apply(originalCall, this, [context, ...args]);
       return Promise.resolve(result);
     };
   }
