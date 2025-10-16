@@ -127,20 +127,15 @@
                 </div>
               </th>
               <template x-for="req in requirements" :key="req.id">
-                <td x-data="{ cell: getRequirementCell(employee.id, req.id) }">
+                <td>
                   <div
                     class="cell"
                     @click="openEditor($event, employee.id, req.id)"
                   >
                     <span
                       class="badge"
-                      :class="{
-                        'badge-green': (cell.status==='Completed' || cell.status==='Complete') && !cellExpired(cell),
-                        'badge-amber': (cell.status==='Completed' || cell.status==='Complete') && cellWarn(cell),
-                        'badge-rose':  cellExpired(cell),
-                        'badge-slate': (cell.status!=='Completed' && cell.status!=='Complete') && !cellExpired(cell)
-                      }"
-                      x-text="chipText(cell)"
+                      :class="requirementCellBadgeClasses(employee.id, req.id)"
+                      x-text="requirementCellChipText(employee.id, req.id)"
                       role="button"
                       tabindex="0"
                       :aria-label="`Edit ${req.name} for ${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Edit requirement'"
@@ -148,7 +143,7 @@
                       @keydown.enter.prevent="openEditor($event, employee.id, req.id)"
                       @keydown.space.prevent="openEditor($event, employee.id, req.id)"
                     ></span>
-                    <span class="cell-sub" x-text="cellSubtext(cell)"></span>
+                    <span class="cell-sub" x-text="requirementCellSubtext(employee.id, req.id)"></span>
                   </div>
                 </td>
               </template>
