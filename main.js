@@ -1462,9 +1462,12 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               baseEmployee.rank = employmentTypeValue;
             }
 
-            await db.employees.add(baseEmployee);
+            const { AddEmployee } = await import('./commands.js');
+            const command = new AddEmployee(db, { employee: baseEmployee });
+            const result = await command.execute();
+            const createdEmployee = result?.employee || baseEmployee;
 
-            this.$dispatch('employee:added', { employee: baseEmployee });
+            this.$dispatch('employee:added', { employee: createdEmployee });
 
             await this.hide();
           } catch (error) {
