@@ -1975,29 +1975,59 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
   getEmployeeRequirement(employeeId, requirementId) {
     return this.employeeRequirementMap.get(this.buildRequirementKey(employeeId, requirementId)) || null;
   },
-  requirementExpired(record) {
-    if (!record || !record.expiresOn) return false;
-    const expiresOn = new Date(record.expiresOn);
+  getRequirementCell(employeeId, requirementId) {
+    const record = this.getEmployeeRequirement(employeeId, requirementId);
+    const status = normalizeStatus(record?.status || 'Pending');
+    return {
+      employeeId,
+      requirementId,
+      status,
+      completedAt: record?.completedOn || null,
+      expiresAt: record?.expiresOn || null,
+      raw: record || null
+    };
+  },
+  cellExpired(cell) {
+    const expiresValue = cell?.expiresAt ?? cell?.expiresOn ?? cell?.raw?.expiresOn;
+    if (!expiresValue) return false;
+    const expiresOn = new Date(expiresValue);
     if (Number.isNaN(expiresOn.getTime())) return false;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return expiresOn < today;
   },
+  cellWarn(cell) {
+    const expiresValue = cell?.expiresAt ?? cell?.expiresOn ?? cell?.raw?.expiresOn;
+    if (!expiresValue) return false;
+    const expiresOn = new Date(expiresValue);
+    if (Number.isNaN(expiresOn.getTime())) return false;
+    const diff = (expiresOn.getTime() - Date.now()) / 86400000;
+    return diff >= 0 && diff <= 30;
+  },
+  chipText(cell) {
+    const status = normalizeStatus(cell?.status || 'Pending');
+    if (status === 'Exempt') return '◎ Exempt';
+    if (this.cellExpired(cell)) return '✖ Expired';
+    if (status === 'Completed' && this.cellWarn(cell)) return '⚠ Due soon';
+    if (status === 'Completed') return '✔ Complete';
+    return '○ Pending';
+  },
+  requirementExpired(record) {
+    if (!record) return false;
+    return this.cellExpired({ expiresAt: record.expiresOn, raw: record });
+  },
   isRequirementExpiring(record, thresholdDays = 30) {
     if (!record || !record.expiresOn) return false;
+    if (thresholdDays === 30) {
+      return this.cellWarn({ expiresAt: record.expiresOn });
+    }
     const expiresOn = new Date(record.expiresOn);
     if (Number.isNaN(expiresOn.getTime())) return false;
-    const today = new Date();
-    const diff = (expiresOn - today) / (1000 * 60 * 60 * 24);
+    const diff = (expiresOn.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
     return diff >= 0 && diff <= thresholdDays;
   },
   hasExpiringRequirement(employeeId) {
-    for (const req of this.requirements) {
-      if (this.isRequirementExpiring(this.getEmployeeRequirement(employeeId, req.id))) {
-        return true;
-      }
-    }
-    return false;
+    return this.requirements.some(req => this.cellWarn(this.getRequirementCell(employeeId, req.id)));
   },
   employeeCompliancePercent(employeeId) {
     if (!this.requirements.length) return 0;
@@ -2012,31 +2042,18 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     return Math.round((completed / this.requirements.length) * 100);
   },
-  statusBadgeClass(employeeId, requirementId) {
-    const record = this.getEmployeeRequirement(employeeId, requirementId);
-    const status = normalizeStatus(record?.status);
-    if (status === 'Completed') return 'status-complete';
-    if (status === 'Exempt') return 'status-exempt';
-    if (this.requirementExpired(record)) return 'status-overdue';
-    return 'status-pending';
-  },
-  cellStatusLabel(employeeId, requirementId) {
-    const record = this.getEmployeeRequirement(employeeId, requirementId);
-    return normalizeStatus(record?.status || 'Pending');
-  },
-  cellSubtext(employeeId, requirementId) {
-    const record = this.getEmployeeRequirement(employeeId, requirementId);
-    if (!record) return 'Not started';
-    const status = normalizeStatus(record.status);
-    if (status === 'Completed' && record.completedOn) {
-      return `Done ${this.formatDate(record.completedOn)}`;
+  cellSubtext(cell) {
+    if (!cell?.raw) return 'Not started';
+    const status = normalizeStatus(cell.status);
+    if (status === 'Completed' && cell.completedAt) {
+      return `Done ${this.formatDate(cell.completedAt)}`;
     }
     if (status === 'Exempt') {
       return 'Exempt';
     }
-    if (record.expiresOn) {
-      const label = this.requirementExpired(record) ? 'Expired' : 'Expires';
-      return `${label} ${this.formatDate(record.expiresOn)}`;
+    if (cell.expiresAt) {
+      const label = this.cellExpired(cell) ? 'Expired' : 'Expires';
+      return `${label} ${this.formatDate(cell.expiresAt)}`;
     }
     return 'Pending';
   },
@@ -2070,14 +2087,18 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     const top = rect.bottom + window.scrollY + offset;
     return `top:${top}px;left:${left}px;width:${width}px`;
   },
-  openEditor(employeeId, requirementId, event) {
+  openEditor(event, employeeId, requirementId) {
     const record = this.getEmployeeRequirement(employeeId, requirementId);
     this.editorForm.status = normalizeStatus(record?.status || 'Pending');
     this.editorForm.completedOn = normalizeDateInputValue(record?.completedOn);
     this.editorForm.expiresOn = normalizeDateInputValue(record?.expiresOn);
     this.activeEditor.employeeId = employeeId;
     this.activeEditor.requirementId = requirementId;
-    this.activeEditor.style = this.computePopoverStyle(event.currentTarget);
+    const currentTarget = event?.currentTarget || null;
+    const anchor = currentTarget?.classList?.contains?.('badge')
+      ? currentTarget
+      : currentTarget?.querySelector?.('.badge') || currentTarget;
+    this.activeEditor.style = this.computePopoverStyle(anchor);
     this.activeEditor.open = true;
     this.$nextTick(() => {
       this.$refs.editorStatus?.focus();
