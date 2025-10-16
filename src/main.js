@@ -304,19 +304,61 @@ function createAppStore() {
     store.APP_FLAGS = { ...window.APP_FLAGS };
   };
 
-  document.addEventListener('app-flags:changed', handleFlagChange);
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('app-flags:changed', handleFlagChange);
+  }
 
   return store;
 }
 
-const existingAppStore = typeof window.AppStore === 'function' ? window.AppStore() : null;
-const appStore = existingAppStore && typeof existingAppStore === 'object' ? existingAppStore : createAppStore();
+let appStore = null;
 
-Alpine.store('app', appStore);
+if (typeof window !== 'undefined') {
+  try {
+    const existingAppStore = typeof window.AppStore === 'function' ? window.AppStore() : null;
+    appStore = existingAppStore && typeof existingAppStore === 'object' ? existingAppStore : createAppStore();
+    Alpine.store('app', appStore);
+    window.AppStore = function AppStore() {
+      return appStore;
+    };
+    window.AppBootOk = true;
+  } catch (error) {
+    console.error('App boot failed:', error);
+    window.AppBootOk = false;
+    window.AppStore = function AppStore() {
+      return null;
+    };
 
-window.AppStore = function AppStore() {
-  return appStore;
-};
+    if (typeof document !== 'undefined') {
+      const host = document.getElementById('app-v2') || document.body;
+      if (host) {
+        const message = error && (error.stack || error.message) ? error.stack || error.message : String(error);
+        const safeMessage = String(message).replace(/[&<>"']/g, char => {
+          switch (char) {
+            case '&':
+              return '&amp;';
+            case '<':
+              return '&lt;';
+            case '>':
+              return '&gt;';
+            case '"':
+              return '&quot;';
+            case "'":
+              return '&#39;';
+            default:
+              return char;
+          }
+        });
+
+        host.innerHTML = `
+    <div style="padding:16px;font-family:system-ui">
+      <h2>Something went wrong starting the app</h2>
+      <pre style="white-space:pre-wrap;background:#f6f8fa;padding:12px;border-radius:8px">${safeMessage}</pre>
+    </div>`;
+      }
+    }
+  }
+}
 
 const DARK_MODE_KEY = 'maplewood:dashboard:dark-mode';
 const RING_RADIUS = 16;
