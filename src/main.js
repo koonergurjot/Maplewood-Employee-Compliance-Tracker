@@ -29,13 +29,14 @@ const inlineEditTemplate = `
         <h2 class="inline-title" x-text="editorTitle()"></h2>
       </header>
       <div class="inline-body">
-        <label class="inline-field">
+        <label class="inline-field" for="inline-editor-status">
           <span>Status</span>
           <select
             class="input"
             name="status"
             x-ref="editorStatus"
             x-model="editorForm.status"
+            id="inline-editor-status"
             data-autofocus
           >
             <template x-for="status in editorStatusOptions" :key="status">
@@ -43,13 +44,25 @@ const inlineEditTemplate = `
             </template>
           </select>
         </label>
-        <label class="inline-field">
+        <label class="inline-field" for="inline-editor-completed-on">
           <span>Completed on</span>
-          <input type="date" class="input" name="completedOn" x-model="editorForm.completedOn" />
+          <input
+            type="date"
+            class="input"
+            name="completedOn"
+            id="inline-editor-completed-on"
+            x-model="editorForm.completedOn"
+          />
         </label>
-        <label class="inline-field">
+        <label class="inline-field" for="inline-editor-expires-on">
           <span>Expires on</span>
-          <input type="date" class="input" name="expiresOn" x-model="editorForm.expiresOn" />
+          <input
+            type="date"
+            class="input"
+            name="expiresOn"
+            id="inline-editor-expires-on"
+            x-model="editorForm.expiresOn"
+          />
         </label>
       </div>
       <footer class="inline-footer">
@@ -982,7 +995,10 @@ registerV2Component('v2DashboardApp', () => ({
     this.hydrateImportDrawer();
     if (!wasOpen) {
       this.$nextTick(() => {
-        this.$refs.importFileInput?.focus();
+        const node = document.querySelector('#import-drawer-root [data-autofocus]');
+        if (node && typeof node.focus === 'function') {
+          node.focus();
+        }
       });
     }
   },
@@ -1016,8 +1032,9 @@ registerV2Component('v2DashboardApp', () => ({
     if (this.$refs.importFileInput) {
       this.$refs.importFileInput.value = '';
       this.$nextTick(() => {
-        if (typeof this.$refs.importFileInput?.focus === 'function') {
-          this.$refs.importFileInput.focus();
+        const node = document.querySelector('#import-drawer-root [data-autofocus]');
+        if (node && typeof node.focus === 'function') {
+          node.focus();
         }
       });
     }
@@ -1281,7 +1298,10 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       }
       this.hydrateAddEmployeeModal();
       this.$nextTick(() => {
-        this.$refs.addEmployeeFirstName?.focus();
+        const node = document.querySelector('#add-employee-modal-root [data-autofocus]');
+        if (node && typeof node.focus === 'function') {
+          node.focus();
+        }
       });
     }
   },
@@ -2550,7 +2570,9 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.activeEditor.open = true;
     this.$nextTick(() => {
       const node = document.querySelector('#inline-editor [data-autofocus]');
-      if (node) node.focus();
+      if (node && typeof node.focus === 'function') {
+        node.focus();
+      }
     });
   },
   closeEditor() {
