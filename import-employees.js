@@ -227,10 +227,33 @@ import { warnOnce } from './src/compat/deprecations.js';
 
   function toggleImportModal(open){
     const store = getAppStore();
-    if (store){
+    if (!store){
+      return false;
+    }
+
+    const overlay = store.overlay;
+    if (overlay){
+      if (open){
+        if (typeof overlay.open === 'function'){
+          overlay.open('import');
+          return true;
+        }
+        return false;
+      }
+
+      if (typeof overlay.close === 'function'){
+        overlay.close('import');
+        return true;
+      }
+
+      return false;
+    }
+
+    if ('showImportModal' in store){
       store.showImportModal = Boolean(open);
       return true;
     }
+
     return false;
   }
 
