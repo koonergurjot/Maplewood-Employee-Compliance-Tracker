@@ -2878,7 +2878,7 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     const row = await table.where({ employeeId: empId, requirementId: reqId }).first();
     if (!row) return;
     const timestamp = new Date().toISOString();
-    row.status = checked ? 'Complete' : 'Pending';
+    row.status = checked ? 'Completed' : 'Pending';
     if (checked) {
       if (!row.completedAt) {
         row.completedAt = timestamp;
