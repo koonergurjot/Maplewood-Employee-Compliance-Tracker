@@ -2421,7 +2421,11 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     if (!expiresAt) return false;
     const expiresOn = new Date(expiresAt);
     if (Number.isNaN(expiresOn.getTime())) return false;
-    return expiresOn < new Date();
+
+    const today = new Date();
+    expiresOn.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    return expiresOn.getTime() < today.getTime();
   },
   cellWarn(cell) {
     const expiresAt = cell?.expiresAt ?? cell?.expiresOn ?? cell?.raw?.expiresOn;
