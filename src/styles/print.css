@@ -2,8 +2,7 @@
   header,
   .toolbar,
   .btn,
-  [x-cloak],
-  [x-show] {
+  [x-cloak] {
     display: none !important;
   }
 
