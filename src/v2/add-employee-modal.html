@@ -1,14 +1,15 @@
 <div
   id="add-employee-modal-root"
   x-cloak
-  class="fixed inset-0 pointer-events-none"
+  class="fixed inset-0 z-[200] pointer-events-none"
   :class="{ 'aria-hidden': !$store.app.overlay || $store.app.overlay.current !== 'add' }"
   :aria-hidden="!$store.app.overlay || $store.app.overlay.current !== 'add'"
 >
   <div
     x-cloak
     x-show="showAddEmployeeModal"
-    class="fixed inset-0 z-40 bg-black/40 pointer-events-none"
+    class="fixed inset-0 z-40 bg-black/40 pointer-events-auto"
+    @click="closeAddEmployeeModal({ force: true })"
   ></div>
   <section
     x-cloak
@@ -25,8 +26,8 @@
         <div class="flex items-start justify-between gap-4">
           <div>
             <div class="flex items-center gap-3">
-              <button type="button" class="btn-back" @click="goBack()">
-                ← <span>Back</span>
+              <button type="button" class="btn-back" @click="closeAddEmployeeModal({ force: true })">
+                ← <span>Cancel</span>
               </button>
               <h2 id="add-employee-title" class="text-lg font-semibold text-slate-900 dark:text-slate-50">
                 Add employee
