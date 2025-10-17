@@ -556,7 +556,17 @@ export async function commitSeniorityImport() {
 }
 
 if (typeof window !== 'undefined') {
-  window.importEmployeesDryRun = runSeniorityDryRun;
-  window.importEmployeesCommit = commitSeniorityImport;
+  window.importEmployeesSeniorityDryRun = runSeniorityDryRun;
+  window.importEmployeesSeniorityCommit = commitSeniorityImport;
+  window.importSeniorityDryRun = runSeniorityDryRun;
+  window.importSeniorityCommit = commitSeniorityImport;
+
+  if (typeof window.importEmployeesDryRun !== 'function') {
+    window.importEmployeesDryRun = runSeniorityDryRun;
+  }
+
+  if (typeof window.importEmployeesCommit !== 'function') {
+    window.importEmployeesCommit = commitSeniorityImport;
+  }
 }
 
