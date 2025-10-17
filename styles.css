@@ -1043,6 +1043,30 @@ body {
   gap: 0.5rem 0.75rem;
 }
 
+/* Requirements grid layout */
+.grid-scroll {
+  overflow: auto;
+  width: 100%;
+  height: calc(100vh - 220px);
+}
+
+.requirements-table thead th.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.sticky.left-0 {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background: var(--bg, #fff);
+}
+
+.dark .sticky.left-0 {
+  background: var(--bg-dark, rgba(15, 23, 42, 0.95));
+}
+
 .status-legend__item {
   display: inline-flex;
   align-items: center;
