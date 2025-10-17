@@ -862,10 +862,8 @@ const v2DashboardAppDefinition = () => ({
     pendingImports: [],
     pendingImportsLoading: false,
     pendingImportsError: '',
-    approvingBatchId: ''
-    commitLocalDisabled: true,
-    submitDisabled: true,
-    headerRowNumber: null
+    approvingBatchId: '',
+    commitLocalDisabled: true
   },
   init() {
     if (!window.APP_FLAGS?.USE_V2_MAIN) {
