@@ -27,6 +27,21 @@ if (hasWindowObject && window.APP_FLAGS?.USE_V2_MAIN) {
 
 const skipLegacyBootstrap = hasWindowObject && Boolean(window.APP_FLAGS?.USE_V2_MAIN);
 
+const onboardingModulePromise = import('./onboarding.js');
+let importerModulePromise = Promise.resolve();
+
+if (hasWindowObject) {
+  try {
+    await openDatabase();
+  } catch (error) {
+    console.error('Failed to initialize the compliance database. Some features may not work.', error);
+  }
+
+  importerModulePromise = import('./import-employees.js');
+}
+
+await Promise.all([onboardingModulePromise, importerModulePromise]);
+
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
