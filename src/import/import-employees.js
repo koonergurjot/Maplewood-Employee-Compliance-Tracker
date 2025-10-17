@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 
-import { openDatabase, mapPositionStatus } from '../../db.js';
+import { openDatabase, mapPositionStatus, normalizePositionStatusMeta } from '../../db.js';
 import { ImportEmployees } from '../../commands.js';
 import {
   buildHeaderMap,
@@ -150,29 +150,25 @@ const buildFullName = (firstName, lastName) => {
 const normalizeImportedStatus = value => {
   const normalized = normalizeString(value);
   if (!normalized) {
-    return '';
+    return { value: '', resolution: 'empty', original: '' };
   }
 
-  const mapped = mapPositionStatus(normalized, normalized);
-  if (mapped === 'FT' || mapped === 'PT' || mapped === 'Casual') {
-    return mapped;
+  const meta = normalizePositionStatusMeta(normalized);
+  if (meta.value) {
+    return {
+      value: meta.value,
+      resolution: meta.matchedAlias ? 'alias' : 'heuristic',
+      original: normalized
+    };
   }
 
-  const collapsed = normalized.replace(/[^a-z]/gi, '').toLowerCase();
+  const fallbackValue = mapPositionStatus(normalized, 'Casual');
 
-  if (collapsed.includes('cas')) {
-    return 'Casual';
-  }
-
-  if (collapsed.includes('full') || collapsed.startsWith('ft')) {
-    return 'FT';
-  }
-
-  if (collapsed.includes('part') || collapsed.startsWith('pt')) {
-    return 'PT';
-  }
-
-  return '';
+  return {
+    value: fallbackValue,
+    resolution: fallbackValue ? 'fallback' : 'unresolved',
+    original: normalized
+  };
 };
 
 const inferRoleFromJobInfo = record => {
@@ -458,7 +454,8 @@ const collectRawRecords = (rows, headerInfo, mapping) => {
     const jobTitle = jobTitleIndex >= 0 ? normalizeString(row[jobTitleIndex]) : '';
     const ranking = rankingIndex >= 0 ? parseIntegerValue(row[rankingIndex]) : null;
     const rawStatus = positionStatusIndex >= 0 ? normalizeString(row[positionStatusIndex]) : '';
-    const normalizedStatus = normalizeImportedStatus(rawStatus);
+    const { value: normalizedStatus, resolution: statusResolution, original: normalizedOriginal } =
+      normalizeImportedStatus(rawStatus);
     const employeeId = employeeIdIndex >= 0 ? normalizeString(row[employeeIdIndex]) : '';
     const fullName = buildFullName(firstName, lastName);
 
@@ -472,6 +469,8 @@ const collectRawRecords = (rows, headerInfo, mapping) => {
       ranking,
       seniorityHours,
       positionStatus: normalizedStatus,
+      positionStatusOriginal: normalizedOriginal,
+      positionStatusResolution: statusResolution,
       employeeId
     });
   });
@@ -630,15 +629,39 @@ const buildMappingRows = (headerRow = [], mapping = {}) => {
   return rows;
 };
 
-const buildPreview = employees => {
-  const rows = employees.slice(0, 5).map(employee => ({
-    Name: buildFullName(employee.firstName, employee.lastName) || employee.fullName || '',
-    'Seniority Hours': employee.seniorityHours ?? 0,
-    'Job Class': employee.jobClass || '',
-    'Job Title': employee.jobTitle || '',
-    Ranking: employee.ranking ?? '',
-    'Position Status': employee.positionStatus || ''
-  }));
+const buildPreview = (employees, records = []) => {
+  const rows = employees.slice(0, 5).map((employee, index) => {
+    const baseRow = {
+      Name: buildFullName(employee.firstName, employee.lastName) || employee.fullName || '',
+      'Seniority Hours': employee.seniorityHours ?? 0,
+      'Job Class': employee.jobClass || '',
+      'Job Title': employee.jobTitle || '',
+      Ranking: employee.ranking ?? ''
+    };
+
+    const statusValue = employee.positionStatus || '';
+    const sourceRecord = Array.isArray(records) ? records[index] : null;
+    const resolution = sourceRecord?.positionStatusResolution;
+    const shouldHighlightStatus =
+      resolution
+      && resolution !== 'alias'
+      && resolution !== 'empty'
+      && (sourceRecord?.positionStatusOriginal || statusValue);
+
+    if (shouldHighlightStatus) {
+      baseRow['Position Status'] = {
+        text: statusValue,
+        badge: 'Unmapped status',
+        title: sourceRecord?.positionStatusOriginal
+          ? `Original value: ${sourceRecord.positionStatusOriginal}`
+          : ''
+      };
+    } else {
+      baseRow['Position Status'] = statusValue;
+    }
+
+    return baseRow;
+  });
 
   return {
     columns: SENIORITY_PREVIEW_COLUMNS,
@@ -684,7 +707,7 @@ export async function runSeniorityDryRun(file) {
   const summary = { added, updated, skipped: skipped.length };
   const mappingLabels = buildMappingLabels(headerInfo.row, mapping);
   const mappingRows = buildMappingRows(headerInfo.row, mapping);
-  const preview = buildPreview(employees);
+  const preview = buildPreview(employees, records);
   const headerRowNumber = headerInfo.index + 1;
   const fileName = typeof file?.name === 'string' ? file.name : '';
 
