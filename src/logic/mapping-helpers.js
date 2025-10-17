@@ -65,7 +65,19 @@ const HEADER_TOKEN_GROUPS = [
   ['job class code', 'job class'],
   ['job title', 'position description'],
   ['position status', 'status'],
-  ['position id', 'employee id']
+  ['position id', 'employee id'],
+  ['employee name', 'employee']
+];
+
+const SENIORITY_HEADER_TOKENS = [
+  'ranking',
+  'total seniority hours',
+  'job class',
+  'job title',
+  'position status',
+  'last, first',
+  'employee name',
+  'position description'
 ];
 
 const rowMatchesTokenGroup = (row, group) => {
@@ -83,25 +95,56 @@ export function detectHeaderRow(rows, searchLimit = 10) {
 
   const limit = Math.min(searchLimit, rows.length);
 
-  for (let index = 0; index < limit; index += 1) {
-    const row = rows[index];
-    if (!Array.isArray(row) || row.every(cell => normalizeHeaderValue(cell) === '')) {
-      continue;
-    }
+  const detectByTokenGroups = () => {
+    for (let index = 0; index < limit; index += 1) {
+      const row = rows[index];
+      if (!Array.isArray(row) || row.every(cell => normalizeHeaderValue(cell) === '')) {
+        continue;
+      }
 
-    let matches = 0;
-    for (const group of HEADER_TOKEN_GROUPS) {
-      if (rowMatchesTokenGroup(row, group)) {
-        matches += 1;
+      let matches = 0;
+      for (const group of HEADER_TOKEN_GROUPS) {
+        if (rowMatchesTokenGroup(row, group)) {
+          matches += 1;
+        }
+      }
+
+      if (matches >= 3) {
+        return { index, row };
       }
     }
 
-    if (matches >= 3) {
-      return { index, row };
+    return null;
+  };
+
+  const detectByTokenScan = () => {
+    for (let index = 0; index < limit; index += 1) {
+      const row = rows[index];
+      if (!Array.isArray(row) || row.every(cell => normalizeHeaderValue(cell) === '')) {
+        continue;
+      }
+
+      let matches = 0;
+      for (const token of SENIORITY_HEADER_TOKENS) {
+        if (rowMatchesTokenGroup(row, [token])) {
+          matches += 1;
+        }
+      }
+
+      if (matches >= 4) {
+        return { index, row };
+      }
     }
+
+    return null;
+  };
+
+  const detected = detectByTokenGroups();
+  if (detected) {
+    return detected;
   }
 
-  return null;
+  return detectByTokenScan();
 }
 
 export function buildHeaderMap(row = []) {
