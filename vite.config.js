@@ -9,6 +9,11 @@ const buildHash = process.env.BUILD_HASH || Date.now().toString(36);
 const enableLegacy = String(process.env.ENABLE_LEGACY_BUILD).toLowerCase() === 'true';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src')
+    }
+  },
   plugins: [
     enableLegacy &&
       legacy({

@@ -2,13 +2,13 @@ import './polyfills/async-function-call.js';
 import Alpine from 'alpinejs';
 import { qs } from './utils/dom.js';
 import miniAnalyticsTemplate from './v2/mini-analytics.html?raw';
-import requirementsGridTemplate from './v2/requirements-grid.html?raw';
+import requirementsGridTemplate from './components/ComplianceGrid.html?raw';
 import importDrawerTemplate from './v2/import-drawer.html?raw';
 import addEmployeeModalTemplate from './v2/add-employee-modal.html?raw';
 import addRequirementModalTemplate from './v2/add-requirement-modal.html?raw';
 import bulkActionsTemplate from './v2/bulk-actions.html?raw';
 import activityTimelineTemplate from './v2/activity-timeline.html?raw';
-import employeeProfileTemplate from './v2/employee-profile.html?raw';
+import employeeProfileTemplate from './v2/profile-drawer.html?raw';
 import {
   approveImport as approveSupabaseImport,
   getClient as getSupabaseClient,
@@ -81,6 +81,7 @@ const inlineEditTemplate = `
 </template>
 `;
 import './styles/tailwind.css';
+import './components/ComplianceGrid.ts';
 import { openDatabase, generateId, mapPositionStatus } from '../db.js';
 import { AddRequirement, deleteEmployee as deleteEmployeeHelper } from '../commands.js';
 import { addEmployee as addEmployeeApi } from './v2/api.js';
@@ -4081,7 +4082,6 @@ async function bootApp() {
   Alpine.start();
 
   registerServiceWorker();
-}
 
   try {
     const importerModule = await loadSeniorityImporterModule();

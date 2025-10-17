@@ -158,9 +158,10 @@
     }
   </style>
 </head>
-<body x-data="AppStore()" data-app="compliance-tracker">
+<body x-data="AppStore()" data-app="compliance-tracker" class="h-full">
   <div
     id="app-v2"
+    class="h-screen w-screen overflow-hidden"
     x-show="APP_FLAGS.USE_V2_MAIN"
     x-data="v2DashboardApp"
     x-init="init()"
@@ -168,126 +169,13 @@
     :class="{ dark: darkMode }"
     x-effect="document.body.classList.toggle('dark', darkMode)"
   >
-    <main class="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-      <header
-        class="space-y-2 sticky top-0 z-30 border-b border-slate-200/80 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-950 backdrop-blur
-               bg-[radial-gradient(1000px_200px_at_50%_-100px,rgba(99,102,241,.12),transparent)]"
-      >
-        <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 class="text-2xl font-semibold leading-tight">Employee Compliance Overview</h1>
-            <p class="text-sm text-muted">Use filters to narrow results and click any requirement cell to update progress.</p>
-          </div>
-          <div class="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" class="btn btn-primary" @click="openImportDrawer()">Import</button>
-            <button type="button" class="btn" @click="openAddEmployee()">Add Employee</button>
-            <button type="button" class="btn" @click="openAddRequirement()">+ Requirement</button>
-            <div class="relative" x-data="{open:false}">
-              <button type="button" class="btn" @click="open=!open">Export</button>
-              <div
-                x-show="open"
-                x-cloak
-                @click.outside="open=false"
-                class="export-menu absolute right-0 mt-2 w-48 rounded-lg border bg-white shadow"
-              >
-                <button type="button" class="menu-item" @click="exportCSV(); open=false">Export CSV</button>
-                <button type="button" class="menu-item" @click="exportJSON(); open=false">Export JSON</button>
-                <button type="button" class="menu-item" @click="window.print(); open=false">Print view</button>
-              </div>
-            </div>
-            <button type="button" class="btn" @click="window.print()">Print</button>
-            <button type="button" class="btn" @click="toggleDarkMode" aria-label="Toggle dark mode">
-              <span x-text="darkMode ? 'Light mode' : 'Dark mode'"></span>
-            </button>
-          </div>
-        </div>
-        <div class="text-xs text-muted">Showing <span x-text="$store.app.filteredCount()"></span> of <span x-text="$store.app.totalEmployees()"></span> team members.</div>
-      </header>
-
-      <template x-if="loadError">
-        <section class="card" role="alert">
-          <div class="space-y-2" style="padding:1.25rem 1.5rem;">
-            <h2 class="text-lg font-semibold">Unable to load data</h2>
-            <p class="text-sm text-muted" x-text="loadError"></p>
-          </div>
-        </section>
-      </template>
-
-      <div id="mini-analytics" x-show="!loadError" x-html="partials.miniAnalytics"></div>
-
-      <section class="card" aria-label="Employee requirements grid">
-        <div class="space-y-4">
-          <div class="toolbar">
-            <section class="filters-card">
-              <div class="filters-grid">
-                <label class="filter-field" aria-label="Filter by role">
-                <span class="filter-label">Role</span>
-                <select multiple size="4" class="input" x-model="filters.roles" @change="applyFilters">
-                  <template x-if="!roleOptions.length">
-                    <option disabled value="">No roles available</option>
-                  </template>
-                  <template x-for="role in roleOptions" :key="role">
-                    <option :value="role" x-text="role"></option>
-                  </template>
-                </select>
-              </label>
-              <label class="filter-field" aria-label="Filter by employee status">
-                <span class="filter-label">Status</span>
-                <select class="input" x-model="filters.status" @change="applyFilters">
-                  <template x-for="option in statusOptions" :key="option.value">
-                    <option :value="option.value" x-text="option.label"></option>
-                  </template>
-                </select>
-              </label>
-              <label class="filter-field" aria-label="Filter by compliance percentage">
-                <span class="filter-label">Compliance %</span>
-                <select class="input" x-model="filters.compliance" @change="applyFilters">
-                  <template x-for="option in complianceOptions" :key="option.value">
-                    <option :value="option.value" x-text="option.label"></option>
-                  </template>
-                </select>
-              </label>
-              <label class="filter-field" aria-label="Filter by expiration window">
-                <span class="filter-label">Expiring soon</span>
-                <div class="toggle-row">
-                  <input id="expiring-toggle" type="checkbox" class="toggle" x-model="filters.expiringSoon" @change="applyFilters" />
-                  <label class="toggle-label" for="expiring-toggle">Within 30 days</label>
-                </div>
-              </label>
-              <label class="filter-field filter-wide" aria-label="Search employees">
-                <span class="filter-label">Search</span>
-                <input type="search" class="input" placeholder="Search by name" x-model="filters.search" @input.debounce.200ms="applyFilters" />
-              </label>
-              </div>
-              <div class="filters-footer">
-                <div class="filters-actions" style="display:flex;align-items:center;gap:0.75rem;">
-                  <button type="button" class="btn ghost" @click="resetFilters">Reset filters</button>
-                  <button type="button" class="btn ghost" @click="copyFiltersLink">Copy link</button>
-                </div>
-                <div class="filters-meta" x-show="filters.roles.length || filters.status !== 'all' || filters.compliance !== 'all' || filters.expiringSoon || filters.search || filters.analytics">
-                  <span class="text-muted">Filters active</span>
-                </div>
-              </div>
-            </section>
-          </div>
-
-          <div id="requirements-grid" x-html="partials.requirementsGrid"></div>
-        </div>
-      </section>
-
-      <section class="card" aria-label="Recent activity">
-        <div
-          id="activity-timeline"
-          x-html="partials.activityTimeline"
-          class="activity-timeline"
-        >
-          <div class="space-y-3" style="padding:1.25rem 1.5rem;">
-            <h2 class="text-lg font-semibold leading-tight">Recent activity</h2>
-            <p class="text-sm text-muted">Updates you make will appear here.</p>
-          </div>
-        </div>
-      </section>
+    <main class="h-full w-full overflow-hidden">
+      <div id="requirements-grid" class="h-full w-full" x-html="partials.requirementsGrid"></div>
     </main>
+
+    <div id="mini-analytics" class="hidden" x-html="partials.miniAnalytics"></div>
+    <div id="bulk-actions" class="hidden" x-html="partials.bulkActions"></div>
+    <div id="activity-timeline" class="hidden" x-html="partials.activityTimeline"></div>
 
     <div id="import-drawer" x-html="partials.importDrawer"></div>
     <div id="add-requirement-modal" x-html="partials.addRequirementModal"></div>
