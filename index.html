@@ -10,6 +10,9 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="/src/styles/print.css" media="print" />
+  <script>
+    window.APP_FLAGS = { ...(window.APP_FLAGS || {}), USE_V2_MAIN: true };
+  </script>
   <style>
     :root {
       color-scheme: light dark;
@@ -293,8 +296,6 @@
 
     <template id="inline-edit-template"></template>
   </div>
-
-  <div id="app-legacy" x-show="!APP_FLAGS.USE_V2_MAIN"></div>
 
   <button
     type="button"
