@@ -598,6 +598,120 @@ registerV2Component('v2DashboardApp', () => ({
     requirementId: null,
     style: ''
   },
+  gridColumnOrder() {
+    return {
+      info: ['name', 'seniorityHours', 'jobClass', 'jobTitle', 'ranking', 'positionStatus'],
+      requirements: this.requirements
+        .filter(Boolean)
+        .map(requirement => requirement.id ?? requirement.key)
+    };
+  },
+  gridInfoColumnLabel(key) {
+    const labels = {
+      name: 'Employee',
+      seniorityHours: 'Seniority Hours',
+      jobClass: 'Job Class',
+      jobTitle: 'Job Title',
+      ranking: 'Ranking',
+      positionStatus: 'Position Status'
+    };
+    return labels[key] || key;
+  },
+  gridInfoColumns() {
+    const orderDefinition = this.gridColumnOrder();
+    const infoOrder = Array.isArray(orderDefinition?.info) ? orderDefinition.info : [];
+    const columns = [];
+    let infoIndex = 1;
+    for (const key of infoOrder) {
+      if (key === 'name') {
+        columns.push({
+          key,
+          label: this.gridInfoColumnLabel(key),
+          headerClass: 'sticky-col sticky-header sticky-col-name employee-header',
+          cellClass: 'sticky-col sticky-col-name employee-info-cell',
+          cellType: 'th'
+        });
+        continue;
+      }
+      const headerClass = `sticky-col sticky-header sticky-info-col sticky-col-info-${infoIndex} employee-header`;
+      const baseCellClass = `sticky-col sticky-info-col sticky-col-info-${infoIndex} employee-info-cell`;
+      const cellClass = key === 'seniorityHours'
+        ? `${baseCellClass} employee-info-cell-number`
+        : baseCellClass;
+      columns.push({
+        key,
+        label: this.gridInfoColumnLabel(key),
+        headerClass,
+        cellClass,
+        cellType: 'td'
+      });
+      infoIndex += 1;
+    }
+    return columns;
+  },
+  gridInfoCellText(employee, key) {
+    if (!employee) {
+      return '—';
+    }
+    switch (key) {
+      case 'seniorityHours': {
+        const { seniorityHours } = employee;
+        if (seniorityHours !== null && seniorityHours !== '') {
+          const numeric = Number(seniorityHours);
+          if (Number.isFinite(numeric)) {
+            return numeric.toLocaleString();
+          }
+          if (typeof seniorityHours === 'string') {
+            const trimmed = seniorityHours.trim();
+            return trimmed || '—';
+          }
+          return `${seniorityHours}`;
+        }
+        return '—';
+      }
+      case 'jobClass':
+        return employee.jobClass || '—';
+      case 'jobTitle':
+        return employee.jobTitle || employee.role || '—';
+      case 'ranking':
+        return employee.ranking || '—';
+      case 'positionStatus':
+        return employee.positionStatus || employee.status || '—';
+      default:
+        return '—';
+    }
+  },
+  gridOrderedRequirements(requirements = this.requirements) {
+    const source = Array.isArray(requirements) ? requirements.filter(Boolean) : [];
+    const orderDefinition = this.gridColumnOrder();
+    const order = Array.isArray(orderDefinition?.requirements) ? orderDefinition.requirements : [];
+    if (!order.length) {
+      return source;
+    }
+    const requirementMap = new Map();
+    const visited = new Set();
+    for (const requirement of source) {
+      if (!requirement) continue;
+      const key = requirement.id ?? requirement.key;
+      requirementMap.set(key, requirement);
+    }
+    const ordered = [];
+    for (const id of order) {
+      if (visited.has(id)) continue;
+      const match = requirementMap.get(id);
+      if (match) {
+        ordered.push(match);
+        visited.add(id);
+      }
+    }
+    for (const requirement of source) {
+      const key = requirement.id ?? requirement.key;
+      if (visited.has(key)) continue;
+      ordered.push(requirement);
+      visited.add(key);
+    }
+    return ordered;
+  },
   editorForm: {
     status: 'Pending',
     completedOn: '',
@@ -676,14 +790,14 @@ registerV2Component('v2DashboardApp', () => ({
           ? employeeRequirements
           : this._exportRowsCache || this.buildExportRows(employees, requirements, employeeRequirements);
         this._exportRowsCache = null;
-        return exportFilteredCSV(employees, requirements, rows);
+        return exportFilteredCSV(employees, requirements, rows, this.gridColumnOrder());
       },
       exportFilteredJSON: (employees, requirements, employeeRequirements) => {
         const rows = Array.isArray(employeeRequirements) && employeeRequirements.every(entry => Array.isArray(entry?.requirements))
           ? employeeRequirements
           : this._exportRowsCache || this.buildExportRows(employees, requirements, employeeRequirements);
         this._exportRowsCache = null;
-        return exportFilteredJSON(employees, requirements, rows);
+        return exportFilteredJSON(employees, requirements, rows, this.gridColumnOrder());
       }
     };
     this.$watch(
@@ -2094,7 +2208,7 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     employeeRequirements = this.employeeRequirements
   ) {
     const source = Array.isArray(employees) ? employees.filter(Boolean) : [];
-    const requirementList = Array.isArray(requirements) ? requirements.filter(Boolean) : [];
+    const requirementList = this.gridOrderedRequirements(requirements);
     const requirementMap = new Map();
     if (Array.isArray(employeeRequirements)) {
       for (const record of employeeRequirements) {
@@ -2107,11 +2221,17 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       const firstName = normalizeString(employee?.firstName);
       const lastName = normalizeString(employee?.lastName);
       const combinedName = `${firstName} ${lastName}`.trim();
+      const displayName = employee?.fullName || combinedName || 'Unnamed employee';
+      const jobClass = normalizeString(employee?.jobClass);
+      const jobTitle = normalizeString(employee?.jobTitle) || normalizeString(employee?.role);
+      const ranking = normalizeString(employee?.ranking);
+      const positionStatus = normalizeString(employee?.positionStatus) || normalizeString(employee?.status);
       const requirementEntries = requirementList.map(requirement => {
-        const key = this.buildRequirementKey(employee?.id, requirement?.id);
+        const requirementId = requirement?.id ?? requirement?.key ?? null;
+        const key = this.buildRequirementKey(employee?.id, requirementId);
         const record = requirementMap.get(key) || null;
         return {
-          requirementId: requirement?.id ?? null,
+          requirementId,
           requirementName: requirement?.name ?? '',
           status: normalizeStatus(record?.status || 'Pending'),
           completedOn: record?.completedOn || null,
@@ -2123,10 +2243,16 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
         employeeId: employee?.id ?? null,
         firstName,
         lastName,
-        fullName: combinedName || 'Unnamed employee',
+        fullName: displayName,
+        name: displayName,
         role: normalizeString(employee?.role),
         status: normalizeString(employee?.status),
         employmentType: normalizeString(employee?.employmentType),
+        seniorityHours: employee?.seniorityHours ?? '',
+        jobClass,
+        jobTitle,
+        ranking,
+        positionStatus,
         compliancePercent: this.employeeCompliancePercent(employee?.id),
         requirements: requirementEntries
       };
