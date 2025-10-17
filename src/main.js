@@ -1972,25 +1972,46 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
   },
   goBack() {
+    if (this.closeOpenOverlay()) {
+      return;
+    }
     if (typeof window !== 'undefined' && window.history.length > 1) {
       window.history.back();
       return;
     }
-    this.closeAllOverlays();
     this.currentView = 'home';
     this.toast('Returned to Home', 'info');
   },
-  closeAllOverlays() {
-    this.showAddEmployeeModal = false;
-    if (this.addEmployeeModal?.open) {
-      this.addEmployeeModal.open = false;
+  closeOpenOverlay() {
+    let closed = false;
+    if (this.importDrawer?.open) {
+      this.closeImportDrawer();
+      closed = true;
+    }
+    if (this.showAddEmployeeModal || this.addEmployeeModal?.open) {
+      this.closeAddEmployeeModal();
+      closed = true;
     }
     if (this.addRequirementModal?.open) {
-      this.addRequirementModal.open = false;
+      this.closeAddRequirementModal();
+      closed = true;
     }
-    this.importDrawer.open = false;
-    this.profilePanel.open = false;
-    this.profilePanel.employeeId = null;
+    if (this.profilePanel?.open || this.showProfileDrawer) {
+      this.closeProfile();
+      this.showProfileDrawer = false;
+      closed = true;
+    }
+    if (closed) {
+      this.overlay = { current: null };
+    }
+    return closed;
+  },
+  closeAllOverlays(options = {}) {
+    const { silent = false } = options;
+    this.closeImportDrawer({ silent, preserveState: false, force: true });
+    this.closeAddEmployeeModal({ silent, preserveForm: false, force: true });
+    this.closeAddRequirementModal({ silent, preserveForm: false, force: true });
+    this.closeProfile({ silent, force: true });
     this.showProfileDrawer = false;
     this.overlay = { current: null };
   },
