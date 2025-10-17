@@ -18,7 +18,8 @@ export default defineConfig({
   ].filter(Boolean),
   define: {
     __SW_BUILD_HASH__: JSON.stringify(buildHash),
-    __BUILD_HASH__: JSON.stringify(buildHash)
+    __BUILD_HASH__: JSON.stringify(buildHash),
+    'import.meta.env.VITE_BUILD_HASH': JSON.stringify(buildHash)
   },
   build: {
     target: 'es2015',
