@@ -120,8 +120,12 @@ body.dark .grid-container { border-color: var(--border-soft-dark); }
 .requirements-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 640px; }
 .requirements-table th, .requirements-table td { padding: 0.75rem; border-bottom: 1px solid var(--border-soft); background: var(--bg-card); }
 body.dark .requirements-table th, body.dark .requirements-table td { border-color: var(--border-soft-dark); background: var(--bg-card-dark); }
-.sticky-header { position: sticky; top: 0; z-index: 5; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); }
+.sticky-header { position: sticky; top: 0; z-index: 12; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); }
 body.dark .sticky-header { background: rgba(15, 23, 42, 0.9); }
+.requirements-table thead .sticky-header { z-index: 20; }
+.requirements-table thead .sticky-col.sticky-header { z-index: 25; }
+.requirements-table thead .sticky-select.sticky-header { z-index: 30; }
+.requirements-table thead .sticky-divider.sticky-header { z-index: 22; }
 .sticky-col {
   position: sticky;
   left: var(--selection-col-width, 0);
