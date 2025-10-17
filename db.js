@@ -524,6 +524,14 @@ export async function listLookups(type) {
   return values;
 }
 
+/**
+ * @deprecated Use {@link listLookups} instead. This alias exists for legacy
+ * modules that still import the singular helper name.
+ */
+export function listLookup(type) {
+  return listLookups(type);
+}
+
 export async function addLookup(type, value) {
   const normalizedType = normalizeLookupType(type);
   const normalizedValue = normalizeLookupValue(value);

@@ -591,9 +591,12 @@ const v2DashboardAppDefinition = () => ({
   inlineTemplateMounted: false,
   loading: true,
   loadError: null,
+  currentView: 'home',
+  overlay: { current: null },
   darkMode: false,
   showAddRequirementModal: false,
   showAddEmployeeModal: false,
+  showProfileDrawer: false,
   exporter: null,
   _exportRowsCache: null,
   employees: [],
@@ -862,10 +865,8 @@ const v2DashboardAppDefinition = () => ({
     pendingImports: [],
     pendingImportsLoading: false,
     pendingImportsError: '',
-    approvingBatchId: ''
-    commitLocalDisabled: true,
-    submitDisabled: true,
-    headerRowNumber: null
+    approvingBatchId: '',
+    commitLocalDisabled: true
   },
   init() {
     if (!window.APP_FLAGS?.USE_V2_MAIN) {
@@ -1967,6 +1968,29 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     if (typeof window !== 'undefined' && typeof window.alert === 'function') {
       window.alert(payload.message);
     }
+  },
+  goBack() {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    this.closeAllOverlays();
+    this.currentView = 'home';
+    this.toast('Returned to Home', 'info');
+  },
+  closeAllOverlays() {
+    this.showAddEmployeeModal = false;
+    if (this.addEmployeeModal?.open) {
+      this.addEmployeeModal.open = false;
+    }
+    if (this.addRequirementModal?.open) {
+      this.addRequirementModal.open = false;
+    }
+    this.importDrawer.open = false;
+    this.profilePanel.open = false;
+    this.profilePanel.employeeId = null;
+    this.showProfileDrawer = false;
+    this.overlay = { current: null };
   },
   async confirmAndDeleteEmployee(employeeId) {
     if (!this.db || !employeeId) {
