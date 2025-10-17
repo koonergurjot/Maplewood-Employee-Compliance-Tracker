@@ -90,6 +90,10 @@ body {
   padding-right: 1rem;
 }
 
+.max-w-6xl {
+  max-width: 96rem;
+}
+
 @media (min-width: 640px) {
   .container {
     max-width: 640px;
