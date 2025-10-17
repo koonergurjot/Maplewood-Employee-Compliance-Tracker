@@ -510,7 +510,6 @@ registerV2Component('v2DashboardApp', () => ({
   loading: true,
   loadError: null,
   darkMode: false,
-  showExportMenu: false,
   showAddRequirementModal: false,
   showAddEmployeeModal: false,
   exporter: null,
@@ -972,13 +971,14 @@ registerV2Component('v2DashboardApp', () => ({
     });
   },
   openImportDrawer() {
-    if (!this.importDrawer.open) {
-      this.importDrawer.open = true;
-      const store = this.$store?.app;
-      if (store && store.showImportModal !== true) {
-        store.showImportModal = true;
-      }
-      this.hydrateImportDrawer();
+    const wasOpen = !!this.importDrawer.open;
+    this.importDrawer.open = true;
+    const store = this.$store?.app;
+    if (store && store.showImportModal !== true) {
+      store.showImportModal = true;
+    }
+    this.hydrateImportDrawer();
+    if (!wasOpen) {
       this.$nextTick(() => {
         this.$refs.importFileInput?.focus();
       });
@@ -1019,11 +1019,12 @@ registerV2Component('v2DashboardApp', () => ({
     }
   },
   closeImportDrawer(options = {}) {
-    if (!this.importDrawer.open && !options.force) {
+    const { silent = false, preserveState = false, force = false } = options;
+    const wasOpen = !!this.importDrawer.open;
+    this.importDrawer.open = false;
+    if (!wasOpen && !force) {
       return;
     }
-    const { silent = false, preserveState = false } = options;
-    this.importDrawer.open = false;
     if (!preserveState) {
       this.resetImportDrawerState();
     }
@@ -2259,47 +2260,32 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     });
   },
   exportCSV() {
-    this.showExportMenu = false;
-    const rows = this.buildExportRows(this.filteredEmployees, this.requirements, this.employeeRequirements);
-    if (!rows.length) {
-      this.$store?.app?.showToast?.({ type: 'info', message: 'No employees match the current filters.' });
-      return;
-    }
-    this._exportRowsCache = rows;
     const success = this.exporter?.exportFilteredCSV?.(
       this.filteredEmployees,
       this.requirements,
       this.employeeRequirements
     );
-    if (!this.exporter?.exportFilteredCSV) {
-      this._exportRowsCache = null;
-    }
-    if (!success) {
+    if (success === false) {
       this.$store?.app?.showToast?.({ type: 'error', message: 'Unable to export CSV. Please try again.' });
+    } else if (!this.exporter?.exportFilteredCSV) {
+      this.$store?.app?.showToast?.({ type: 'error', message: 'CSV export is unavailable.' });
     }
+    return success;
   },
   exportJSON() {
-    this.showExportMenu = false;
-    const rows = this.buildExportRows(this.filteredEmployees, this.requirements, this.employeeRequirements);
-    if (!rows.length) {
-      this.$store?.app?.showToast?.({ type: 'info', message: 'No employees match the current filters.' });
-      return;
-    }
-    this._exportRowsCache = rows;
     const success = this.exporter?.exportFilteredJSON?.(
       this.filteredEmployees,
       this.requirements,
       this.employeeRequirements
     );
-    if (!this.exporter?.exportFilteredJSON) {
-      this._exportRowsCache = null;
-    }
-    if (!success) {
+    if (success === false) {
       this.$store?.app?.showToast?.({ type: 'error', message: 'Unable to export JSON. Please try again.' });
+    } else if (!this.exporter?.exportFilteredJSON) {
+      this.$store?.app?.showToast?.({ type: 'error', message: 'JSON export is unavailable.' });
     }
+    return success;
   },
   triggerExport(format) {
-    this.showExportMenu = false;
     const normalized = typeof format === 'string' ? format.toLowerCase() : '';
     if (normalized === 'csv') {
       this.exportCSV();
@@ -2312,7 +2298,6 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     console.info(`Unsupported export format requested: ${normalized}`);
   },
   printReport() {
-    this.showExportMenu = false;
     if (typeof window?.print === 'function') {
       window.print();
     } else {
