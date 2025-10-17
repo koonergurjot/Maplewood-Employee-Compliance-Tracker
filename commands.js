@@ -233,9 +233,13 @@ export class AddRequirement {
 
     const { roleIndex } = this.respectTemplates ? await fetchTemplateIndex(this.db) : { roleIndex: new Map() };
 
-    return this.db.transaction('rw', this.db.requirements, this.db.employees, this.db.employeeRequirements, async () => {
-      await this.db.requirements.add(requirement);
-      const employees = await this.db.employees.toArray();
+    return this.db.transaction('rw', this.db.requirements, this.db.employees, this.db.employeeRequirements, async tx => {
+      const requirementsTable = tx.table('requirements');
+      const employeesTable = tx.table('employees');
+      const employeeRequirementsTable = tx.table('employeeRequirements');
+
+      await requirementsTable.add(requirement);
+      const employees = await employeesTable.toArray();
       const employeeRequirements = employees.map(emp => {
         const template = this.respectTemplates ? resolveTemplateForRole(emp.role, roleIndex) : null;
         const status = this.respectTemplates
@@ -253,7 +257,7 @@ export class AddRequirement {
         };
       });
       if (employeeRequirements.length) {
-        await this.db.employeeRequirements.bulkAdd(employeeRequirements);
+        await employeeRequirementsTable.bulkAdd(employeeRequirements);
       }
       return {
         requirement,
@@ -264,10 +268,14 @@ export class AddRequirement {
 
   async undo({ requirement, employeeRequirements }) {
     if (!requirement) return;
-    await this.db.transaction('rw', this.db.requirements, this.db.employeeRequirements, async () => {
-      await this.db.requirements.delete(requirement.id);
+    await this.db.transaction('rw', this.db.requirements, this.db.employeeRequirements, async tx => {
+      const requirementsTable = tx.table('requirements');
+      const employeeRequirementsTable = tx.table('employeeRequirements');
+
+      await requirementsTable.delete(requirement.id);
       if (employeeRequirements?.length) {
-        await this.db.employeeRequirements.bulkDelete(employeeRequirements.map(er => er.id));
+        const ids = employeeRequirements.map(er => er.id);
+        await employeeRequirementsTable.bulkDelete(ids);
       }
     });
   }
