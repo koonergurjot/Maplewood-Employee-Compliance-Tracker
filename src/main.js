@@ -567,6 +567,7 @@ registerV2Component('v2DashboardApp', () => ({
   roleOptions: [],
   filters: { ...DEFAULT_FILTER_STATE },
   _lastSerializedFilters: '',
+  _hasUrlFiltersParam: false,
   complianceOptions: [
     { value: 'all', label: 'All compliance' },
     { value: 'high', label: '≥ 90%' },
@@ -756,10 +757,9 @@ registerV2Component('v2DashboardApp', () => ({
     }
     const savedFilters = this.readSavedFilters();
     const urlFilters = this.readFiltersFromUrl();
-    const normalizedFilters = this.normalizeFilters({
-      ...savedFilters,
-      ...urlFilters
-    });
+    const hasUrlFilters = !!this._hasUrlFiltersParam;
+    const sourceFilters = hasUrlFilters ? urlFilters : { ...savedFilters, ...urlFilters };
+    const normalizedFilters = this.normalizeFilters(sourceFilters);
     this.filters = normalizedFilters;
     this.persistFilters(this.filters);
     this.updateUrlFilters(this.filters);
@@ -2358,11 +2358,17 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
   },
   readFiltersFromUrl() {
+    this._hasUrlFiltersParam = false;
     if (typeof window === 'undefined' || typeof window.location === 'undefined') {
       return {};
     }
     try {
       const params = new URLSearchParams(window.location.search || '');
+      const hasParam = params.has(FILTERS_STORAGE_KEY);
+      this._hasUrlFiltersParam = hasParam;
+      if (!hasParam) {
+        return {};
+      }
       const raw = params.get(FILTERS_STORAGE_KEY);
       if (!raw) {
         return {};
@@ -2412,6 +2418,7 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       }
       return result;
     } catch (error) {
+      this._hasUrlFiltersParam = false;
       console.warn('Failed to parse filters from URL', error);
       return {};
     }
