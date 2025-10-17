@@ -133,6 +133,34 @@ function registerV2Component(name, definition) {
   return Alpine.data(name, definition);
 }
 
+function registerServiceWorker() {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return;
+  }
+
+  if (import.meta.env?.DEV) {
+    return;
+  }
+
+  if (window.__SW_REGISTERED__) {
+    return;
+  }
+
+  const buildHash =
+    (import.meta.env?.VITE_BUILD_HASH && String(import.meta.env.VITE_BUILD_HASH)) ||
+    Date.now().toString(36);
+
+  navigator.serviceWorker
+    .register(`/sw.js?build=${encodeURIComponent(buildHash)}`)
+    .then((registration) => {
+      window.__SW_REGISTERED__ = true;
+      console.info('Service worker registered', registration.scope);
+    })
+    .catch((error) => {
+      console.warn('Service worker registration failed:', error);
+    });
+}
+
 async function ensureSeedRequirements(db) {
   const count = (await db.requirements.count?.()) ?? 0;
   if (count) {
@@ -4067,6 +4095,8 @@ function bootApp() {
   registerV2Component('v2DashboardApp', v2DashboardAppDefinition);
 
   Alpine.start();
+
+  registerServiceWorker();
 }
 
 try {
