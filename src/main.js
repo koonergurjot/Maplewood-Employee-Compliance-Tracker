@@ -453,34 +453,6 @@ function createAppStore() {
 
 let appStore = null;
 
-if (typeof window !== 'undefined') {
-  try {
-    const existingAppStore = typeof window.AppStore === 'function' ? window.AppStore() : null;
-    appStore = existingAppStore && typeof existingAppStore === 'object' ? existingAppStore : createAppStore();
-    Alpine.store('app', appStore);
-    window.AppStore = function AppStore() {
-      return appStore;
-    };
-    window.AppBootOk = true;
-  } catch (error) {
-    console.error('App boot failed:', error);
-    window.AppBootOk = false;
-    window.AppStore = function AppStore() {
-      return null;
-    };
-
-    if (typeof document !== 'undefined') {
-      const el = document.getElementById('app-v2') || document.body;
-      if (el) {
-        el.innerHTML = `<div style="padding:16px;font-family:system-ui">
-    <h2>App failed to start</h2>
-    <pre style="white-space:pre-wrap;background:#f6f8fa;padding:12px;border-radius:8px">${(error.stack || error.message || error)}</pre>
-  </div>`;
-      }
-    }
-  }
-}
-
 const DARK_MODE_KEY = 'maplewood:dashboard:dark-mode';
 const RING_RADIUS = 16;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -499,10 +471,6 @@ function replaceTemplate(targetId, html) {
   }
 }
 
-if (window.APP_FLAGS.USE_V2_MAIN) {
-  replaceTemplate('inline-edit-template', inlineEditTemplate);
-}
-
 function normalizeString(value) {
   return (value ?? '').toString().trim();
 }
@@ -511,12 +479,7 @@ function normalizeLower(value) {
   return normalizeString(value).toLowerCase();
 }
 
-window.Alpine = Alpine;
-
-const activityTimelineStore = createActivityTimelineStore();
-Alpine.store('activityLog', activityTimelineStore);
-
-registerV2Component('v2DashboardApp', () => ({
+const v2DashboardAppDefinition = () => ({
   db: null,
   activityLog: null,
   partials: {
@@ -2851,6 +2814,53 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     this.employeeRequirementMap.set(key, { ...(this.employeeRequirementMap.get(key) || {}), ...record });
   }
-}));
+});
 
-Alpine.start();
+function bootApp() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const existingAppStore = typeof window.AppStore === 'function' ? window.AppStore() : null;
+  appStore = existingAppStore && typeof existingAppStore === 'object' ? existingAppStore : createAppStore();
+  Alpine.store('app', appStore);
+  window.AppStore = function AppStore() {
+    return appStore;
+  };
+
+  if (window.APP_FLAGS?.USE_V2_MAIN) {
+    replaceTemplate('inline-edit-template', inlineEditTemplate);
+  }
+
+  window.Alpine = Alpine;
+
+  const activityTimelineStore = createActivityTimelineStore();
+  Alpine.store('activityLog', activityTimelineStore);
+
+  registerV2Component('v2DashboardApp', v2DashboardAppDefinition);
+
+  Alpine.start();
+}
+
+try {
+  bootApp();
+  if (typeof window !== 'undefined') {
+    window.AppBootOk = true;
+  }
+} catch (error) {
+  console.error('App boot failed:', error);
+  if (typeof window !== 'undefined') {
+    window.AppBootOk = false;
+    window.AppStore = function AppStore() {
+      return null;
+    };
+
+    const el = typeof document !== 'undefined' ? document.getElementById('app-v2') || document.body : null;
+    if (el) {
+      el.innerHTML = `<div style="padding:16px;font-family:system-ui">
+    <h2>App failed to start</h2>
+    <pre style="white-space:pre-wrap;background:#f6f8fa;padding:12px;border-radius:8px">${(error.stack || error.message || error)}</pre>
+  </div>`;
+    }
+  }
+}
