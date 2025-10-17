@@ -43,7 +43,7 @@ export function evaluateRequirementState(record, options = {}) {
   } = options;
 
   const status = normalizeStatus(record?.status || 'Pending');
-  const compliant = status === 'Completed' || status === 'Exempt';
+  let compliant = status === 'Completed' || status === 'Exempt';
   const expiresOn = record?.expiresOn ? parseDate(record.expiresOn) : null;
   const todayNormalized = normalizeDate(today);
   const expiresNormalized = expiresOn ? normalizeDate(expiresOn) : null;
@@ -54,6 +54,9 @@ export function evaluateRequirementState(record, options = {}) {
     const diff = expiresNormalized.getTime() - todayNormalized.getTime();
     daysUntilExpiry = Math.round(diff / MS_PER_DAY);
     expired = diff < 0;
+    if (expired && status === 'Completed') {
+      compliant = false;
+    }
   }
 
   const overdue = !compliant && expired;
