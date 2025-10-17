@@ -98,7 +98,7 @@ export function normalizePositionStatusMeta(value) {
   return resolvePositionStatus(value);
 }
 
-export function mapPositionStatus(value, fallback = 'Casual') {
+export function mapPositionStatus(value, fallback = '') {
   const meta = resolvePositionStatus(value);
   if (meta.value) {
     return meta.value;
@@ -117,7 +117,7 @@ export function mapPositionStatus(value, fallback = 'Casual') {
   }
 
   console.warn('Unrecognized position status:', value);
-  return 'Casual';
+  return '';
 }
 
 export const BULK_OPERATION_CHUNK_SIZE = 300;
