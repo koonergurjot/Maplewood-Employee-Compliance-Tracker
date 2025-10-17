@@ -93,6 +93,26 @@ function resolveInfoOrder(columnOrder) {
   return normalized;
 }
 
+function resolveRequirementOrder(columnOrder) {
+  const provided = Array.isArray(columnOrder?.requirements) ? columnOrder.requirements : [];
+  const normalized = [];
+  const seen = new Set();
+  for (const identifier of provided) {
+    if (identifier === null || typeof identifier === 'undefined') {
+      continue;
+    }
+    if (typeof identifier !== 'string' && typeof identifier !== 'number') {
+      continue;
+    }
+    if (seen.has(identifier)) {
+      continue;
+    }
+    seen.add(identifier);
+    normalized.push(identifier);
+  }
+  return normalized;
+}
+
 function getInfoLabel(key) {
   return INFO_LABELS[key] || key;
 }
@@ -158,7 +178,7 @@ function formatInfoValue(row, key) {
 
 function orderRequirements(requirements, columnOrder) {
   const source = Array.isArray(requirements) ? requirements.filter(Boolean) : [];
-  const order = Array.isArray(columnOrder?.requirements) ? columnOrder.requirements : [];
+  const order = resolveRequirementOrder(columnOrder);
   if (!order.length) {
     return source;
   }

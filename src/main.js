@@ -614,11 +614,14 @@ registerV2Component('v2DashboardApp', () => ({
     style: ''
   },
   gridColumnOrder() {
+    const requirementIds = Array.isArray(this.requirements)
+      ? this.requirements
+          .filter(requirement => typeof requirement?.id !== 'undefined' && requirement.id !== null)
+          .map(requirement => requirement.id)
+      : [];
     return {
       info: ['name', 'seniorityHours', 'jobClass', 'jobTitle', 'ranking', 'positionStatus'],
-      requirements: this.requirements
-        .filter(Boolean)
-        .map(requirement => requirement.id ?? requirement.key)
+      requirements: requirementIds
     };
   },
   gridInfoColumnLabel(key) {
