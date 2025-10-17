@@ -52,24 +52,74 @@
     </header>
     <div class="flex-1 overflow-y-auto px-6 py-6">
       <div class="space-y-6">
+        <div class="space-y-2">
+          <span class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Import mode</span>
+          <div
+            class="inline-flex rounded-lg bg-slate-100 p-1 text-sm font-medium text-slate-600 shadow-sm dark:bg-slate-800/70 dark:text-slate-300"
+            role="tablist"
+          >
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="importDrawer.mode === 'employees'"
+              :tabindex="importDrawer.mode === 'employees' ? 0 : -1"
+              class="rounded-md px-3 py-1.5 transition"
+              :class="
+                importDrawer.mode === 'employees'
+                  ? 'bg-white text-slate-900 shadow ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+              "
+              @click="setImportDrawerMode('employees')"
+            >
+              Employees
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="importDrawer.mode === 'seniority'"
+              :tabindex="importDrawer.mode === 'seniority' ? 0 : -1"
+              class="rounded-md px-3 py-1.5 transition"
+              :class="
+                importDrawer.mode === 'seniority'
+                  ? 'bg-white text-slate-900 shadow ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+              "
+              @click="setImportDrawerMode('seniority')"
+            >
+              Seniority
+            </button>
+          </div>
+        </div>
+
         <div class="space-y-3">
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-200" for="import-file-input">Employee file</label>
+          <label
+            class="block text-sm font-medium text-slate-700 dark:text-slate-200"
+            for="import-file-input"
+            x-text="importDrawer.mode === 'seniority' ? 'Seniority file' : 'Employee file'"
+          ></label>
           <input
             id="import-file-input"
             x-ref="importFileInput"
             type="file"
-            accept=".csv,.json"
+            :accept="importDrawer.mode === 'seniority' ? '.csv,.xlsx' : '.csv,.json'"
             class="block w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             @change="onImportFileChange($event)"
           />
           <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span x-text="importDrawer.fileName || 'CSV files are recommended.'"></span>
+            <span
+              x-text="
+                importDrawer.fileName
+                  || (importDrawer.mode === 'seniority'
+                    ? 'CSV or XLSX files are supported.'
+                    : 'CSV files are recommended.')
+              "
+            ></span>
             <button
               type="button"
               class="text-blue-600 hover:underline dark:text-blue-400"
               @click="downloadSampleCSV()"
             >
-              Download Sample CSV
+              <span x-text="importDrawer.mode === 'seniority' ? 'Download Seniority Sample' : 'Download Sample CSV'"></span>
             </button>
           </div>
         </div>

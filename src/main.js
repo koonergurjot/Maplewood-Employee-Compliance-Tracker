@@ -605,6 +605,7 @@ registerV2Component('v2DashboardApp', () => ({
   },
   importDrawer: {
     open: false,
+    mode: 'employees',
     file: null,
     fileName: '',
     dryRunLoading: false,
@@ -869,6 +870,40 @@ registerV2Component('v2DashboardApp', () => ({
       });
     }
   },
+  setImportDrawerMode(mode) {
+    const normalized = mode === 'seniority' ? 'seniority' : 'employees';
+    if (this.importDrawer.mode === normalized) {
+      return;
+    }
+
+    if (this.importDrawer.dryRunLoading || this.importDrawer.commitLoading) {
+      return;
+    }
+
+    this.importDrawer.mode = normalized;
+    this.importDrawer.file = null;
+    this.importDrawer.fileName = '';
+    this.importDrawer.summary = null;
+    this.importDrawer.mapping = null;
+    this.importDrawer.previewRows = [];
+    this.importDrawer.previewColumns = [];
+    this.importDrawer.previewTotal = 0;
+    this.importDrawer.error = '';
+    this.importDrawer.dryRunLoading = false;
+    this.importDrawer.commitLoading = false;
+    this.importDrawer.commitDisabled = true;
+
+    this.updateImportDrawerCommitState();
+
+    if (this.$refs.importFileInput) {
+      this.$refs.importFileInput.value = '';
+      this.$nextTick(() => {
+        if (typeof this.$refs.importFileInput?.focus === 'function') {
+          this.$refs.importFileInput.focus();
+        }
+      });
+    }
+  },
   closeImportDrawer(options = {}) {
     if (!this.importDrawer.open && !options.force) {
       return;
@@ -886,6 +921,7 @@ registerV2Component('v2DashboardApp', () => ({
     }
   },
   resetImportDrawerState() {
+    this.importDrawer.mode = 'employees';
     this.importDrawer.file = null;
     this.importDrawer.fileName = '';
     this.importDrawer.dryRunLoading = false;
@@ -907,6 +943,16 @@ registerV2Component('v2DashboardApp', () => ({
     state.commitDisabled = disabled;
   },
   downloadSampleCSV() {
+    if (this.importDrawer.mode === 'seniority') {
+      try {
+        window.open('/sample-seniority-import.csv', '_blank', 'noopener');
+      } catch (error) {
+        console.error('Failed to open seniority sample', error);
+        this.setImportDrawerError('Unable to open the seniority sample file.', { toast: false });
+      }
+      return;
+    }
+
     const csv = `First Name,Last Name,Role,Status,Employment Type,Seniority Hours
 Ravneet,KAUR,LPN,Active,Full-Time,1123
 Tirth,SINGH,HCA,Active,Casual,456
@@ -1377,13 +1423,28 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     const fileName = typeof targetFile.name === 'string' ? targetFile.name : '';
     const extension = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
-    if (extension === 'xlsx' && !window.XLSX && !window.__xlsxModule) {
+    const mode = this.importDrawer.mode === 'seniority' ? 'seniority' : 'employees';
+    if (
+      mode === 'seniority'
+      && (extension === 'xlsx' || extension === 'xls')
+      && !window.XLSX
+      && !window.__xlsxModule
+    ) {
       this.toast('Excel not available—use CSV or bundle XLSX', 'error');
       return;
     }
-    const dryRunFn = window.importEmployeesDryRun;
+    const dryRunFn =
+      mode === 'seniority'
+        ? window.importEmployeesSeniorityDryRun
+            || window.importSeniorityDryRun
+            || window.importEmployeesDryRun
+        : window.importEmployeesDryRun;
     if (typeof dryRunFn !== 'function') {
-      this.setImportDrawerError('Employee importer is unavailable. Please reload the page.');
+      const errorMessage =
+        mode === 'seniority'
+          ? 'Seniority importer is unavailable. Please reload the page.'
+          : 'Employee importer is unavailable. Please reload the page.';
+      this.setImportDrawerError(errorMessage);
       return;
     }
     this.importDrawer.dryRunLoading = true;
@@ -1404,9 +1465,19 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     if (this.importDrawer.commitDisabled) {
       return;
     }
-    const commitFn = window.importEmployeesCommit;
+    const mode = this.importDrawer.mode === 'seniority' ? 'seniority' : 'employees';
+    const commitFn =
+      mode === 'seniority'
+        ? window.importEmployeesSeniorityCommit
+            || window.importSeniorityCommit
+            || window.importEmployeesCommit
+        : window.importEmployeesCommit;
     if (typeof commitFn !== 'function') {
-      this.setImportDrawerError('Employee importer is unavailable. Please reload the page.');
+      const errorMessage =
+        mode === 'seniority'
+          ? 'Seniority importer is unavailable. Please reload the page.'
+          : 'Employee importer is unavailable. Please reload the page.';
+      this.setImportDrawerError(errorMessage);
       return;
     }
     this.importDrawer.commitLoading = true;
@@ -1417,15 +1488,16 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       await this.loadData();
       this.closeImportDrawer();
       const store = this.$store?.app;
-      const message = `Employees: ${summary.added} added, ${summary.updated} updated, ${summary.skipped} skipped.`;
+      const label = mode === 'seniority' ? 'Seniority' : 'Employees';
+      const message = `${label}: ${summary.added} added, ${summary.updated} updated, ${summary.skipped} skipped.`;
       if (store && typeof store.showToast === 'function') {
         store.showToast({ type: 'success', message });
       }
       const timelineStore = this.$store?.activityLog;
       if (timelineStore && typeof timelineStore.record === 'function') {
         timelineStore.record({
-          type: 'Import',
-          actionType: 'ImportEmployees',
+          type: mode === 'seniority' ? 'Seniority import' : 'Import',
+          actionType: mode === 'seniority' ? 'ImportEmployeesSeniority' : 'ImportEmployees',
           summary: message,
           timestamp: Date.now(),
           metadata: summary
