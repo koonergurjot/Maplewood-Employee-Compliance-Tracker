@@ -1,0 +1,117 @@
+<div
+  id="add-requirement-modal-root"
+  x-cloak
+  class="pointer-events-none fixed inset-0 flex items-center justify-center px-4"
+>
+  <div
+    x-cloak
+    x-show="addRequirementModal.open"
+    x-transition.opacity.duration.150ms
+    class="pointer-events-none absolute inset-0 z-40 bg-slate-900/50 backdrop-blur-sm"
+  ></div>
+  <button
+    type="button"
+    x-cloak
+    x-show="addRequirementModal.open"
+    class="pointer-events-auto absolute inset-0 z-40 h-full w-full cursor-default"
+    @click="closeAddRequirementModal()"
+    aria-hidden="true"
+    tabindex="-1"
+  ></button>
+  <section
+    x-cloak
+    x-show="addRequirementModal.open"
+    class="pointer-events-auto relative z-50 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="add-requirement-title"
+    @keydown.escape.window="closeAddRequirementModal()"
+    @click.stop
+  >
+    <header class="mb-5 flex items-start justify-between gap-4">
+      <div>
+        <h2 id="add-requirement-title" class="text-lg font-semibold text-slate-900 dark:text-slate-50">
+          Add requirement
+        </h2>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Define the requirement label and optional defaults. Newly added items start pending for every employee.
+        </p>
+      </div>
+      <button
+        type="button"
+        class="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        @click="closeAddRequirementModal()"
+        aria-label="Close add requirement modal"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path
+            fill-rule="evenodd"
+            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+            clip-rule="evenodd"
+          />
+        </svg>
+      </button>
+    </header>
+    <form class="space-y-4" @submit.prevent="submitAddRequirementForm" novalidate>
+      <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+        Name
+        <input
+          type="text"
+          class="input"
+          name="name"
+          x-model="addRequirementModal.form.name"
+          x-ref="addRequirementName"
+          :aria-invalid="Boolean(addRequirementModal.errors.name)"
+          required
+        />
+        <p class="text-xs text-red-600" x-show="addRequirementModal.errors.name" x-text="addRequirementModal.errors.name"></p>
+      </label>
+      <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+        Badge color
+        <input
+          type="color"
+          class="input h-10"
+          name="color"
+          x-model="addRequirementModal.form.color"
+        />
+        <p class="text-xs text-slate-500 dark:text-slate-400">Optional. Used for highlights within the grid.</p>
+      </label>
+      <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+        Default expiry (days)
+        <input
+          type="number"
+          min="0"
+          step="1"
+          class="input"
+          name="defaultExpiryDays"
+          x-model="addRequirementModal.form.defaultExpiryDays"
+          :aria-invalid="Boolean(addRequirementModal.errors.defaultExpiryDays)"
+        />
+        <p
+          class="text-xs text-red-600"
+          x-show="addRequirementModal.errors.defaultExpiryDays"
+          x-text="addRequirementModal.errors.defaultExpiryDays"
+        ></p>
+      </label>
+      <template x-if="addRequirementModal.errors.form">
+        <p
+          class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200"
+          role="alert"
+        >
+          <span x-text="addRequirementModal.errors.form"></span>
+        </p>
+      </template>
+      <footer class="flex justify-end gap-3">
+        <button type="button" class="btn ghost" @click="closeAddRequirementModal()">Cancel</button>
+        <button type="submit" class="btn" :disabled="addRequirementModal.saving">
+          <template x-if="addRequirementModal.saving">
+            <span>Adding…</span>
+          </template>
+          <template x-if="!addRequirementModal.saving">
+            <span>Add requirement</span>
+          </template>
+        </button>
+      </footer>
+    </form>
+  </section>
+</div>
