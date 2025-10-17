@@ -758,6 +758,7 @@ const v2DashboardAppDefinition = () => ({
   roleOptions: [],
   filters: { ...DEFAULT_FILTER_STATE },
   _lastSerializedFilters: '',
+  _lastFilteredEmployeesSignature: '',
   complianceOptions: [
     { value: 'all', label: 'All compliance' },
     { value: 'high', label: '≥ 90%' },
@@ -3453,7 +3454,29 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       this.toast('Unable to copy link.', 'error');
     }
   },
+  buildFilteredEmployeesSignature(list) {
+    const source = Array.isArray(list) && list.length ? list : this.filteredEmployees;
+    if (!Array.isArray(source) || !source.length) {
+      return '';
+    }
+    const ids = source
+      .map(employee => employee?.id)
+      .filter(id => id !== null && typeof id !== 'undefined')
+      .map(id => String(id));
+    if (!ids.length) {
+      return '';
+    }
+    ids.sort();
+    return ids.join('|');
+  },
+  handleFilteredEmployeesChanged(previousSignature, nextSignature) {
+    if (previousSignature === nextSignature) {
+      return;
+    }
+    this.clearSelectedEmployees();
+  },
   applyFilters() {
+    const previousSignature = this._lastFilteredEmployeesSignature;
     const roleFilter = this.filters.roles.map(normalizeLower);
     const statusFilter = normalizeLower(this.filters.status);
     const complianceFilter = this.filters.compliance;
@@ -3503,6 +3526,9 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       }
       return true;
     });
+    const nextSignature = this.buildFilteredEmployeesSignature(this.filteredEmployees);
+    this.handleFilteredEmployeesChanged(previousSignature, nextSignature);
+    this._lastFilteredEmployeesSignature = nextSignature;
     this.updateStoreFilteredEmployees();
     this.syncSelectedEmployees();
   },
