@@ -18,20 +18,55 @@
     </div>
   </template>
 
-  <div class="grid-scroll" role="region" aria-label="Scrollable requirements table" x-show="!loading && filteredEmployees.length">
-    <table class="min-w-full text-sm text-slate-700 requirements-table">
-      <thead class="text-xs uppercase tracking-wide text-slate-500">
-        <tr>
-          <th scope="col" class="sticky left-0 z-10 bg-white px-4 py-3 text-left">Employee</th>
-          <template x-for="req in gridOrderedRequirements()" :key="req.id">
-            <th class="px-4 py-3 text-left whitespace-nowrap" x-text="req.name"></th>
+  <div
+    class="grid-scroll"
+    role="grid"
+    aria-label="Employee requirements grid"
+    x-show="!loading && filteredEmployees.length"
+    x-ref="requirementsGrid"
+    :aria-rowcount="filteredEmployees.length"
+    :aria-colcount="gridOrderedRequirements().length + 1"
+    @keydown.arrow-right.prevent="focusNextCell()"
+    @keydown.arrow-left.prevent="focusPrevCell()"
+    @keydown.arrow-up.prevent="focusUpCell()"
+    @keydown.arrow-down.prevent="focusDownCell()"
+    @focusin="handleGridFocusIn"
+  >
+    <table class="min-w-full text-sm text-slate-700 requirements-table" role="presentation">
+      <thead class="text-xs uppercase tracking-wide text-slate-500" role="rowgroup">
+        <tr role="row">
+          <th
+            scope="col"
+            role="columnheader"
+            aria-colindex="1"
+            class="sticky left-0 z-10 bg-white px-4 py-3 text-left"
+          >
+            Employee
+          </th>
+          <template x-for="(req, colIndex) in gridOrderedRequirements()" :key="req.id">
+            <th
+              role="columnheader"
+              class="px-4 py-3 text-left whitespace-nowrap"
+              :aria-colindex="colIndex + 2"
+              x-text="req.name"
+            ></th>
           </template>
         </tr>
       </thead>
-      <tbody class="divide-y divide-slate-200">
-        <template x-for="employee in filteredEmployees" :key="employee.id">
-          <tr class="bg-white">
-            <th scope="row" class="sticky left-0 z-10 bg-white px-4 py-3 align-top">
+      <tbody class="divide-y divide-slate-200" role="rowgroup">
+        <template x-for="(employee, rowIndex) in filteredEmployees" :key="employee.id">
+          <tr class="bg-white" role="row">
+            <th
+              scope="row"
+              role="rowheader"
+              class="sticky left-0 z-10 bg-white px-4 py-3 align-top"
+              :tabindex="gridCellTabIndex(rowIndex, 0)"
+              :data-row-index="rowIndex"
+              data-col-index="0"
+              :aria-rowindex="rowIndex + 1"
+              aria-colindex="1"
+              @focus="setGridActiveCell(rowIndex, 0)"
+            >
               <div class="flex items-start gap-3">
                 <div class="relative h-8 w-8 shrink-0 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-semibold">
                   <span x-text="(employee.firstName?.[0]||'') + (employee.lastName?.[0]||'')"></span>
@@ -76,8 +111,17 @@
                 </div>
               </div>
             </th>
-            <template x-for="req in gridOrderedRequirements()" :key="req.id">
-              <td class="px-4 py-3 align-top">
+            <template x-for="(req, colIndex) in gridOrderedRequirements()" :key="req.id">
+              <td
+                class="px-4 py-3 align-top"
+                role="gridcell"
+                :tabindex="gridCellTabIndex(rowIndex, colIndex + 1)"
+                :data-row-index="rowIndex"
+                :data-col-index="colIndex + 1"
+                :aria-rowindex="rowIndex + 1"
+                :aria-colindex="colIndex + 2"
+                @focus="setGridActiveCell(rowIndex, colIndex + 1)"
+              >
                 <div x-data="requirementCell(employee.id, req.id)" x-init="init()" class="flex items-center gap-2">
                   <input
                     type="checkbox"

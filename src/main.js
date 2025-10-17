@@ -837,6 +837,10 @@ const v2DashboardAppDefinition = () => ({
     requirementId: null,
     style: ''
   },
+  gridActiveCell: {
+    row: 0,
+    col: 0
+  },
   gridColumnOrder() {
     const requirementIds = Array.isArray(this.requirements)
       ? this.requirements
@@ -890,6 +894,125 @@ const v2DashboardAppDefinition = () => ({
       infoIndex += 1;
     }
     return columns;
+  },
+  gridRowCount() {
+    return Array.isArray(this.filteredEmployees) ? this.filteredEmployees.length : 0;
+  },
+  gridColumnCount() {
+    const requirementCount = this.gridOrderedRequirements().length;
+    return 1 + requirementCount;
+  },
+  gridClampCell(row, col) {
+    const rowCount = this.gridRowCount();
+    const colCount = this.gridColumnCount();
+    if (rowCount <= 0 || colCount <= 0) {
+      return { row: 0, col: 0, valid: false };
+    }
+    const maxRow = rowCount - 1;
+    const maxCol = colCount - 1;
+    const nextRow = Math.min(Math.max(Number(row) || 0, 0), maxRow);
+    const nextCol = Math.min(Math.max(Number(col) || 0, 0), maxCol);
+    return { row: nextRow, col: nextCol, valid: true };
+  },
+  gridCellTabIndex(row, col) {
+    return this.gridActiveCell.row === row && this.gridActiveCell.col === col ? 0 : -1;
+  },
+  setGridActiveCell(row, col, options = {}) {
+    const { focus = false } = options;
+    const clamped = this.gridClampCell(row, col);
+    this.gridActiveCell = { row: clamped.row, col: clamped.col };
+    if (focus && clamped.valid) {
+      this.$nextTick(() => {
+        const cell = this.findGridCell(clamped.row, clamped.col);
+        if (cell) {
+          cell.focus();
+        }
+      });
+    }
+  },
+  ensureGridActiveCellInBounds({ focus = false } = {}) {
+    const clamped = this.gridClampCell(this.gridActiveCell.row, this.gridActiveCell.col);
+    if (!clamped.valid) {
+      this.gridActiveCell = { row: 0, col: 0 };
+      return;
+    }
+    this.setGridActiveCell(clamped.row, clamped.col, { focus });
+  },
+  findGridCell(row, col) {
+    const grid = this.$refs?.requirementsGrid;
+    if (!grid) {
+      return null;
+    }
+    return grid.querySelector(`[data-row-index="${row}"][data-col-index="${col}"]`);
+  },
+  focusGridCell(row, col) {
+    this.setGridActiveCell(row, col, { focus: true });
+  },
+  focusNextCell() {
+    if (this.gridRowCount() === 0 || this.gridColumnCount() === 0) {
+      return;
+    }
+    const maxRow = this.gridRowCount() - 1;
+    const maxCol = this.gridColumnCount() - 1;
+    let { row, col } = this.gridActiveCell;
+    if (col < maxCol) {
+      col += 1;
+    } else if (row < maxRow) {
+      row += 1;
+      col = 0;
+    } else {
+      row = maxRow;
+      col = maxCol;
+    }
+    this.focusGridCell(row, col);
+  },
+  focusPrevCell() {
+    if (this.gridRowCount() === 0 || this.gridColumnCount() === 0) {
+      return;
+    }
+    const maxCol = this.gridColumnCount() - 1;
+    let { row, col } = this.gridActiveCell;
+    if (col > 0) {
+      col -= 1;
+    } else if (row > 0) {
+      row -= 1;
+      col = maxCol;
+    } else {
+      row = 0;
+      col = 0;
+    }
+    this.focusGridCell(row, col);
+  },
+  focusUpCell() {
+    if (this.gridRowCount() === 0 || this.gridColumnCount() === 0) {
+      return;
+    }
+    const targetRow = Math.max(this.gridActiveCell.row - 1, 0);
+    this.focusGridCell(targetRow, this.gridActiveCell.col);
+  },
+  focusDownCell() {
+    if (this.gridRowCount() === 0 || this.gridColumnCount() === 0) {
+      return;
+    }
+    const maxRow = this.gridRowCount() - 1;
+    const targetRow = Math.min(this.gridActiveCell.row + 1, maxRow);
+    this.focusGridCell(targetRow, this.gridActiveCell.col);
+  },
+  handleGridFocusIn(event) {
+    const rawTarget = event?.target;
+    if (!rawTarget || typeof rawTarget.closest !== 'function') {
+      return;
+    }
+    const target = rawTarget.closest('[data-row-index][data-col-index]');
+    if (!target) {
+      return;
+    }
+    const row = Number.parseInt(target.getAttribute('data-row-index'), 10);
+    const col = Number.parseInt(target.getAttribute('data-col-index'), 10);
+    if (Number.isNaN(row) || Number.isNaN(col)) {
+      return;
+    }
+    this.setGridActiveCell(row, col);
   },
   gridInfoCellText(employee, key) {
     if (!employee) {
@@ -1067,6 +1190,25 @@ const v2DashboardAppDefinition = () => ({
         }
       }
     );
+    this.$watch(
+      () => this.filteredEmployees.length,
+      () => {
+        this.ensureGridActiveCellInBounds();
+      }
+    );
+    this.$watch(
+      () => this.requirements.length,
+      () => {
+        this.ensureGridActiveCellInBounds();
+      }
+    );
+    this.$watch(
+      () => this.gridColumnCount(),
+      () => {
+        this.ensureGridActiveCellInBounds();
+      }
+    );
+    this.ensureGridActiveCellInBounds();
     this.resetAddRequirementForm();
     this.resetAddEmployeeForm();
     this.bootstrap();
