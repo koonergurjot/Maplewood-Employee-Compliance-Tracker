@@ -2,6 +2,7 @@ import Papa from 'papaparse';
 
 import { openDatabase, mapPositionStatus } from '../../db.js';
 import { ImportEmployees } from '../../commands.js';
+import { recordImportActivity } from '../v2/api.js';
 import {
   buildHeaderMap,
   detectHeaderRow,
@@ -60,6 +61,20 @@ const buildCompositeKey = (firstName, lastName, role) => {
   }
 
   return [last, first, rolePart].join('|');
+};
+
+const resolveCurrentUserName = () => {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+  const flags = window.APP_FLAGS && typeof window.APP_FLAGS === 'object' ? window.APP_FLAGS : {};
+  if (typeof flags.currentUserName === 'string') {
+    const trimmed = flags.currentUserName.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return '';
 };
 
 const parseFloatValue = value => {
@@ -633,7 +648,7 @@ export async function runSeniorityDryRun(file) {
     mappingRows,
     skipped,
     headerRow: headerInfo.row,
-    records
+    records,
     headerRowNumber,
     fileName,
     preview
@@ -699,13 +714,7 @@ const resolvePendingImportConfig = () => {
 
 const buildPendingImportPayload = (context, overrides = {}) => {
   const submittedAt = new Date().toISOString();
-  const userName =
-    (typeof window !== 'undefined'
-      && window.APP_FLAGS
-      && typeof window.APP_FLAGS.currentUserName === 'string'
-      && window.APP_FLAGS.currentUserName.trim())
-      ? window.APP_FLAGS.currentUserName.trim()
-      : '';
+  const userName = resolveCurrentUserName();
 
   const headerRowNumber =
     overrides.headerRowNumber != null
@@ -796,6 +805,9 @@ export async function commitSeniorityImport() {
   const added = result?.addedEmployees?.length || 0;
   const updated = result?.updatedSnapshots?.length || 0;
   const skipped = summary?.skipped || 0;
+  const actor = resolveCurrentUserName() || 'Admin';
+  const total = added + updated;
+  const importSource = 'seniority';
 
   const store = resolveStore();
   if (store && typeof store.loadData === 'function') {
@@ -806,14 +818,23 @@ export async function commitSeniorityImport() {
     }
   }
 
-  if (store && typeof store.recordActivity === 'function') {
-    try {
-      await store.recordActivity('ImportEmployeesSeniority', [], { added, updated, skipped }, null, {
-        supportsUndo: false
-      });
-    } catch (error) {
-      console.warn('Failed to record seniority import activity', error);
-    }
+  try {
+    await recordImportActivity({
+      db,
+      actor,
+      added,
+      updated,
+      skipped,
+      total,
+      source: importSource,
+      metadata: {
+        mode: importSource,
+        fileName: lastImportContext?.fileName || '',
+        summary: summary || null
+      }
+    });
+  } catch (error) {
+    console.warn('Failed to record import activity', error);
   }
 
   lastImportContext = null;

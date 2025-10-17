@@ -1,4 +1,6 @@
 import { AddEmployee, ImportEmployees } from '../../commands.js';
+import ActivityLog from '../../activity-log.js';
+import { generateId } from '../../db.js';
 
 function assertDb(db) {
   if (!db || typeof db.table !== 'function') {
@@ -21,6 +23,39 @@ async function recordActivity(activityLog, entry) {
     console.error('Compat activity record failed', error);
     return null;
   }
+}
+
+function toPositiveInteger(value, fallback = 0) {
+  const numeric = Number.parseInt(value, 10);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Math.max(0, numeric);
+}
+
+function normalizeSource(value) {
+  if (typeof value !== 'string') {
+    return 'CSV';
+  }
+  const trimmed = value.trim();
+  return trimmed || 'CSV';
+}
+
+function resolveActivitiesTable(db) {
+  if (!db) {
+    return null;
+  }
+  if (typeof db.table === 'function') {
+    try {
+      const table = db.table('activities');
+      if (table) {
+        return table;
+      }
+    } catch (error) {
+      console.warn('Failed to access activities table via table()', error);
+    }
+  }
+  return db.activities || null;
 }
 
 export async function addEmployee({
@@ -89,4 +124,87 @@ export async function importEmployees({
   }
 
   return { added, updated, skipped };
+}
+
+export async function recordImportActivity({
+  db,
+  activityLog = null,
+  actor = 'Admin',
+  added = 0,
+  updated = 0,
+  skipped = 0,
+  total,
+  source = 'CSV',
+  metadata = {}
+} = {}) {
+  const database = assertDb(db);
+  const addedCount = toPositiveInteger(added, 0);
+  const updatedCount = toPositiveInteger(updated, 0);
+  const skippedCount = toPositiveInteger(skipped, 0);
+  const resolvedTotal = Number.isFinite(Number(total))
+    ? Math.max(0, Math.trunc(Number(total)))
+    : addedCount + updatedCount;
+  const normalizedSource = normalizeSource(source);
+  const normalizedActor = typeof actor === 'string' && actor.trim() ? actor.trim() : 'Admin';
+  const safeMetadata = metadata && typeof metadata === 'object' ? { ...metadata } : {};
+  const timestampIso = new Date().toISOString();
+  const summary = `Imported ${resolvedTotal} employees (${normalizedSource}). ${addedCount} added, ${updatedCount} updated.`;
+  const details = {
+    added: addedCount,
+    updated: updatedCount,
+    skipped: skippedCount,
+    total: resolvedTotal,
+    source: normalizedSource,
+    approval: {
+      by: normalizedActor,
+      at: timestampIso
+    },
+    ...safeMetadata
+  };
+
+  const entry = {
+    type: 'import',
+    summary,
+    details,
+    createdAt: timestampIso
+  };
+
+  const activitiesTable = resolveActivitiesTable(database);
+  if (activitiesTable && typeof activitiesTable.add === 'function') {
+    try {
+      entry.id = await activitiesTable.add(entry);
+    } catch (error) {
+      console.warn('Failed to persist import activity in activities table', error);
+    }
+  }
+
+  if (entry.id == null) {
+    entry.id = generateId();
+  }
+
+  try {
+    const logInstance = activityLog
+      || (ActivityLog && typeof ActivityLog.init === 'function' ? await ActivityLog.init(database) : null);
+    if (logInstance) {
+      await recordActivity(logInstance, {
+        actionType: 'ImportEmployees',
+        actor: normalizedActor,
+        targets: [],
+        metadata: {
+          added: addedCount,
+          updated: updatedCount,
+          skipped: skippedCount,
+          total: resolvedTotal,
+          source: normalizedSource,
+          ...safeMetadata
+        },
+        undoPayload: null,
+        supportsUndo: false
+      });
+    }
+  } catch (error) {
+    console.warn('Failed to record legacy import activity', error);
+  }
+
+  return entry;
 }
