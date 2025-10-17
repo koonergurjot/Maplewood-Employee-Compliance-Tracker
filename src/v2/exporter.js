@@ -15,6 +15,68 @@ const INFO_LABELS = {
   positionStatus: 'Position Status'
 };
 
+const CORE_EXPORT_FIELDS = [
+  {
+    key: 'employeeId',
+    label: 'Employee ID',
+    csvValue: row => {
+      const value = row?.employeeId;
+      if (typeof value === 'number' || typeof value === 'string') {
+        return String(value).trim();
+      }
+      return '';
+    },
+    jsonValue: row => {
+      if (typeof row?.employeeId === 'number' || typeof row?.employeeId === 'string') {
+        return row.employeeId;
+      }
+      return null;
+    }
+  },
+  {
+    key: 'firstName',
+    label: 'First Name',
+    csvValue: row => formatStringValue(row?.firstName),
+    jsonValue: row => formatStringValue(row?.firstName)
+  },
+  {
+    key: 'lastName',
+    label: 'Last Name',
+    csvValue: row => formatStringValue(row?.lastName),
+    jsonValue: row => formatStringValue(row?.lastName)
+  },
+  {
+    key: 'role',
+    label: 'Role',
+    csvValue: row => formatStringValue(row?.role),
+    jsonValue: row => formatStringValue(row?.role)
+  },
+  {
+    key: 'employmentType',
+    label: 'Employment Type',
+    csvValue: row => formatStringValue(row?.employmentType),
+    jsonValue: row => formatStringValue(row?.employmentType)
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    csvValue: row => formatStringValue(row?.status),
+    jsonValue: row => formatStringValue(row?.status)
+  },
+  {
+    key: 'compliancePercent',
+    label: 'Compliance %',
+    csvValue: row => {
+      const percent = normalizePercent(row?.compliancePercent);
+      if (percent === null) {
+        return formatStringValue(row?.compliancePercent);
+      }
+      return `${percent}%`;
+    },
+    jsonValue: row => normalizePercent(row?.compliancePercent)
+  }
+];
+
 function formatDate(value) {
   if (!value) {
     return '';
@@ -111,6 +173,32 @@ function normalizeNumberLike(value) {
   }
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function formatStringValue(value) {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  if (typeof value === 'number') {
+    return String(value);
+  }
+  if (value === null || typeof value === 'undefined') {
+    return '';
+  }
+  return String(value);
+}
+
+function normalizePercent(value) {
+  const cleaned = typeof value === 'string' ? value.trim().replace(/%$/, '') : value;
+  const numeric = normalizeNumberLike(cleaned);
+  if (numeric === null) {
+    return null;
+  }
+  const rounded = Math.round(Number(numeric));
+  if (!Number.isFinite(rounded)) {
+    return null;
+  }
+  return Math.max(0, Math.min(100, rounded));
 }
 
 function formatInfoValue(row, key) {
@@ -219,7 +307,10 @@ export function exportFilteredCSV(employees, requirements, rows, columnOrder) {
   const infoOrder = resolveInfoOrder(columnOrder);
   const requirementList = orderRequirements(requirements, columnOrder);
 
-  const header = infoOrder.map(key => getInfoLabel(key));
+  const header = [
+    ...CORE_EXPORT_FIELDS.map(field => field.label),
+    ...infoOrder.map(key => getInfoLabel(key))
+  ];
   for (const requirement of requirementList) {
     if (!requirement) continue;
     header.push(String(requirement.name || requirement.id || 'Requirement'));
@@ -229,7 +320,10 @@ export function exportFilteredCSV(employees, requirements, rows, columnOrder) {
   for (const row of exportRows) {
     if (!row) continue;
     const requirementMap = buildRequirementLookup(row);
-    const baseCells = infoOrder.map(key => toCsvValue(formatInfoValue(row, key)));
+    const baseCells = [
+      ...CORE_EXPORT_FIELDS.map(field => toCsvValue(field.csvValue(row))),
+      ...infoOrder.map(key => toCsvValue(formatInfoValue(row, key)))
+    ];
     for (const requirement of requirementList) {
       if (!requirement) {
         baseCells.push('');
@@ -268,6 +362,10 @@ export function exportFilteredJSON(employees, requirements, rows, columnOrder) {
     requirementCount: requirementList.length,
     employees: exportRows.map(row => {
       const info = {};
+      for (const field of CORE_EXPORT_FIELDS) {
+        info[field.key] = field.jsonValue(row);
+      }
+      info.name = formatInfoValue(row, 'name');
       for (const key of infoOrder) {
         info[getInfoLabel(key)] = formatInfoValue(row, key);
       }
