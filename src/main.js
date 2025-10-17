@@ -83,7 +83,7 @@ const inlineEditTemplate = `
 `;
 import './styles/tailwind.css';
 import { openDatabase, generateId, mapPositionStatus } from '../db.js';
-import { AddRequirement } from '../commands.js';
+import { AddRequirement, deleteEmployee as deleteEmployeeHelper } from '../commands.js';
 import { addEmployee as addEmployeeApi } from './v2/api.js';
 import { exportFilteredCSV, exportFilteredJSON } from './v2/exporter.js';
 import {
@@ -482,6 +482,35 @@ function normalizeWindowDays(value, fallback = ANALYTICS_EXPIRING_WINDOW_DAYS) {
   return normalizeNonNegativeNumber(value, fallback);
 }
 
+function splitFullName(fullName, defaults = {}) {
+  const baseline = typeof defaults === 'object' && defaults !== null ? defaults : {};
+  const value = normalizeString(fullName);
+  if (!value) {
+    return {
+      firstName: normalizeString(baseline.firstName),
+      lastName: normalizeString(baseline.lastName)
+    };
+  }
+  const parts = value.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return {
+      firstName: '',
+      lastName: ''
+    };
+  }
+  if (parts.length === 1) {
+    return {
+      firstName: parts[0],
+      lastName: ''
+    };
+  }
+  const lastName = parts.pop();
+  return {
+    firstName: parts.join(' '),
+    lastName: lastName || ''
+  };
+}
+
 const v2DashboardAppDefinition = () => ({
   db: null,
   activityLog: [],
@@ -569,7 +598,8 @@ const v2DashboardAppDefinition = () => ({
   formErrors: {},
   formSaving: false,
   api: {
-    addEmployee: addEmployeeApi
+    addEmployee: addEmployeeApi,
+    deleteEmployee: deleteEmployeeHelper
   },
   addRequirementModal: {
     open: false,
@@ -596,7 +626,18 @@ const v2DashboardAppDefinition = () => ({
   },
   profilePanel: {
     open: false,
-    employeeId: null
+    employeeId: null,
+    editing: false,
+    saving: false,
+    error: '',
+    form: {
+      name: '',
+      seniorityHours: '',
+      jobClass: '',
+      jobTitle: '',
+      ranking: '',
+      positionStatus: ''
+    }
   },
   activeEditor: {
     open: false,
@@ -735,6 +776,8 @@ const v2DashboardAppDefinition = () => ({
     fileName: '',
     dryRunLoading: false,
     commitLoading: false,
+    commitLocalLoading: false,
+    submitLoading: false,
     summary: null,
     mapping: null,
     mappingRows: [],
@@ -758,6 +801,9 @@ const v2DashboardAppDefinition = () => ({
     pendingImportsLoading: false,
     pendingImportsError: '',
     approvingBatchId: ''
+    commitLocalDisabled: true,
+    submitDisabled: true,
+    headerRowNumber: null
   },
   init() {
     if (!window.APP_FLAGS?.USE_V2_MAIN) {
@@ -916,7 +962,7 @@ const v2DashboardAppDefinition = () => ({
     }
 
     try {
-      this.partials.employeeProfile = employeeProfileTemplate;
+      this.partials.employeeProfile = profileDrawerTemplate;
       this.hydrateEmployeeProfile();
     } catch (error) {
       console.error(error);
@@ -1019,7 +1065,12 @@ const v2DashboardAppDefinition = () => ({
       return;
     }
 
-    if (this.importDrawer.dryRunLoading || this.importDrawer.commitLoading) {
+    if (
+      this.importDrawer.dryRunLoading
+      || this.importDrawer.commitLoading
+      || this.importDrawer.commitLocalLoading
+      || this.importDrawer.submitLoading
+    ) {
       return;
     }
 
@@ -1036,6 +1087,10 @@ const v2DashboardAppDefinition = () => ({
     this.importDrawer.dryRunLoading = false;
     this.importDrawer.commitLoading = false;
     this.importDrawer.commitDisabled = true;
+    this.importDrawer.commitLocalLoading = false;
+    this.importDrawer.submitLoading = false;
+    this.importDrawer.commitLocalDisabled = true;
+    this.importDrawer.submitDisabled = true;
     this.importDrawer.headerRowNumber = null;
 
     this.updateImportDrawerCommitState();
@@ -1073,6 +1128,8 @@ const v2DashboardAppDefinition = () => ({
     this.importDrawer.fileName = '';
     this.importDrawer.dryRunLoading = false;
     this.importDrawer.commitLoading = false;
+    this.importDrawer.commitLocalLoading = false;
+    this.importDrawer.submitLoading = false;
     this.importDrawer.summary = null;
     this.importDrawer.mapping = null;
     this.importDrawer.mappingRows = [];
@@ -1095,6 +1152,9 @@ const v2DashboardAppDefinition = () => ({
     this.importDrawer.adminMode = false;
     this.importDrawer.pendingImports = [];
     this.importDrawer.pendingImportsLoading = false;
+    this.importDrawer.commitDisabled = true;
+    this.importDrawer.commitLocalDisabled = true;
+    this.importDrawer.submitDisabled = true;
     this.updateImportDrawerCommitState();
     if (this.$refs.importFileInput) {
       this.$refs.importFileInput.value = '';
@@ -1347,6 +1407,11 @@ const v2DashboardAppDefinition = () => ({
     } finally {
       this.importDrawer.approvingBatchId = '';
     }
+    const hasSummary = !!state.summary && typeof state.summary === 'object';
+    const baseDisabled = !state.file || !hasSummary || state.dryRunLoading;
+    state.commitDisabled = baseDisabled || state.commitLoading;
+    state.commitLocalDisabled = baseDisabled || state.commitLocalLoading || state.submitLoading;
+    state.submitDisabled = baseDisabled || state.submitLoading || state.commitLocalLoading;
   },
   downloadSampleCSV() {
     if (this.importDrawer.mode === 'seniority') {
@@ -1837,6 +1902,50 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       window.alert(payload.message);
     }
   },
+  async confirmAndDeleteEmployee(employeeId) {
+    if (!this.db || !employeeId) {
+      return;
+    }
+    const employee = await this.db.employees.get(employeeId);
+    if (!employee) {
+      return;
+    }
+    const displayName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.name || 'this employee';
+    const ok = confirm(`Are you sure you want to permanently delete ${displayName}? This cannot be undone.`);
+    if (!ok) {
+      return;
+    }
+
+    if (typeof this.api?.deleteEmployee !== 'function') {
+      console.warn('Delete employee API is unavailable.');
+      this.toast('Delete action is unavailable right now.', 'error');
+      return;
+    }
+
+    try {
+      await this.api.deleteEmployee({
+        db: this.db,
+        employeeId,
+        activityLog: this.activityLog
+      });
+    } catch (error) {
+      console.error('Failed to delete employee', error);
+      this.toast('Failed to delete employee', 'error');
+      return;
+    }
+
+    this.employees = this.employees.filter(emp => emp?.id !== employeeId);
+    this.filteredEmployees = this.filteredEmployees.filter(emp => emp?.id !== employeeId);
+    this.selectedEmployees = this.selectedEmployees.filter(id => id !== employeeId);
+
+    if (this.profilePanel.employeeId === employeeId) {
+      this.closeProfile();
+    }
+
+    this.toast(`Deleted ${displayName}`, 'success');
+    await this.loadData();
+    this.applyFilters();
+  },
   downloadSampleCsv() {
     try {
       window.open('/sample-employees.csv', '_blank', 'noopener');
@@ -1852,6 +1961,10 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       return;
     }
     this.profilePanel.employeeId = employee.id;
+    this.profilePanel.editing = false;
+    this.profilePanel.saving = false;
+    this.profilePanel.error = '';
+    this.profilePanel.form = this.buildProfileForm(employee);
     const wasOpen = !!this.profilePanel.open;
     this.profilePanel.open = true;
     this.hydrateEmployeeProfile();
@@ -1870,6 +1983,7 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     this.profilePanel.open = false;
     this.profilePanel.employeeId = null;
+    this.resetProfileForm();
   },
   setImportDrawerError(message, options = {}) {
     const { toast = true } = options;
@@ -1996,6 +2110,12 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.importDrawer.pendingBatchId = '';
     this.importDrawer.approvalMessage = '';
     this.importDrawer.submitLoading = false;
+    this.importDrawer.commitLoading = false;
+    this.importDrawer.commitLocalLoading = false;
+    this.importDrawer.submitLoading = false;
+    this.importDrawer.commitDisabled = true;
+    this.importDrawer.commitLocalDisabled = true;
+    this.importDrawer.submitDisabled = true;
     this.updateImportDrawerCommitState();
     if (file) {
       await this.runImportDryRun(file);
@@ -2048,6 +2168,9 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
   },
   async commitImport() {
+    if (this.importDrawer.mode === 'seniority') {
+      return this.commitImportLocally();
+    }
     if (this.importDrawer.commitDisabled) {
       return;
     }
@@ -2100,6 +2223,113 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       this.setImportDrawerError(message);
     } finally {
       this.importDrawer.commitLoading = false;
+      this.updateImportDrawerCommitState();
+    }
+  },
+  async commitImportLocally() {
+    if (this.importDrawer.mode !== 'seniority') {
+      return this.commitImport();
+    }
+    if (this.importDrawer.commitLocalDisabled) {
+      return;
+    }
+    const commitFn =
+      window.importEmployeesSeniorityCommit
+        || window.importSeniorityCommit
+        || window.importEmployeesCommit;
+    if (typeof commitFn !== 'function') {
+      this.setImportDrawerError('Seniority importer is unavailable. Please reload the page.');
+      return;
+    }
+    this.importDrawer.commitLocalLoading = true;
+    this.updateImportDrawerCommitState();
+    try {
+      const result = await commitFn();
+      const summary = this.normalizeImportSummary(result || {});
+      await this.loadData();
+      this.closeImportDrawer();
+      const store = this.$store?.app;
+      const message = `Seniority import committed locally: ${summary.added} added, ${summary.updated} updated, ${summary.skipped} skipped.`;
+      if (store && typeof store.showToast === 'function') {
+        store.showToast({ type: 'success', message });
+      }
+      const total = summary.added + summary.updated;
+      const approvedBy = (window.APP_FLAGS?.currentUserName && String(window.APP_FLAGS.currentUserName).trim())
+        || 'Admin';
+      await this.recordActivity({
+        type: 'import',
+        summary: `Imported ${total} employees (seniority). ${summary.updated} updated. ${summary.added} added.`,
+        details: {
+          ...summary,
+          source: 'seniority',
+          total,
+          approvedBy,
+          approvedAt: new Date().toISOString(),
+          action: 'localCommit'
+        }
+      });
+    } catch (error) {
+      console.error('Seniority import commit failed', error);
+      const message = error?.message ? String(error.message) : 'Local commit failed. Check the console for details.';
+      this.setImportDrawerError(message);
+    } finally {
+      this.importDrawer.commitLocalLoading = false;
+      this.updateImportDrawerCommitState();
+    }
+  },
+  async submitImportForApproval() {
+    if (this.importDrawer.mode !== 'seniority') {
+      return;
+    }
+    if (this.importDrawer.submitDisabled) {
+      return;
+    }
+    const submitFn =
+      window.importEmployeesSenioritySubmitForApproval
+        || window.importSenioritySubmitForApproval
+        || window.submitSeniorityImportForApproval;
+    if (typeof submitFn !== 'function') {
+      this.setImportDrawerError('Pending import workflow is unavailable. Please reload the page.');
+      return;
+    }
+    this.importDrawer.submitLoading = true;
+    this.updateImportDrawerCommitState();
+    try {
+      const result = await submitFn({
+        fileName: this.importDrawer.fileName,
+        headerRowNumber: this.importDrawer.headerRowNumber
+      });
+      const summarySource = result && typeof result === 'object' && result.summary ? result.summary : result;
+      const summary = this.normalizeImportSummary(summarySource || {});
+      this.closeImportDrawer();
+      const store = this.$store?.app;
+      const message = `Seniority import submitted for approval: ${summary.added} added, ${summary.updated} updated, ${summary.skipped} skipped.`;
+      if (store && typeof store.showToast === 'function') {
+        store.showToast({ type: 'success', message });
+      }
+      const total = summary.added + summary.updated;
+      const submittedBy = (window.APP_FLAGS?.currentUserName && String(window.APP_FLAGS.currentUserName).trim())
+        || 'Admin';
+      await this.recordActivity({
+        type: 'importPending',
+        summary: `Submitted ${total} seniority updates for approval. ${summary.updated} updated. ${summary.added} added.`,
+        details: {
+          ...summary,
+          source: 'seniority',
+          total,
+          approval: {
+            status: 'pending',
+            submittedBy,
+            submittedAt: new Date().toISOString()
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Submit for approval failed', error);
+      const message = error?.message ? String(error.message) : 'Submit for approval failed. Check the console for details.';
+      this.setImportDrawerError(message);
+    } finally {
+      this.importDrawer.submitLoading = false;
       this.updateImportDrawerCommitState();
     }
   },
@@ -3123,6 +3353,40 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     if (!employee) return '—';
     return this.gridInfoCellText(employee, 'seniorityHours');
   },
+  profileInfoRows() {
+    const employee = this.profileEmployee();
+    if (!employee) {
+      return [];
+    }
+    return [
+      { key: 'name', label: 'Name', value: this.profileEmployeeName() },
+      {
+        key: 'seniorityHours',
+        label: 'Seniority Hours',
+        value: this.gridInfoCellText(employee, 'seniorityHours')
+      },
+      {
+        key: 'jobClass',
+        label: 'Job Class',
+        value: employee.jobClass ? String(employee.jobClass).trim() : '—'
+      },
+      {
+        key: 'jobTitle',
+        label: 'Job Title',
+        value: employee.jobTitle || employee.role || '—'
+      },
+      {
+        key: 'ranking',
+        label: 'Ranking',
+        value: employee.ranking ? String(employee.ranking).trim() : '—'
+      },
+      {
+        key: 'positionStatus',
+        label: 'Position Status',
+        value: employee.positionStatus || employee.status || '—'
+      }
+    ];
+  },
   profileCompliancePercent() {
     if (!this.profilePanel.employeeId) return 0;
     return this.employeeCompliancePercent(this.profilePanel.employeeId);
@@ -3165,6 +3429,22 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     return 'All assignments are on track.';
   },
+  profileRequirementStatusLabel(cell) {
+    const status = normalizeStatus(cell?.status || 'Pending');
+    if (status === 'Exempt') {
+      return 'Exempt';
+    }
+    if (this.cellExpired(cell)) {
+      return 'Expired';
+    }
+    if (status === 'Completed' && this.cellWarn(cell)) {
+      return 'Due soon';
+    }
+    if (status === 'Completed') {
+      return 'Completed';
+    }
+    return 'Pending';
+  },
   profileAssignments() {
     if (!this.profilePanel.employeeId) {
       return [];
@@ -3176,15 +3456,249 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       if (!requirement) return;
       const cell = this.getRequirementCell(employeeId, requirement.id);
       const keyBase = requirement.id ?? requirement.key ?? requirement.name ?? index;
+      const completedOn = cell.completedAt ? this.formatDate(cell.completedAt) : '';
+      const expiresOn = cell.expiresAt ? this.formatDate(cell.expiresAt) : '';
       assignments.push({
         key: `req-${String(keyBase)}-${index}`,
         name: requirement.name || 'Requirement',
         badgeClass: this.requirementBadgeClass(cell),
         badgeLabel: this.chipText(cell),
-        subtext: this.cellSubtext(cell)
+        subtext: this.cellSubtext(cell),
+        statusLabel: this.profileRequirementStatusLabel(cell),
+        completedOn: completedOn || '—',
+        expiresOn: expiresOn || '—'
       });
     });
     return assignments;
+  },
+  profileFormDefaults() {
+    return {
+      name: '',
+      seniorityHours: '',
+      jobClass: '',
+      jobTitle: '',
+      ranking: '',
+      positionStatus: ''
+    };
+  },
+  buildProfileForm(employee) {
+    if (!employee) {
+      return this.profileFormDefaults();
+    }
+    const first = normalizeString(employee.firstName);
+    const last = normalizeString(employee.lastName);
+    const fullName = `${first} ${last}`.trim() || normalizeString(employee.fullName);
+    let seniority = '';
+    if (typeof employee.seniorityHours === 'number') {
+      seniority = Number.isFinite(employee.seniorityHours)
+        ? String(employee.seniorityHours)
+        : '';
+    } else if (typeof employee.seniorityHours === 'string') {
+      seniority = employee.seniorityHours.trim();
+    }
+    return {
+      name: fullName,
+      seniorityHours: seniority,
+      jobClass: employee.jobClass ? String(employee.jobClass).trim() : '',
+      jobTitle: employee.jobTitle ? String(employee.jobTitle).trim() : employee.role || '',
+      ranking: employee.ranking ? String(employee.ranking).trim() : '',
+      positionStatus: employee.positionStatus
+        ? String(employee.positionStatus).trim()
+        : employee.status
+          ? String(employee.status).trim()
+          : ''
+    };
+  },
+  resetProfileForm(employee = null) {
+    const source = employee || this.profileEmployee();
+    this.profilePanel.form = this.buildProfileForm(source);
+    this.profilePanel.editing = false;
+    this.profilePanel.saving = false;
+    this.profilePanel.error = '';
+  },
+  startProfileEdit() {
+    const employee = this.profileEmployee();
+    if (!employee) {
+      this.profilePanel.error = 'Employee not found.';
+      return;
+    }
+    this.profilePanel.form = this.buildProfileForm(employee);
+    this.profilePanel.editing = true;
+    this.profilePanel.error = '';
+    this.$nextTick(() => {
+      const node = document.querySelector('#employee-profile-root [data-profile-autofocus]');
+      if (node && typeof node.focus === 'function') {
+        node.focus();
+      }
+    });
+  },
+  cancelProfileEdit() {
+    const employee = this.profileEmployee();
+    this.profilePanel.form = this.buildProfileForm(employee);
+    this.profilePanel.editing = false;
+    this.profilePanel.saving = false;
+    this.profilePanel.error = '';
+  },
+  normalizeProfileSeniorityInput(value) {
+    if (value === null || typeof value === 'undefined') {
+      return '';
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : '';
+    }
+    const stringValue = String(value).trim();
+    if (!stringValue) {
+      return '';
+    }
+    const numeric = Number(stringValue.replace(/,/g, ''));
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+    return stringValue;
+  },
+  profileFormIsUnchanged(form, employee) {
+    if (!employee) {
+      return false;
+    }
+    const baseline = this.buildProfileForm(employee);
+    const keys = ['name', 'seniorityHours', 'jobClass', 'jobTitle', 'ranking', 'positionStatus'];
+    return keys.every(key => normalizeString(form?.[key]) === normalizeString(baseline[key]));
+  },
+  async saveProfileChanges() {
+    if (!this.profilePanel.editing || this.profilePanel.saving) {
+      return;
+    }
+    const employee = this.profileEmployee();
+    if (!employee) {
+      this.profilePanel.error = 'Employee not found.';
+      return;
+    }
+    const form = this.profilePanel.form || {};
+    if (this.profileFormIsUnchanged(form, employee)) {
+      this.profilePanel.editing = false;
+      this.profilePanel.error = '';
+      return;
+    }
+    const fullName = normalizeString(form.name);
+    if (!fullName) {
+      this.profilePanel.error = 'Name is required.';
+      return;
+    }
+    const { firstName, lastName } = splitFullName(form.name, employee);
+    const seniorityHours = this.normalizeProfileSeniorityInput(form.seniorityHours);
+    const jobClass = typeof form.jobClass === 'string' ? form.jobClass.trim() : '';
+    const jobTitle = typeof form.jobTitle === 'string' ? form.jobTitle.trim() : '';
+    const ranking = typeof form.ranking === 'string' ? form.ranking.trim() : '';
+    const positionInput = typeof form.positionStatus === 'string' ? form.positionStatus.trim() : '';
+    const normalizedPositionStatus = mapPositionStatus(positionInput) || positionInput;
+    const updates = {
+      firstName,
+      lastName,
+      fullName,
+      seniorityHours,
+      jobClass,
+      jobTitle,
+      ranking,
+      positionStatus: normalizedPositionStatus,
+      updatedAt: new Date().toISOString()
+    };
+    const syncPayload = {
+      id: employee.id,
+      firstName,
+      lastName,
+      fullName,
+      seniorityHours,
+      jobClass,
+      jobTitle,
+      ranking,
+      positionStatus: normalizedPositionStatus
+    };
+    const compareKeys = ['firstName', 'lastName', 'seniorityHours', 'jobClass', 'jobTitle', 'ranking', 'positionStatus'];
+    const diff = {};
+    const comparableValue = value => {
+      if (value === null || typeof value === 'undefined') return '';
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : '';
+      }
+      return String(value);
+    };
+    compareKeys.forEach(key => {
+      if (comparableValue(employee[key]) !== comparableValue(updates[key])) {
+        diff[key] = {
+          before: employee[key] ?? '',
+          after: updates[key]
+        };
+      }
+    });
+    this.profilePanel.saving = true;
+    try {
+      const employeesTable = this.db?.table ? this.db.table('employees') : null;
+      if (employeesTable) {
+        await employeesTable.update(employee.id, updates);
+      }
+      const index = this.employees.findIndex(emp => emp && emp.id === employee.id);
+      const updatedEmployee = { ...employee, ...updates };
+      if (index !== -1) {
+        this.employees.splice(index, 1, updatedEmployee);
+      }
+      this.employees.sort((a, b) => {
+        const lastCompare = normalizeLower(a?.lastName).localeCompare(normalizeLower(b?.lastName));
+        if (lastCompare !== 0) return lastCompare;
+        return normalizeLower(a?.firstName).localeCompare(normalizeLower(b?.firstName));
+      });
+      this.updateStoreEmployees();
+      this.refreshEmployeeLookups();
+      this.applyFilters();
+      this.profilePanel.form = this.buildProfileForm(updatedEmployee);
+      this.profilePanel.editing = false;
+      this.profilePanel.error = '';
+      await this.syncEmployeeProfileUpdate(employee.id, syncPayload);
+      if (Object.keys(diff).length) {
+        const summaryName = `${normalizeString(updates.firstName)} ${normalizeString(updates.lastName)}`.trim()
+          || updates.fullName
+          || employee.fullName
+          || 'Employee';
+        await this.recordActivity({
+          type: 'employee:update',
+          summary: `Updated profile for ${summaryName}`,
+          details: { employeeId: employee.id, changes: diff }
+        });
+      }
+      this.toast('Employee profile updated', 'success');
+    } catch (error) {
+      console.error('Failed to update employee profile', error);
+      this.profilePanel.error = 'Unable to save changes. Please try again.';
+    } finally {
+      this.profilePanel.saving = false;
+    }
+  },
+  async syncEmployeeProfileUpdate(employeeId, payload) {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const flags = window.APP_FLAGS || {};
+    const flagValue =
+      typeof flags.SUPABASE_SYNC !== 'undefined'
+        ? flags.SUPABASE_SYNC
+        : flags.SUPABASE_SYNC_ENABLED;
+    const syncClient = window.SupabaseSync || window.supabaseSync || window.SUPABASE_SYNC;
+    if (!syncClient) {
+      return;
+    }
+    if (flagValue === false) {
+      return;
+    }
+    try {
+      if (typeof syncClient.updateEmployee === 'function') {
+        await syncClient.updateEmployee(employeeId, payload);
+        return;
+      }
+      if (typeof syncClient.upsertEmployee === 'function') {
+        await syncClient.upsertEmployee(payload);
+      }
+    } catch (error) {
+      console.error('Supabase sync failed', error);
+    }
   },
   async toggleRequirement(empId, reqId, checked) {
     if (!this.db) return;
