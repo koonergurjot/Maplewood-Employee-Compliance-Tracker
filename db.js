@@ -60,6 +60,8 @@ export const BULK_OPERATION_CHUNK_SIZE = 300;
 
 let DexieRef = Dexie ?? null;
 let dexieLoaderPromise = null;
+let databaseInstance = null;
+let databaseOpenPromise = null;
 
 function setDexie(module) {
   if (!module) {
@@ -416,6 +418,10 @@ function defineSchema(db) {
 }
 
 export async function createDatabase() {
+  if (databaseInstance) {
+    return databaseInstance;
+  }
+
   let DexieInstance = getDexie();
   if (!DexieInstance) {
     DexieInstance = await ensureDexieLoaded();
@@ -427,14 +433,29 @@ export async function createDatabase() {
 
   const db = new DexieInstance(DB_NAME);
   defineSchema(db);
-  return db;
+  databaseInstance = db;
+  return databaseInstance;
 }
 
 export async function openDatabase() {
   const db = await createDatabase();
-  await db.open();
-  await seedInitialDataIfNeeded(db);
-  return db;
+
+  if (db.isOpen()) {
+    await seedInitialDataIfNeeded(db);
+    return db;
+  }
+
+  if (!databaseOpenPromise) {
+    databaseOpenPromise = (async () => {
+      await db.open();
+      await seedInitialDataIfNeeded(db);
+      return db;
+    })().finally(() => {
+      databaseOpenPromise = null;
+    });
+  }
+
+  return databaseOpenPromise;
 }
 
 function normalizeLookupType(type) {
@@ -501,6 +522,14 @@ export async function listLookups(type) {
   }
 
   return values;
+}
+
+/**
+ * @deprecated Use {@link listLookups} instead. This alias exists for legacy
+ * modules that still import the singular helper name.
+ */
+export function listLookup(type) {
+  return listLookups(type);
 }
 
 export async function addLookup(type, value) {
