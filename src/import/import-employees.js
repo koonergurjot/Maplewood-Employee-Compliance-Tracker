@@ -21,29 +21,14 @@ const SENIORITY_PREVIEW_COLUMNS = [
   'Position Status'
 ];
 
-const SENIORITY_MAPPING_FIELD_ORDER = [
-  'name',
-  'firstName',
-  'lastName',
-  'seniorityHours',
-  'jobClass',
-  'jobTitle',
-  'ranking',
-  'positionStatus',
-  'employeeId'
+const SENIORITY_MAPPING_DISPLAY = [
+  { key: 'name', label: 'Name' },
+  { key: 'seniorityHours', label: 'Seniority Hours' },
+  { key: 'jobClass', label: 'Job Class' },
+  { key: 'jobTitle', label: 'Job Title' },
+  { key: 'ranking', label: 'Ranking' },
+  { key: 'positionStatus', label: 'Position Status' }
 ];
-
-const SENIORITY_MAPPING_LABELS = {
-  name: 'Employee Name',
-  firstName: 'First Name',
-  lastName: 'Last Name',
-  seniorityHours: 'Seniority Hours',
-  jobClass: 'Job Class',
-  jobTitle: 'Job Title',
-  ranking: 'Ranking',
-  positionStatus: 'Position Status',
-  employeeId: 'Employee ID'
-};
 
 let cachedXlsx = null;
 let xlsxLoadPromise = null;
@@ -533,24 +518,50 @@ const buildMappingRows = (headerRow = [], mapping = {}) => {
   const rows = [];
   const { columns = {}, meta = {} } = mapping;
 
-  const addRow = (fieldKey, index) => {
+  const labelForIndex = index => {
     if (typeof index !== 'number' || index < 0) {
-      return;
+      return '';
     }
-    const sourceHeader = normalizeHeaderLabel(headerRow[index]);
+    return normalizeHeaderLabel(headerRow[index]) || '';
+  };
+
+  const resolveNameSource = () => {
+    if (typeof columns.name === 'number' && columns.name >= 0) {
+      return labelForIndex(columns.name);
+    }
+
+    const parts = [];
+    if (typeof meta.firstName === 'number' && meta.firstName >= 0) {
+      parts.push(labelForIndex(meta.firstName));
+    }
+    if (typeof meta.lastName === 'number' && meta.lastName >= 0) {
+      parts.push(labelForIndex(meta.lastName));
+    }
+
+    return parts.length ? parts.join(' + ') : '';
+  };
+
+  const pushRow = (fieldKey, sourceHeader, label) => {
     rows.push({
       fieldKey,
-      sourceHeader: sourceHeader || '—',
-      mappedField: SENIORITY_MAPPING_LABELS[fieldKey] || fieldKey
+      sourceHeader: sourceHeader || 'Not detected',
+      mappedField: label
     });
   };
 
-  for (const fieldKey of SENIORITY_MAPPING_FIELD_ORDER) {
-    if (fieldKey === 'firstName' || fieldKey === 'lastName') {
-      addRow(fieldKey, meta[fieldKey]);
-    } else {
-      addRow(fieldKey, columns[fieldKey]);
+  const nameSource = resolveNameSource();
+  pushRow('name', nameSource, 'Name');
+
+  for (const entry of SENIORITY_MAPPING_DISPLAY) {
+    if (entry.key === 'name') {
+      continue;
     }
+    const headerLabel = labelForIndex(columns[entry.key]);
+    pushRow(entry.key, headerLabel, entry.label);
+  }
+
+  if (typeof columns.employeeId === 'number' && columns.employeeId >= 0) {
+    pushRow('employeeId', labelForIndex(columns.employeeId), 'Employee ID');
   }
 
   return rows;
@@ -612,14 +623,20 @@ export async function runSeniorityDryRun(file) {
   const mappingRows = buildMappingRows(headerInfo.row, mapping);
   const preview = buildPreview(employees);
   const headerRowNumber = headerInfo.index + 1;
+  const fileName = typeof file?.name === 'string' ? file.name : '';
 
   lastImportContext = {
     mode: 'seniority',
     employees,
     summary,
     mapping: mappingLabels,
+    mappingRows,
     skipped,
-    headerRow: headerInfo.row
+    headerRow: headerInfo.row,
+    records
+    headerRowNumber,
+    fileName,
+    preview
   };
 
   return {
@@ -628,8 +645,142 @@ export async function runSeniorityDryRun(file) {
     mappingRows,
     headerRowNumber,
     preview,
-    skipped
+    skipped,
+    employees,
+    rows: records,
+    headerRow: headerInfo.row
   };
+}
+
+const resolvePendingImportConfig = () => {
+  if (typeof window === 'undefined') {
+    return { endpoint: '', apiKey: '', headers: {} };
+  }
+
+  const flags = (window.APP_FLAGS && typeof window.APP_FLAGS === 'object') ? window.APP_FLAGS : {};
+  const supabase = (flags.supabase && typeof flags.supabase === 'object') ? flags.supabase : {};
+
+  const endpointCandidates = [
+    flags.pendingImportEndpoint,
+    flags.pendingImportsEndpoint,
+    flags.pendingImportUrl,
+    flags.supabasePendingImportUrl,
+    supabase.pendingImportEndpoint,
+    supabase.pendingImportUrl,
+    supabase.pendingImportsUrl,
+    window.SUPABASE_PENDING_IMPORT_ENDPOINT,
+    window.SUPABASE_PENDING_IMPORT_URL
+  ];
+
+  const apiKeyCandidates = [
+    flags.pendingImportKey,
+    flags.supabaseAnonKey,
+    flags.supabaseServiceKey,
+    supabase.pendingImportKey,
+    supabase.anonKey,
+    supabase.serviceKey,
+    window.SUPABASE_PENDING_IMPORT_KEY,
+    window.SUPABASE_ANON_KEY,
+    window.SUPABASE_SERVICE_KEY
+  ];
+
+  const endpoint = endpointCandidates
+    .map(candidate => (typeof candidate === 'string' ? candidate.trim() : ''))
+    .find(Boolean) || '';
+
+  const apiKey = apiKeyCandidates
+    .map(candidate => (typeof candidate === 'string' ? candidate.trim() : ''))
+    .find(Boolean) || '';
+
+  const additionalHeaders = (supabase.headers && typeof supabase.headers === 'object') ? supabase.headers : {};
+
+  return { endpoint, apiKey, headers: additionalHeaders };
+};
+
+const buildPendingImportPayload = (context, overrides = {}) => {
+  const submittedAt = new Date().toISOString();
+  const userName =
+    (typeof window !== 'undefined'
+      && window.APP_FLAGS
+      && typeof window.APP_FLAGS.currentUserName === 'string'
+      && window.APP_FLAGS.currentUserName.trim())
+      ? window.APP_FLAGS.currentUserName.trim()
+      : '';
+
+  const headerRowNumber =
+    overrides.headerRowNumber != null
+      ? overrides.headerRowNumber
+      : context.headerRowNumber != null
+        ? context.headerRowNumber
+        : null;
+
+  return {
+    type: 'seniority',
+    submittedAt,
+    submittedBy: userName || undefined,
+    summary: context.summary || { added: 0, updated: 0, skipped: 0 },
+    mapping: context.mapping || {},
+    mappingRows: context.mappingRows || [],
+    headerRow: context.headerRow || [],
+    employees: context.employees || [],
+    skipped: context.skipped || [],
+    preview: context.preview || null,
+    fileName: overrides.fileName || context.fileName || '',
+    meta: {
+      source: 'seniority',
+      headerRowNumber
+    }
+  };
+};
+
+export async function submitSeniorityImportForApproval(options = {}) {
+  if (!lastImportContext || !Array.isArray(lastImportContext.employees)) {
+    throw new Error('Run a dry-run before submitting for approval.');
+  }
+
+  const { endpoint, apiKey, headers } = resolvePendingImportConfig();
+  if (!endpoint) {
+    throw new Error('Pending import endpoint is not configured.');
+  }
+
+  const payload = buildPendingImportPayload(lastImportContext, options);
+
+  const requestHeaders = {
+    'Content-Type': 'application/json',
+    ...headers
+  };
+
+  if (apiKey) {
+    requestHeaders.apikey = apiKey;
+    requestHeaders.Authorization = `Bearer ${apiKey}`;
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: requestHeaders,
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    const message = errorText ? errorText.trim() : 'Unable to submit the import for approval.';
+    throw new Error(message);
+  }
+
+  let result = null;
+  try {
+    result = await response.json();
+  } catch (error) {
+    result = null;
+  }
+
+  lastImportContext = null;
+
+  if (result && typeof result === 'object') {
+    return result;
+  }
+
+  return { summary: payload.summary };
 }
 
 export async function commitSeniorityImport() {
@@ -673,8 +824,11 @@ export async function commitSeniorityImport() {
 if (typeof window !== 'undefined') {
   window.importEmployeesSeniorityDryRun = runSeniorityDryRun;
   window.importEmployeesSeniorityCommit = commitSeniorityImport;
+  window.importEmployeesSenioritySubmitForApproval = submitSeniorityImportForApproval;
   window.importSeniorityDryRun = runSeniorityDryRun;
   window.importSeniorityCommit = commitSeniorityImport;
+  window.importSenioritySubmitForApproval = submitSeniorityImportForApproval;
+  window.submitSeniorityImportForApproval = submitSeniorityImportForApproval;
 
   if (typeof window.importEmployeesDryRun !== 'function') {
     window.importEmployeesDryRun = runSeniorityDryRun;

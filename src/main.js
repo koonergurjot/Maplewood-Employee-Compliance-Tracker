@@ -10,6 +10,13 @@ import addRequirementModalTemplate from './v2/add-requirement-modal.html?raw';
 import bulkActionsTemplate from './v2/bulk-actions.html?raw';
 import activityTimelineTemplate from './v2/activity-timeline.html?raw';
 import employeeProfileTemplate from './v2/employee-profile.html?raw';
+import {
+  approveImport as approveSupabaseImport,
+  getClient as getSupabaseClient,
+  hasSupabaseConfig,
+  pullEmployeesSince,
+  upsertPendingImport as submitImportForApproval
+} from './cloud/supabase.js';
 const inlineEditTemplate = `
 <template>
   <div class="inline-overlay" x-show="activeEditor.open" x-transition.opacity @click="closeEditor" aria-hidden="true"></div>
@@ -76,7 +83,7 @@ const inlineEditTemplate = `
 `;
 import './styles/tailwind.css';
 import { openDatabase, generateId, mapPositionStatus } from '../db.js';
-import { AddRequirement } from '../commands.js';
+import { AddRequirement, deleteEmployee as deleteEmployeeHelper } from '../commands.js';
 import { addEmployee as addEmployeeApi } from './v2/api.js';
 import { exportFilteredCSV, exportFilteredJSON } from './v2/exporter.js';
 import {
@@ -90,6 +97,7 @@ import {
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
+const CLOUD_LAST_SYNC_STORAGE_KEY = 'maplewood:cloud:lastSync';
 
 const DEFAULT_APP_FLAGS = { USE_V2_MAIN: true };
 const USE_V2_STORAGE_KEY = 'USE_V2_MAIN';
@@ -306,8 +314,70 @@ document.addEventListener('keydown', event => {
 function createAppStore() {
   const store = {
     APP_FLAGS: { ...window.APP_FLAGS },
-    showImportModal: false,
-    showAddEmployeeModal: false,
+    overlay: {
+      current: null,
+      _lastInvoker: null,
+      open(name, options = {}) {
+        if (!name) {
+          return;
+        }
+
+        const invoker = options?.invoker;
+        const isFocusableInvoker = invoker && typeof invoker.focus === 'function' ? invoker : null;
+        const activeElement = (() => {
+          if (typeof document === 'undefined') {
+            return null;
+          }
+          const active = document.activeElement;
+          if (!active || typeof active.focus !== 'function') {
+            return null;
+          }
+          return active;
+        })();
+
+        if (this.current !== name) {
+          this._lastInvoker = isFocusableInvoker || activeElement || null;
+          this.current = name;
+          return;
+        }
+
+        if (isFocusableInvoker) {
+          this._lastInvoker = isFocusableInvoker;
+        }
+      },
+      close(name) {
+        if (name && this.current && name !== this.current) {
+          return;
+        }
+
+        this.current = null;
+
+        const target = this._lastInvoker;
+        this._lastInvoker = null;
+
+        if (!target || typeof target.focus !== 'function') {
+          return;
+        }
+
+        const focusTarget = () => {
+          try {
+            target.focus({ preventScroll: false });
+          } catch (error) {
+            try {
+              target.focus();
+            } catch (nestedError) {
+              void nestedError;
+            }
+          }
+        };
+
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(() => focusTarget());
+        } else {
+          setTimeout(() => focusTarget(), 0);
+        }
+      }
+    },
     showAddRequirementModal: false,
     employees: [],
     filteredEmployees: [],
@@ -474,6 +544,35 @@ function normalizeWindowDays(value, fallback = ANALYTICS_EXPIRING_WINDOW_DAYS) {
   return normalizeNonNegativeNumber(value, fallback);
 }
 
+function splitFullName(fullName, defaults = {}) {
+  const baseline = typeof defaults === 'object' && defaults !== null ? defaults : {};
+  const value = normalizeString(fullName);
+  if (!value) {
+    return {
+      firstName: normalizeString(baseline.firstName),
+      lastName: normalizeString(baseline.lastName)
+    };
+  }
+  const parts = value.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return {
+      firstName: '',
+      lastName: ''
+    };
+  }
+  if (parts.length === 1) {
+    return {
+      firstName: parts[0],
+      lastName: ''
+    };
+  }
+  const lastName = parts.pop();
+  return {
+    firstName: parts.join(' '),
+    lastName: lastName || ''
+  };
+}
+
 const v2DashboardAppDefinition = () => ({
   db: null,
   activityLog: [],
@@ -561,7 +660,8 @@ const v2DashboardAppDefinition = () => ({
   formErrors: {},
   formSaving: false,
   api: {
-    addEmployee: addEmployeeApi
+    addEmployee: addEmployeeApi,
+    deleteEmployee: deleteEmployeeHelper
   },
   addRequirementModal: {
     open: false,
@@ -588,7 +688,18 @@ const v2DashboardAppDefinition = () => ({
   },
   profilePanel: {
     open: false,
-    employeeId: null
+    employeeId: null,
+    editing: false,
+    saving: false,
+    error: '',
+    form: {
+      name: '',
+      seniorityHours: '',
+      jobClass: '',
+      jobTitle: '',
+      ranking: '',
+      positionStatus: ''
+    }
   },
   activeEditor: {
     open: false,
@@ -603,7 +714,7 @@ const v2DashboardAppDefinition = () => ({
           .map(requirement => requirement.id)
       : [];
     return {
-      info: ['name', 'seniorityHours', 'jobClass', 'jobTitle', 'ranking', 'positionStatus'],
+      info: ['name'],
       requirements: requirementIds
     };
   },
@@ -718,6 +829,8 @@ const v2DashboardAppDefinition = () => ({
     completedOn: '',
     expiresOn: ''
   },
+  cloudAvailable: hasSupabaseConfig(),
+  lastCloudSync: '',
   importDrawer: {
     open: false,
     mode: 'employees',
@@ -725,6 +838,8 @@ const v2DashboardAppDefinition = () => ({
     fileName: '',
     dryRunLoading: false,
     commitLoading: false,
+    commitLocalLoading: false,
+    submitLoading: false,
     summary: null,
     mapping: null,
     mappingRows: [],
@@ -733,6 +848,23 @@ const v2DashboardAppDefinition = () => ({
     previewTotal: 0,
     error: '',
     commitDisabled: true,
+    headerRowNumber: null,
+    submitDisabled: true,
+    submitLoading: false,
+    awaitingApproval: false,
+    pendingBatchId: '',
+    approvalMessage: '',
+    pendingRows: [],
+    pendingRawRows: [],
+    pendingSummary: null,
+    pendingHeader: null,
+    adminMode: false,
+    pendingImports: [],
+    pendingImportsLoading: false,
+    pendingImportsError: '',
+    approvingBatchId: ''
+    commitLocalDisabled: true,
+    submitDisabled: true,
     headerRowNumber: null
   },
   init() {
@@ -776,22 +908,26 @@ const v2DashboardAppDefinition = () => ({
       }
     };
     this.$watch(
-      () => this.$store?.app?.showImportModal,
+      () => this.$store?.app?.overlay?.current,
       value => {
-        if (value) {
+        if (value === 'import') {
           this.openImportDrawer();
-        } else if (value === false && this.importDrawer.open) {
+        } else if (this.importDrawer.open && value !== 'import') {
           this.closeImportDrawer({ silent: true });
         }
-      }
-    );
-    this.$watch(
-      () => this.$store?.app?.showAddEmployeeModal,
-      value => {
-        if (value) {
+
+        if (value === 'add') {
           this.openAddEmployeeModal();
-        } else if (value === false && this.showAddEmployeeModal) {
+        } else if (this.showAddEmployeeModal && value !== 'add') {
           this.closeAddEmployeeModal({ silent: true });
+        }
+
+        if (value === 'profile') {
+          if (!this.profilePanel.open && this.profilePanel.employeeId) {
+            this.openProfile(this.profilePanel.employeeId);
+          }
+        } else if (this.profilePanel.open) {
+          this.closeProfile({ silent: true });
         }
       }
     );
@@ -813,8 +949,17 @@ const v2DashboardAppDefinition = () => ({
     try {
       this.loading = true;
       await this.loadPartials();
+      this.cloudAvailable = hasSupabaseConfig();
+      this.lastCloudSync = this.readLastCloudSync();
       this.db = await openDatabase();
       await ensureSeedRequirements(this.db);
+      if (this.cloudAvailable) {
+        try {
+          await this.syncFromCloud();
+        } catch (syncError) {
+          console.warn('Cloud sync failed during bootstrap', syncError);
+        }
+      }
       await this.initActivityLog();
       await this.loadData();
       this.applyFilters();
@@ -883,7 +1028,7 @@ const v2DashboardAppDefinition = () => ({
     }
 
     try {
-      this.partials.employeeProfile = employeeProfileTemplate;
+      this.partials.employeeProfile = profileDrawerTemplate;
       this.hydrateEmployeeProfile();
     } catch (error) {
       console.error(error);
@@ -964,12 +1109,12 @@ const v2DashboardAppDefinition = () => ({
     });
   },
   openImportDrawer() {
+    const store = this.$store?.app;
+    if (store?.overlay && typeof store.overlay.open === 'function') {
+      store.overlay.open('import');
+    }
     const wasOpen = !!this.importDrawer.open;
     this.importDrawer.open = true;
-    const store = this.$store?.app;
-    if (store && store.showImportModal !== true) {
-      store.showImportModal = true;
-    }
     this.hydrateImportDrawer();
     if (!wasOpen) {
       this.$nextTick(() => {
@@ -986,7 +1131,12 @@ const v2DashboardAppDefinition = () => ({
       return;
     }
 
-    if (this.importDrawer.dryRunLoading || this.importDrawer.commitLoading) {
+    if (
+      this.importDrawer.dryRunLoading
+      || this.importDrawer.commitLoading
+      || this.importDrawer.commitLocalLoading
+      || this.importDrawer.submitLoading
+    ) {
       return;
     }
 
@@ -1003,6 +1153,10 @@ const v2DashboardAppDefinition = () => ({
     this.importDrawer.dryRunLoading = false;
     this.importDrawer.commitLoading = false;
     this.importDrawer.commitDisabled = true;
+    this.importDrawer.commitLocalLoading = false;
+    this.importDrawer.submitLoading = false;
+    this.importDrawer.commitLocalDisabled = true;
+    this.importDrawer.submitDisabled = true;
     this.importDrawer.headerRowNumber = null;
 
     this.updateImportDrawerCommitState();
@@ -1028,9 +1182,9 @@ const v2DashboardAppDefinition = () => ({
       this.resetImportDrawerState();
     }
     if (!silent) {
-      const store = this.$store?.app;
-      if (store && store.showImportModal !== false) {
-        store.showImportModal = false;
+      const overlay = this.$store?.app?.overlay;
+      if (overlay && typeof overlay.close === 'function') {
+        overlay.close('import');
       }
     }
   },
@@ -1040,6 +1194,8 @@ const v2DashboardAppDefinition = () => ({
     this.importDrawer.fileName = '';
     this.importDrawer.dryRunLoading = false;
     this.importDrawer.commitLoading = false;
+    this.importDrawer.commitLocalLoading = false;
+    this.importDrawer.submitLoading = false;
     this.importDrawer.summary = null;
     this.importDrawer.mapping = null;
     this.importDrawer.mappingRows = [];
@@ -1048,6 +1204,23 @@ const v2DashboardAppDefinition = () => ({
     this.importDrawer.previewTotal = 0;
     this.importDrawer.error = '';
     this.importDrawer.headerRowNumber = null;
+    this.importDrawer.submitDisabled = true;
+    this.importDrawer.submitLoading = false;
+    this.importDrawer.awaitingApproval = false;
+    this.importDrawer.pendingBatchId = '';
+    this.importDrawer.approvalMessage = '';
+    this.importDrawer.pendingRows = [];
+    this.importDrawer.pendingRawRows = [];
+    this.importDrawer.pendingSummary = null;
+    this.importDrawer.pendingHeader = null;
+    this.importDrawer.pendingImportsError = '';
+    this.importDrawer.approvingBatchId = '';
+    this.importDrawer.adminMode = false;
+    this.importDrawer.pendingImports = [];
+    this.importDrawer.pendingImportsLoading = false;
+    this.importDrawer.commitDisabled = true;
+    this.importDrawer.commitLocalDisabled = true;
+    this.importDrawer.submitDisabled = true;
     this.updateImportDrawerCommitState();
     if (this.$refs.importFileInput) {
       this.$refs.importFileInput.value = '';
@@ -1055,8 +1228,256 @@ const v2DashboardAppDefinition = () => ({
   },
   updateImportDrawerCommitState() {
     const state = this.importDrawer;
-    const disabled = !state.file || !state.summary || state.dryRunLoading || state.commitLoading;
-    state.commitDisabled = disabled;
+    const hasSummary = Boolean(state.summary);
+    const submitDisabled = !hasSummary || state.dryRunLoading || state.submitLoading || !this.cloudAvailable;
+    state.submitDisabled = submitDisabled || state.awaitingApproval;
+    const disabled = !state.file || !hasSummary || state.dryRunLoading || state.commitLoading || state.submitLoading;
+    state.commitDisabled = disabled || state.awaitingApproval;
+  },
+  readLastCloudSync() {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return '';
+    }
+    try {
+      return window.localStorage.getItem(CLOUD_LAST_SYNC_STORAGE_KEY) || '';
+    } catch (error) {
+      console.warn('Unable to read cloud sync timestamp', error);
+      return '';
+    }
+  },
+  writeLastCloudSync(value) {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      this.lastCloudSync = value || '';
+      return;
+    }
+    try {
+      if (value) {
+        window.localStorage.setItem(CLOUD_LAST_SYNC_STORAGE_KEY, value);
+      } else {
+        window.localStorage.removeItem(CLOUD_LAST_SYNC_STORAGE_KEY);
+      }
+      this.lastCloudSync = value || '';
+    } catch (error) {
+      console.warn('Unable to persist cloud sync timestamp', error);
+      this.lastCloudSync = value || '';
+    }
+  },
+  currentUserName() {
+    const flags = typeof window !== 'undefined' ? window.APP_FLAGS || {} : {};
+    const fromFlags = typeof flags.currentUserName === 'string' && flags.currentUserName.trim()
+      ? flags.currentUserName.trim()
+      : '';
+    if (fromFlags) {
+      return fromFlags;
+    }
+    if (typeof flags.currentUserEmail === 'string' && flags.currentUserEmail.trim()) {
+      return flags.currentUserEmail.trim();
+    }
+    return '';
+  },
+  computeLatestSyncTimestamp(employees = [], requirements = []) {
+    const timestamps = [];
+    const collect = value => {
+      if (!value) {
+        return;
+      }
+      try {
+        const iso = new Date(value).toISOString();
+        timestamps.push(iso);
+      } catch (_) {
+        // ignore parse errors
+      }
+    };
+    employees.forEach(entry => collect(entry?.updatedAt));
+    requirements.forEach(entry => collect(entry?.updatedAt));
+    timestamps.sort();
+    return timestamps.length ? timestamps[timestamps.length - 1] : '';
+  },
+  async syncFromCloud(force = false) {
+    if (!this.db || !this.cloudAvailable) {
+      return;
+    }
+    const since = force ? '' : this.readLastCloudSync();
+    const safeSince = typeof since === 'string' && since ? since : '';
+    const result = await pullEmployeesSince(safeSince);
+    if (!result) {
+      return;
+    }
+    const employees = Array.isArray(result.employees) ? result.employees : [];
+    const requirements = Array.isArray(result.employeeRequirements) ? result.employeeRequirements : [];
+    if (employees.length || requirements.length) {
+      await this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async () => {
+        if (employees.length) {
+          await this.db.employees.bulkPut(employees);
+        }
+        if (requirements.length) {
+          await this.db.employeeRequirements.bulkPut(requirements);
+        }
+      });
+    }
+    const nextCursor = result.cursor || this.computeLatestSyncTimestamp(employees, requirements) || new Date().toISOString();
+    if (nextCursor) {
+      this.writeLastCloudSync(nextCursor);
+    }
+  },
+  async submitImportForCloudApproval() {
+    if (!this.cloudAvailable) {
+      this.toast('Cloud sync is not configured.', 'error');
+      return;
+    }
+    if (this.importDrawer.submitLoading) {
+      return;
+    }
+    const rows = Array.isArray(this.importDrawer.pendingRows) ? this.importDrawer.pendingRows : [];
+    if (!rows.length) {
+      this.toast('Run a dry-run before submitting for approval.', 'error');
+      return;
+    }
+    const rawRows = Array.isArray(this.importDrawer.pendingRawRows) ? this.importDrawer.pendingRawRows : [];
+    const payloadRows = rows.map((row, index) => ({
+      mapped: row,
+      raw: rawRows[index] || null
+    }));
+    const metadata = {
+      summary: this.importDrawer.pendingSummary,
+      mapping: this.importDrawer.mapping,
+      headerRow: this.importDrawer.pendingHeader,
+      mode: this.importDrawer.mode === 'seniority' ? 'seniority' : 'employees',
+      fileName: this.importDrawer.fileName,
+      requestedBy: this.currentUserName()
+    };
+    this.importDrawer.submitLoading = true;
+    this.importDrawer.pendingImportsError = '';
+    this.updateImportDrawerCommitState();
+    try {
+      const response = await submitImportForApproval(payloadRows, metadata);
+      this.importDrawer.pendingBatchId = response?.batchId || '';
+      this.importDrawer.awaitingApproval = true;
+      this.importDrawer.approvalMessage = 'Awaiting approval';
+      this.toast('Import submitted for approval.', 'success');
+    } catch (error) {
+      console.error('Failed to submit import for approval', error);
+      const message = error?.message ? `Submit failed: ${error.message}` : 'Submit failed. See console for details.';
+      this.setImportDrawerError(message);
+    } finally {
+      this.importDrawer.submitLoading = false;
+      this.updateImportDrawerCommitState();
+    }
+  },
+  toggleImportAdminMode() {
+    if (!this.cloudAvailable) {
+      this.toast('Cloud sync is not configured.', 'error');
+      return;
+    }
+    this.importDrawer.adminMode = !this.importDrawer.adminMode;
+    if (this.importDrawer.adminMode) {
+      this.loadPendingImports();
+    }
+  },
+  async loadPendingImports() {
+    if (!this.cloudAvailable) {
+      return;
+    }
+    const client = getSupabaseClient();
+    if (!client) {
+      this.importDrawer.pendingImports = [];
+      this.importDrawer.pendingImportsError = '';
+      return;
+    }
+    this.importDrawer.pendingImportsLoading = true;
+    this.importDrawer.pendingImportsError = '';
+    try {
+      const { data, error } = await client
+        .from('imports')
+        .select('id, status, summary, row_count, created_at, requested_by, mode, file_name')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+      if (error) {
+        throw error;
+      }
+      const pending = Array.isArray(data) ? data : [];
+      this.importDrawer.pendingImports = pending.map(entry => {
+        const summary = entry?.summary && typeof entry.summary === 'object' ? entry.summary : {};
+        const added = Number(summary.added) || 0;
+        const updated = Number(summary.updated) || 0;
+        const skipped = Number(summary.skipped) || 0;
+        const createdAt = entry?.created_at ? new Date(entry.created_at) : null;
+        const createdLabel = createdAt && !Number.isNaN(createdAt.valueOf())
+          ? createdAt.toLocaleString()
+          : '';
+        return {
+          id: entry.id,
+          status: entry.status,
+          mode: entry.mode || 'employees',
+          summary,
+          rowCount: entry.row_count || 0,
+          createdAt: entry.created_at,
+          createdAtLabel: createdLabel,
+          requestedBy: entry.requested_by || '',
+          fileName: entry.file_name || '',
+          summaryText: `${added} added, ${updated} updated, ${skipped} skipped`
+        };
+      });
+    } catch (error) {
+      console.error('Failed to load pending imports', error);
+      this.importDrawer.pendingImportsError = error?.message ? String(error.message) : 'Unable to load pending imports.';
+    } finally {
+      this.importDrawer.pendingImportsLoading = false;
+    }
+  },
+  async approvePendingImport(batchId) {
+    if (!batchId || !this.cloudAvailable) {
+      return;
+    }
+    if (this.importDrawer.approvingBatchId) {
+      return;
+    }
+    if (!this.db) {
+      this.toast('Database is not ready.', 'error');
+      return;
+    }
+    this.importDrawer.approvingBatchId = batchId;
+    this.importDrawer.pendingImportsError = '';
+    try {
+      const approvedBy = this.currentUserName() || undefined;
+      const result = await approveSupabaseImport(batchId, { approvedBy });
+      const employees = Array.isArray(result?.employees) ? result.employees : [];
+      const requirements = Array.isArray(result?.employeeRequirements) ? result.employeeRequirements : [];
+      if (employees.length || requirements.length) {
+        await this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async () => {
+          if (employees.length) {
+            await this.db.employees.bulkPut(employees);
+          }
+          if (requirements.length) {
+            await this.db.employeeRequirements.bulkPut(requirements);
+          }
+        });
+      }
+      if (result?.cursor) {
+        this.writeLastCloudSync(result.cursor);
+      } else {
+        const cursor = this.computeLatestSyncTimestamp(employees, requirements);
+        if (cursor) {
+          this.writeLastCloudSync(cursor);
+        }
+      }
+      await this.syncFromCloud(true);
+      await this.loadPendingImports();
+      await this.loadData();
+      this.toast('Import approved and synced.', 'success');
+    } catch (error) {
+      console.error('Failed to approve import', error);
+      const message = error?.message ? String(error.message) : 'Approval failed.';
+      this.importDrawer.pendingImportsError = message;
+      this.toast('Approval failed. See console for details.', 'error');
+    } finally {
+      this.importDrawer.approvingBatchId = '';
+    }
+    const hasSummary = !!state.summary && typeof state.summary === 'object';
+    const baseDisabled = !state.file || !hasSummary || state.dryRunLoading;
+    state.commitDisabled = baseDisabled || state.commitLoading;
+    state.commitLocalDisabled = baseDisabled || state.commitLocalLoading || state.submitLoading;
+    state.submitDisabled = baseDisabled || state.submitLoading || state.commitLocalLoading;
   },
   downloadSampleCSV() {
     if (this.importDrawer.mode === 'seniority') {
@@ -1321,9 +1742,9 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       this.resetAddEmployeeForm();
     }
     this.showAddEmployeeModal = true;
-    const store = this.$store?.app;
-    if (store && store.showAddEmployeeModal !== true) {
-      store.showAddEmployeeModal = true;
+    const overlay = this.$store?.app?.overlay;
+    if (overlay && typeof overlay.open === 'function') {
+      overlay.open('add');
     }
     this.hydrateAddEmployeeModal();
     this.$nextTick(() => {
@@ -1344,9 +1765,9 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       this.resetAddEmployeeForm();
     }
     if (!silent) {
-      const store = this.$store?.app;
-      if (store && store.showAddEmployeeModal !== false) {
-        store.showAddEmployeeModal = false;
+      const overlay = this.$store?.app?.overlay;
+      if (overlay && typeof overlay.close === 'function') {
+        overlay.close('add');
       }
     }
   },
@@ -1547,6 +1968,50 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       window.alert(payload.message);
     }
   },
+  async confirmAndDeleteEmployee(employeeId) {
+    if (!this.db || !employeeId) {
+      return;
+    }
+    const employee = await this.db.employees.get(employeeId);
+    if (!employee) {
+      return;
+    }
+    const displayName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.name || 'this employee';
+    const ok = confirm(`Are you sure you want to permanently delete ${displayName}? This cannot be undone.`);
+    if (!ok) {
+      return;
+    }
+
+    if (typeof this.api?.deleteEmployee !== 'function') {
+      console.warn('Delete employee API is unavailable.');
+      this.toast('Delete action is unavailable right now.', 'error');
+      return;
+    }
+
+    try {
+      await this.api.deleteEmployee({
+        db: this.db,
+        employeeId,
+        activityLog: this.activityLog
+      });
+    } catch (error) {
+      console.error('Failed to delete employee', error);
+      this.toast('Failed to delete employee', 'error');
+      return;
+    }
+
+    this.employees = this.employees.filter(emp => emp?.id !== employeeId);
+    this.filteredEmployees = this.filteredEmployees.filter(emp => emp?.id !== employeeId);
+    this.selectedEmployees = this.selectedEmployees.filter(id => id !== employeeId);
+
+    if (this.profilePanel.employeeId === employeeId) {
+      this.closeProfile();
+    }
+
+    this.toast(`Deleted ${displayName}`, 'success');
+    await this.loadData();
+    this.applyFilters();
+  },
   downloadSampleCsv() {
     try {
       window.open('/sample-employees.csv', '_blank', 'noopener');
@@ -1562,6 +2027,14 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       return;
     }
     this.profilePanel.employeeId = employee.id;
+    this.profilePanel.editing = false;
+    this.profilePanel.saving = false;
+    this.profilePanel.error = '';
+    this.profilePanel.form = this.buildProfileForm(employee);
+    const overlay = this.$store?.app?.overlay;
+    if (overlay && typeof overlay.open === 'function') {
+      overlay.open('profile');
+    }
     const wasOpen = !!this.profilePanel.open;
     this.profilePanel.open = true;
     this.hydrateEmployeeProfile();
@@ -1574,17 +2047,29 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       });
     }
   },
-  closeProfile() {
-    if (!this.profilePanel.open) {
+  closeProfile(options = {}) {
+    const { silent = false, force = false } = options;
+    if (!this.profilePanel.open && !force) {
       return;
     }
     this.profilePanel.open = false;
+    if (!silent) {
+      const overlay = this.$store?.app?.overlay;
+      if (overlay && typeof overlay.close === 'function') {
+        overlay.close('profile');
+      }
+    }
     this.profilePanel.employeeId = null;
+    this.resetProfileForm();
   },
   setImportDrawerError(message, options = {}) {
     const { toast = true } = options;
     const safeMessage = message ? String(message) : 'Import failed.';
     this.importDrawer.error = safeMessage;
+    this.importDrawer.submitLoading = false;
+    this.importDrawer.awaitingApproval = false;
+    this.importDrawer.pendingBatchId = '';
+    this.importDrawer.approvalMessage = '';
     this.updateImportDrawerCommitState();
     if (toast) {
       const store = this.$store?.app;
@@ -1609,6 +2094,19 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.importDrawer.summary = summary;
     const mapping = result && typeof result.mapping === 'object' ? result.mapping : (result && typeof result.columns === 'object' ? result.columns : null);
     this.importDrawer.mapping = mapping;
+    const pendingEmployees = Array.isArray(result?.employees)
+      ? result.employees.filter(row => row && typeof row === 'object')
+      : [];
+    this.importDrawer.pendingRows = pendingEmployees;
+    this.importDrawer.pendingRawRows = Array.isArray(result?.rows)
+      ? result.rows.filter(row => row && typeof row === 'object')
+      : [];
+    this.importDrawer.pendingSummary = summary;
+    this.importDrawer.pendingHeader = Array.isArray(result?.headerRow) ? [...result.headerRow] : null;
+    this.importDrawer.awaitingApproval = false;
+    this.importDrawer.pendingBatchId = '';
+    this.importDrawer.approvalMessage = '';
+    this.importDrawer.submitLoading = false;
     const mappingRows = Array.isArray(result?.mappingRows)
       ? result.mappingRows
           .filter(row => row && typeof row === 'object')
@@ -1681,6 +2179,20 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.importDrawer.previewTotal = 0;
     this.importDrawer.error = '';
     this.importDrawer.headerRowNumber = null;
+    this.importDrawer.pendingRows = [];
+    this.importDrawer.pendingRawRows = [];
+    this.importDrawer.pendingSummary = null;
+    this.importDrawer.pendingHeader = null;
+    this.importDrawer.awaitingApproval = false;
+    this.importDrawer.pendingBatchId = '';
+    this.importDrawer.approvalMessage = '';
+    this.importDrawer.submitLoading = false;
+    this.importDrawer.commitLoading = false;
+    this.importDrawer.commitLocalLoading = false;
+    this.importDrawer.submitLoading = false;
+    this.importDrawer.commitDisabled = true;
+    this.importDrawer.commitLocalDisabled = true;
+    this.importDrawer.submitDisabled = true;
     this.updateImportDrawerCommitState();
     if (file) {
       await this.runImportDryRun(file);
@@ -1733,6 +2245,9 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
   },
   async commitImport() {
+    if (this.importDrawer.mode === 'seniority') {
+      return this.commitImportLocally();
+    }
     if (this.importDrawer.commitDisabled) {
       return;
     }
@@ -1785,6 +2300,113 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       this.setImportDrawerError(message);
     } finally {
       this.importDrawer.commitLoading = false;
+      this.updateImportDrawerCommitState();
+    }
+  },
+  async commitImportLocally() {
+    if (this.importDrawer.mode !== 'seniority') {
+      return this.commitImport();
+    }
+    if (this.importDrawer.commitLocalDisabled) {
+      return;
+    }
+    const commitFn =
+      window.importEmployeesSeniorityCommit
+        || window.importSeniorityCommit
+        || window.importEmployeesCommit;
+    if (typeof commitFn !== 'function') {
+      this.setImportDrawerError('Seniority importer is unavailable. Please reload the page.');
+      return;
+    }
+    this.importDrawer.commitLocalLoading = true;
+    this.updateImportDrawerCommitState();
+    try {
+      const result = await commitFn();
+      const summary = this.normalizeImportSummary(result || {});
+      await this.loadData();
+      this.closeImportDrawer();
+      const store = this.$store?.app;
+      const message = `Seniority import committed locally: ${summary.added} added, ${summary.updated} updated, ${summary.skipped} skipped.`;
+      if (store && typeof store.showToast === 'function') {
+        store.showToast({ type: 'success', message });
+      }
+      const total = summary.added + summary.updated;
+      const approvedBy = (window.APP_FLAGS?.currentUserName && String(window.APP_FLAGS.currentUserName).trim())
+        || 'Admin';
+      await this.recordActivity({
+        type: 'import',
+        summary: `Imported ${total} employees (seniority). ${summary.updated} updated. ${summary.added} added.`,
+        details: {
+          ...summary,
+          source: 'seniority',
+          total,
+          approvedBy,
+          approvedAt: new Date().toISOString(),
+          action: 'localCommit'
+        }
+      });
+    } catch (error) {
+      console.error('Seniority import commit failed', error);
+      const message = error?.message ? String(error.message) : 'Local commit failed. Check the console for details.';
+      this.setImportDrawerError(message);
+    } finally {
+      this.importDrawer.commitLocalLoading = false;
+      this.updateImportDrawerCommitState();
+    }
+  },
+  async submitImportForApproval() {
+    if (this.importDrawer.mode !== 'seniority') {
+      return;
+    }
+    if (this.importDrawer.submitDisabled) {
+      return;
+    }
+    const submitFn =
+      window.importEmployeesSenioritySubmitForApproval
+        || window.importSenioritySubmitForApproval
+        || window.submitSeniorityImportForApproval;
+    if (typeof submitFn !== 'function') {
+      this.setImportDrawerError('Pending import workflow is unavailable. Please reload the page.');
+      return;
+    }
+    this.importDrawer.submitLoading = true;
+    this.updateImportDrawerCommitState();
+    try {
+      const result = await submitFn({
+        fileName: this.importDrawer.fileName,
+        headerRowNumber: this.importDrawer.headerRowNumber
+      });
+      const summarySource = result && typeof result === 'object' && result.summary ? result.summary : result;
+      const summary = this.normalizeImportSummary(summarySource || {});
+      this.closeImportDrawer();
+      const store = this.$store?.app;
+      const message = `Seniority import submitted for approval: ${summary.added} added, ${summary.updated} updated, ${summary.skipped} skipped.`;
+      if (store && typeof store.showToast === 'function') {
+        store.showToast({ type: 'success', message });
+      }
+      const total = summary.added + summary.updated;
+      const submittedBy = (window.APP_FLAGS?.currentUserName && String(window.APP_FLAGS.currentUserName).trim())
+        || 'Admin';
+      await this.recordActivity({
+        type: 'importPending',
+        summary: `Submitted ${total} seniority updates for approval. ${summary.updated} updated. ${summary.added} added.`,
+        details: {
+          ...summary,
+          source: 'seniority',
+          total,
+          approval: {
+            status: 'pending',
+            submittedBy,
+            submittedAt: new Date().toISOString()
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Submit for approval failed', error);
+      const message = error?.message ? String(error.message) : 'Submit for approval failed. Check the console for details.';
+      this.setImportDrawerError(message);
+    } finally {
+      this.importDrawer.submitLoading = false;
       this.updateImportDrawerCommitState();
     }
   },
@@ -2808,6 +3430,40 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     if (!employee) return '—';
     return this.gridInfoCellText(employee, 'seniorityHours');
   },
+  profileInfoRows() {
+    const employee = this.profileEmployee();
+    if (!employee) {
+      return [];
+    }
+    return [
+      { key: 'name', label: 'Name', value: this.profileEmployeeName() },
+      {
+        key: 'seniorityHours',
+        label: 'Seniority Hours',
+        value: this.gridInfoCellText(employee, 'seniorityHours')
+      },
+      {
+        key: 'jobClass',
+        label: 'Job Class',
+        value: employee.jobClass ? String(employee.jobClass).trim() : '—'
+      },
+      {
+        key: 'jobTitle',
+        label: 'Job Title',
+        value: employee.jobTitle || employee.role || '—'
+      },
+      {
+        key: 'ranking',
+        label: 'Ranking',
+        value: employee.ranking ? String(employee.ranking).trim() : '—'
+      },
+      {
+        key: 'positionStatus',
+        label: 'Position Status',
+        value: employee.positionStatus || employee.status || '—'
+      }
+    ];
+  },
   profileCompliancePercent() {
     if (!this.profilePanel.employeeId) return 0;
     return this.employeeCompliancePercent(this.profilePanel.employeeId);
@@ -2850,6 +3506,22 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     return 'All assignments are on track.';
   },
+  profileRequirementStatusLabel(cell) {
+    const status = normalizeStatus(cell?.status || 'Pending');
+    if (status === 'Exempt') {
+      return 'Exempt';
+    }
+    if (this.cellExpired(cell)) {
+      return 'Expired';
+    }
+    if (status === 'Completed' && this.cellWarn(cell)) {
+      return 'Due soon';
+    }
+    if (status === 'Completed') {
+      return 'Completed';
+    }
+    return 'Pending';
+  },
   profileAssignments() {
     if (!this.profilePanel.employeeId) {
       return [];
@@ -2861,15 +3533,249 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       if (!requirement) return;
       const cell = this.getRequirementCell(employeeId, requirement.id);
       const keyBase = requirement.id ?? requirement.key ?? requirement.name ?? index;
+      const completedOn = cell.completedAt ? this.formatDate(cell.completedAt) : '';
+      const expiresOn = cell.expiresAt ? this.formatDate(cell.expiresAt) : '';
       assignments.push({
         key: `req-${String(keyBase)}-${index}`,
         name: requirement.name || 'Requirement',
         badgeClass: this.requirementBadgeClass(cell),
         badgeLabel: this.chipText(cell),
-        subtext: this.cellSubtext(cell)
+        subtext: this.cellSubtext(cell),
+        statusLabel: this.profileRequirementStatusLabel(cell),
+        completedOn: completedOn || '—',
+        expiresOn: expiresOn || '—'
       });
     });
     return assignments;
+  },
+  profileFormDefaults() {
+    return {
+      name: '',
+      seniorityHours: '',
+      jobClass: '',
+      jobTitle: '',
+      ranking: '',
+      positionStatus: ''
+    };
+  },
+  buildProfileForm(employee) {
+    if (!employee) {
+      return this.profileFormDefaults();
+    }
+    const first = normalizeString(employee.firstName);
+    const last = normalizeString(employee.lastName);
+    const fullName = `${first} ${last}`.trim() || normalizeString(employee.fullName);
+    let seniority = '';
+    if (typeof employee.seniorityHours === 'number') {
+      seniority = Number.isFinite(employee.seniorityHours)
+        ? String(employee.seniorityHours)
+        : '';
+    } else if (typeof employee.seniorityHours === 'string') {
+      seniority = employee.seniorityHours.trim();
+    }
+    return {
+      name: fullName,
+      seniorityHours: seniority,
+      jobClass: employee.jobClass ? String(employee.jobClass).trim() : '',
+      jobTitle: employee.jobTitle ? String(employee.jobTitle).trim() : employee.role || '',
+      ranking: employee.ranking ? String(employee.ranking).trim() : '',
+      positionStatus: employee.positionStatus
+        ? String(employee.positionStatus).trim()
+        : employee.status
+          ? String(employee.status).trim()
+          : ''
+    };
+  },
+  resetProfileForm(employee = null) {
+    const source = employee || this.profileEmployee();
+    this.profilePanel.form = this.buildProfileForm(source);
+    this.profilePanel.editing = false;
+    this.profilePanel.saving = false;
+    this.profilePanel.error = '';
+  },
+  startProfileEdit() {
+    const employee = this.profileEmployee();
+    if (!employee) {
+      this.profilePanel.error = 'Employee not found.';
+      return;
+    }
+    this.profilePanel.form = this.buildProfileForm(employee);
+    this.profilePanel.editing = true;
+    this.profilePanel.error = '';
+    this.$nextTick(() => {
+      const node = document.querySelector('#employee-profile-root [data-profile-autofocus]');
+      if (node && typeof node.focus === 'function') {
+        node.focus();
+      }
+    });
+  },
+  cancelProfileEdit() {
+    const employee = this.profileEmployee();
+    this.profilePanel.form = this.buildProfileForm(employee);
+    this.profilePanel.editing = false;
+    this.profilePanel.saving = false;
+    this.profilePanel.error = '';
+  },
+  normalizeProfileSeniorityInput(value) {
+    if (value === null || typeof value === 'undefined') {
+      return '';
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : '';
+    }
+    const stringValue = String(value).trim();
+    if (!stringValue) {
+      return '';
+    }
+    const numeric = Number(stringValue.replace(/,/g, ''));
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+    return stringValue;
+  },
+  profileFormIsUnchanged(form, employee) {
+    if (!employee) {
+      return false;
+    }
+    const baseline = this.buildProfileForm(employee);
+    const keys = ['name', 'seniorityHours', 'jobClass', 'jobTitle', 'ranking', 'positionStatus'];
+    return keys.every(key => normalizeString(form?.[key]) === normalizeString(baseline[key]));
+  },
+  async saveProfileChanges() {
+    if (!this.profilePanel.editing || this.profilePanel.saving) {
+      return;
+    }
+    const employee = this.profileEmployee();
+    if (!employee) {
+      this.profilePanel.error = 'Employee not found.';
+      return;
+    }
+    const form = this.profilePanel.form || {};
+    if (this.profileFormIsUnchanged(form, employee)) {
+      this.profilePanel.editing = false;
+      this.profilePanel.error = '';
+      return;
+    }
+    const fullName = normalizeString(form.name);
+    if (!fullName) {
+      this.profilePanel.error = 'Name is required.';
+      return;
+    }
+    const { firstName, lastName } = splitFullName(form.name, employee);
+    const seniorityHours = this.normalizeProfileSeniorityInput(form.seniorityHours);
+    const jobClass = typeof form.jobClass === 'string' ? form.jobClass.trim() : '';
+    const jobTitle = typeof form.jobTitle === 'string' ? form.jobTitle.trim() : '';
+    const ranking = typeof form.ranking === 'string' ? form.ranking.trim() : '';
+    const positionInput = typeof form.positionStatus === 'string' ? form.positionStatus.trim() : '';
+    const normalizedPositionStatus = mapPositionStatus(positionInput) || positionInput;
+    const updates = {
+      firstName,
+      lastName,
+      fullName,
+      seniorityHours,
+      jobClass,
+      jobTitle,
+      ranking,
+      positionStatus: normalizedPositionStatus,
+      updatedAt: new Date().toISOString()
+    };
+    const syncPayload = {
+      id: employee.id,
+      firstName,
+      lastName,
+      fullName,
+      seniorityHours,
+      jobClass,
+      jobTitle,
+      ranking,
+      positionStatus: normalizedPositionStatus
+    };
+    const compareKeys = ['firstName', 'lastName', 'seniorityHours', 'jobClass', 'jobTitle', 'ranking', 'positionStatus'];
+    const diff = {};
+    const comparableValue = value => {
+      if (value === null || typeof value === 'undefined') return '';
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : '';
+      }
+      return String(value);
+    };
+    compareKeys.forEach(key => {
+      if (comparableValue(employee[key]) !== comparableValue(updates[key])) {
+        diff[key] = {
+          before: employee[key] ?? '',
+          after: updates[key]
+        };
+      }
+    });
+    this.profilePanel.saving = true;
+    try {
+      const employeesTable = this.db?.table ? this.db.table('employees') : null;
+      if (employeesTable) {
+        await employeesTable.update(employee.id, updates);
+      }
+      const index = this.employees.findIndex(emp => emp && emp.id === employee.id);
+      const updatedEmployee = { ...employee, ...updates };
+      if (index !== -1) {
+        this.employees.splice(index, 1, updatedEmployee);
+      }
+      this.employees.sort((a, b) => {
+        const lastCompare = normalizeLower(a?.lastName).localeCompare(normalizeLower(b?.lastName));
+        if (lastCompare !== 0) return lastCompare;
+        return normalizeLower(a?.firstName).localeCompare(normalizeLower(b?.firstName));
+      });
+      this.updateStoreEmployees();
+      this.refreshEmployeeLookups();
+      this.applyFilters();
+      this.profilePanel.form = this.buildProfileForm(updatedEmployee);
+      this.profilePanel.editing = false;
+      this.profilePanel.error = '';
+      await this.syncEmployeeProfileUpdate(employee.id, syncPayload);
+      if (Object.keys(diff).length) {
+        const summaryName = `${normalizeString(updates.firstName)} ${normalizeString(updates.lastName)}`.trim()
+          || updates.fullName
+          || employee.fullName
+          || 'Employee';
+        await this.recordActivity({
+          type: 'employee:update',
+          summary: `Updated profile for ${summaryName}`,
+          details: { employeeId: employee.id, changes: diff }
+        });
+      }
+      this.toast('Employee profile updated', 'success');
+    } catch (error) {
+      console.error('Failed to update employee profile', error);
+      this.profilePanel.error = 'Unable to save changes. Please try again.';
+    } finally {
+      this.profilePanel.saving = false;
+    }
+  },
+  async syncEmployeeProfileUpdate(employeeId, payload) {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const flags = window.APP_FLAGS || {};
+    const flagValue =
+      typeof flags.SUPABASE_SYNC !== 'undefined'
+        ? flags.SUPABASE_SYNC
+        : flags.SUPABASE_SYNC_ENABLED;
+    const syncClient = window.SupabaseSync || window.supabaseSync || window.SUPABASE_SYNC;
+    if (!syncClient) {
+      return;
+    }
+    if (flagValue === false) {
+      return;
+    }
+    try {
+      if (typeof syncClient.updateEmployee === 'function') {
+        await syncClient.updateEmployee(employeeId, payload);
+        return;
+      }
+      if (typeof syncClient.upsertEmployee === 'function') {
+        await syncClient.upsertEmployee(payload);
+      }
+    } catch (error) {
+      console.error('Supabase sync failed', error);
+    }
   },
   async toggleRequirement(empId, reqId, checked) {
     if (!this.db) return;

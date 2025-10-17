@@ -22,7 +22,7 @@
     <table class="requirements-table has-selection-column">
       <thead>
         <tr>
-          <th scope="col" class="sticky-select sticky-header checkbox-cell" rowspan="2">
+          <th scope="col" class="sticky-select sticky-header checkbox-cell">
             <span class="sr-only">Select all employees</span>
             <input
               type="checkbox"
@@ -37,40 +37,20 @@
           <template x-for="column in gridInfoColumns()" :key="`header-${column.key}`">
             <th
               scope="col"
-              rowspan="2"
               :class="[column.headerClass, column.key === 'name' ? 'sticky left-0 z-20 bg-white' : '']"
             >
               <span x-text="column.label"></span>
             </th>
           </template>
-          <th
-            class="sticky-header requirements-divider sticky-divider w-2 bg-slate-100/70 border-l"
-            role="presentation"
-            aria-hidden="true"
-            rowspan="2"
-          ></th>
-          <template x-if="gridOrderedRequirements().length">
-            <th
-              scope="col"
-              class="sticky-header requirements-group"
-              :colspan="gridOrderedRequirements().length"
-            >
-              Requirements
+          <template x-for="req in gridOrderedRequirements()" :key="req.id">
+            <th scope="col" class="sticky-header requirement-header">
+              <div class="requirement-head">
+                <span class="requirement-name" x-text="req.name"></span>
+                <span class="requirement-tag" x-show="req.defaultExpiryDays" x-text="req.defaultExpiryDays + 'd'"></span>
+              </div>
             </th>
           </template>
         </tr>
-        <template x-if="gridOrderedRequirements().length">
-          <tr>
-            <template x-for="req in gridOrderedRequirements()" :key="req.id">
-              <th scope="col" class="sticky-header requirement-header">
-                <div class="requirement-head">
-                  <span class="requirement-name" x-text="req.name"></span>
-                  <span class="requirement-tag" x-show="req.defaultExpiryDays" x-text="req.defaultExpiryDays + 'd'"></span>
-                </div>
-              </th>
-            </template>
-          </tr>
-        </template>
       </thead>
       <tbody>
         <template x-for="employee in filteredEmployees" :key="employee.id">
@@ -110,7 +90,20 @@
                       <div class="font-medium" x-text="employee.fullName || (employee.firstName+' '+employee.lastName)"></div>
                       <div class="text-xs text-slate-500" x-text="(employee.role||'—') + ' • ' + (employee.status||'—')"></div>
                     </div>
-                    <button class="ml-auto text-slate-500 hover:text-slate-700" @click.stop="openProfile(employee.id)" title="Details">⋯</button>
+                    <div class="ml-auto flex items-center gap-2">
+                      <button
+                        type="button"
+                        class="text-slate-500 hover:text-slate-700"
+                        @click.stop="openProfile(employee.id)"
+                        title="Details"
+                      >⋯</button>
+                      <button
+                        type="button"
+                        class="text-rose-600 hover:text-rose-800 text-xs"
+                        title="Delete Employee"
+                        @click.stop="confirmAndDeleteEmployee(employee.id)"
+                      >🗑 Delete</button>
+                    </div>
                   </div>
                 </th>
               </template>
@@ -120,11 +113,6 @@
                 </td>
               </template>
             </template>
-            <td
-              class="requirements-divider sticky-divider w-2 bg-slate-100/70 border-l"
-              role="presentation"
-              aria-hidden="true"
-            ></td>
             <template x-for="req in gridOrderedRequirements()" :key="req.id">
               <td x-data="{ cell: getRequirementCell(employee.id, req.id) }">
                 <div class="cell">

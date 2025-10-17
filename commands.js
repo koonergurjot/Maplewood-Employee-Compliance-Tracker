@@ -77,6 +77,65 @@ export const determineStatusForTemplate = (template, requirementId, fallback = '
   return templateExcludesRequirement(template, requirementId) ? 'NotRequired' : fallback;
 };
 
+export async function deleteEmployee({ db, employeeId, activityLog }) {
+  if (!db || !employeeId) {
+    return;
+  }
+
+  const employeesTable = db.employees;
+  if (!employeesTable?.get) {
+    return;
+  }
+
+  const employee = await employeesTable.get(employeeId);
+  if (!employee) {
+    return;
+  }
+
+  await db.transaction('rw', db.employees, db.employeeRequirements, async (transaction) => {
+    const employeesTable = transaction.table('employees');
+    const employeeRequirementsTable = transaction.table('employeeRequirements');
+
+    let requirementsDeleted = false;
+
+    if (employeeRequirementsTable?.where) {
+      try {
+        await employeeRequirementsTable
+          .where('[employeeId+requirementId]')
+          .startsWith([employeeId])
+          .delete();
+        requirementsDeleted = true;
+      } catch (error) {
+        if (error?.name !== 'InvalidStateError' && error?.name !== 'DataError') {
+          throw error;
+        }
+      }
+    }
+
+    if (!requirementsDeleted && employeeRequirementsTable?.filter) {
+      await employeeRequirementsTable
+        .filter(record => record?.employeeId === employeeId)
+        .delete();
+    }
+
+    await employeesTable.delete(employeeId);
+  });
+
+  const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.name || 'Employee';
+  const summary = `Deleted employee ${fullName} (${employee.role || 'Unknown Role'})`;
+  const entry = {
+    type: 'employee:delete',
+    summary,
+    createdAt: new Date().toISOString()
+  };
+
+  if (db.activities?.add) {
+    await db.activities.add(entry);
+  }
+
+  activityLog?.unshift?.({ ...entry });
+}
+
 export class AddEmployee {
   constructor(db, { employee } = {}) {
     this.db = db;
@@ -676,7 +735,12 @@ export class ImportEmployees {
       return {
         addedEmployees,
         addedEmployeeRequirements,
-        updatedSnapshots
+        updatedSnapshots,
+        summary: {
+          added: addedEmployees.length,
+          updated: updatedSnapshots.length,
+          skipped: Math.max(0, this.employees.length - addedEmployees.length - updatedSnapshots.length)
+        }
       };
     });
   }
