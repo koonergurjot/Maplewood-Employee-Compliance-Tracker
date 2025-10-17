@@ -556,6 +556,23 @@ const v2DashboardAppDefinition = () => ({
     statuses: [...DEFAULT_STATUS_LOOKUPS],
     employmentTypes: [...DEFAULT_EMPLOYMENT_TYPE_LOOKUPS]
   },
+  form: {
+    firstName: '',
+    lastName: '',
+    role: '',
+    status: '',
+    employmentType: '',
+    seniorityHours: '',
+    jobClass: '',
+    jobTitle: '',
+    ranking: '',
+    positionStatus: ''
+  },
+  formErrors: {},
+  formSaving: false,
+  api: {
+    addEmployee: addEmployeeApi
+  },
   addRequirementModal: {
     open: false,
     saving: false,
@@ -563,19 +580,6 @@ const v2DashboardAppDefinition = () => ({
       name: '',
       color: '#e2e8f0',
       defaultExpiryDays: ''
-    },
-    errors: {}
-  },
-  addEmployeeModal: {
-    open: false,
-    saving: false,
-    form: {
-      firstName: '',
-      lastName: '',
-      role: '',
-      status: '',
-      employmentType: '',
-      seniorityHours: ''
     },
     errors: {}
   },
@@ -779,7 +783,7 @@ const v2DashboardAppDefinition = () => ({
       value => {
         if (value) {
           this.openAddEmployeeModal();
-        } else if (value === false && this.addEmployeeModal.open) {
+        } else if (value === false && this.showAddEmployeeModal) {
           this.closeAddEmployeeModal({ silent: true });
         }
       }
@@ -1228,40 +1232,35 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
   },
   openAddEmployee() {
+    this.openAddEmployeeModal();
+  },
+  openAddEmployeeModal() {
+    if (this.showAddEmployeeModal) {
+      return;
+    }
+    if (!this.form.role) {
+      this.resetAddEmployeeForm();
+    }
     this.showAddEmployeeModal = true;
     const store = this.$store?.app;
     if (store && store.showAddEmployeeModal !== true) {
       store.showAddEmployeeModal = true;
     }
-    this.openAddEmployeeModal();
-  },
-  openAddEmployeeModal() {
-    if (!this.addEmployeeModal.open) {
-      if (!this.addEmployeeModal.form.role) {
-        this.resetAddEmployeeForm();
+    this.hydrateAddEmployeeModal();
+    this.$nextTick(() => {
+      const node = document.querySelector('#add-employee-modal-root [data-autofocus]');
+      if (node && typeof node.focus === 'function') {
+        node.focus();
       }
-      this.addEmployeeModal.open = true;
-      this.showAddEmployeeModal = true;
-      const store = this.$store?.app;
-      if (store && store.showAddEmployeeModal !== true) {
-        store.showAddEmployeeModal = true;
-      }
-      this.hydrateAddEmployeeModal();
-      this.$nextTick(() => {
-        const node = document.querySelector('#add-employee-modal-root [data-autofocus]');
-        if (node && typeof node.focus === 'function') {
-          node.focus();
-        }
-      });
-    }
+    });
   },
   closeAddEmployeeModal(options = {}) {
     const { silent = false, preserveForm = false, force = false } = options;
-    if (!this.addEmployeeModal.open && !force) {
+    if (!this.showAddEmployeeModal && !force) {
       return;
     }
-    this.addEmployeeModal.open = false;
     this.showAddEmployeeModal = false;
+    this.formSaving = false;
     if (!preserveForm) {
       this.resetAddEmployeeForm();
     }
@@ -1278,39 +1277,74 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       statuses: DEFAULT_STATUS_LOOKUPS,
       employmentTypes: DEFAULT_EMPLOYMENT_TYPE_LOOKUPS
     };
-    this.addEmployeeModal.form = {
+    const role = lookups.roles?.[0] || '';
+    const status = lookups.statuses?.[0] || '';
+    const employmentType = lookups.employmentTypes?.[0] || '';
+    this.form = {
       firstName: '',
       lastName: '',
-      role: lookups.roles?.[0] || '',
-      status: lookups.statuses?.[0] || '',
-      employmentType: lookups.employmentTypes?.[0] || '',
-      seniorityHours: ''
+      role,
+      status,
+      employmentType,
+      seniorityHours: '',
+      jobClass: '',
+      jobTitle: '',
+      ranking: '',
+      positionStatus: mapPositionStatus(employmentType) || ''
     };
-    this.addEmployeeModal.errors = {};
+    this.formErrors = {};
   },
   validateAddEmployeeForm() {
     const errors = {};
-    const fields = ['firstName', 'lastName', 'role', 'status', 'employmentType', 'seniorityHours'];
-    for (const field of fields) {
-      const value = this.addEmployeeModal.form[field];
+    const required = [
+      'firstName',
+      'lastName',
+      'role',
+      'status',
+      'employmentType',
+      'seniorityHours',
+      'jobClass',
+      'jobTitle',
+      'ranking',
+      'positionStatus'
+    ];
+    for (const field of required) {
+      const value = this.form[field];
       const normalized = typeof value === 'string' ? value.trim() : value;
       if (normalized === '' || normalized == null) {
         errors[field] = 'This field is required.';
       }
     }
-    return {
-      valid: Object.keys(errors).length === 0,
-      errors
-    };
+    if (!errors.seniorityHours) {
+      const hours = Number.parseFloat(this.form.seniorityHours);
+      if (!Number.isFinite(hours) || hours < 0) {
+        errors.seniorityHours = 'Enter a valid number.';
+      }
+    }
+    if (!errors.ranking) {
+      const rankingValue = Number.parseFloat(this.form.ranking);
+      if (!Number.isFinite(rankingValue)) {
+        errors.ranking = 'Enter a valid number.';
+      }
+    }
+    return errors;
   },
   focusFirstInvalidAddEmployeeField(errors) {
-    const order = ['firstName', 'lastName', 'role', 'status', 'employmentType', 'seniorityHours'];
+    const order = [
+      'firstName',
+      'lastName',
+      'role',
+      'status',
+      'employmentType',
+      'seniorityHours',
+      'jobClass',
+      'jobTitle',
+      'ranking',
+      'positionStatus'
+    ];
     for (const field of order) {
       if (!errors[field]) continue;
-      const refName =
-        field === 'seniorityHours'
-          ? 'addEmployeeSeniorityHours'
-          : `addEmployee${field.charAt(0).toUpperCase()}${field.slice(1)}`;
+      const refName = `addEmployee${field.charAt(0).toUpperCase()}${field.slice(1)}`;
       const target = this.$refs?.[refName];
       if (target && typeof target.focus === 'function') {
         target.focus();
@@ -1319,7 +1353,7 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
   },
   buildAddEmployeePayload() {
-    const form = this.addEmployeeModal.form;
+    const form = this.form;
     const firstName = typeof form.firstName === 'string' ? form.firstName.trim() : '';
     const lastName = typeof form.lastName === 'string' ? form.lastName.trim() : '';
     const role = typeof form.role === 'string' ? form.role.trim() : '';
@@ -1327,6 +1361,12 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     const employmentType = typeof form.employmentType === 'string' ? form.employmentType.trim() : '';
     const hoursValue = typeof form.seniorityHours === 'string' ? form.seniorityHours.trim() : form.seniorityHours;
     const seniorityHours = Number.parseFloat(hoursValue);
+    const jobClass = typeof form.jobClass === 'string' ? form.jobClass.trim() : '';
+    const jobTitle = typeof form.jobTitle === 'string' ? form.jobTitle.trim() : '';
+    const rankingValue = typeof form.ranking === 'string' ? form.ranking.trim() : form.ranking;
+    const ranking = Number.parseFloat(rankingValue);
+    const rawPositionStatus = typeof form.positionStatus === 'string' ? form.positionStatus.trim() : '';
+    const normalizedPositionStatus = mapPositionStatus(rawPositionStatus, employmentType);
     const timestamp = new Date().toISOString();
     return {
       id: generateId(),
@@ -1338,42 +1378,45 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       employmentType,
       position: role,
       rank: employmentType,
-      jobClass: '',
-      jobTitle: '',
-      ranking: null,
-      positionStatus: mapPositionStatus(employmentType),
+      jobClass,
+      jobTitle,
+      ranking: Number.isFinite(ranking) ? ranking : null,
+      positionStatus: normalizedPositionStatus || rawPositionStatus,
       seniorityHours: Number.isFinite(seniorityHours) ? seniorityHours : 0,
       createdAt: timestamp,
       updatedAt: timestamp
     };
   },
-  async submitAddEmployeeForm() {
-    if (!this.db || this.addEmployeeModal.saving) {
+  async addEmployeeSubmit() {
+    if (!this.db || this.formSaving) {
       return;
     }
-    const { valid, errors } = this.validateAddEmployeeForm();
-    this.addEmployeeModal.errors = errors;
-    if (!valid) {
+    const errors = this.validateAddEmployeeForm();
+    this.formErrors = errors;
+    if (!this.form.firstName || !this.form.lastName || !this.form.role) {
+      this.toast('Please fill required fields', 'error');
+      this.$nextTick(() => this.focusFirstInvalidAddEmployeeField(errors));
+      return;
+    }
+    if (Object.keys(errors).length) {
       this.$nextTick(() => this.focusFirstInvalidAddEmployeeField(errors));
       return;
     }
     await this.initActivityLog();
     const payload = this.buildAddEmployeePayload();
-    this.addEmployeeModal.saving = true;
+    this.formSaving = true;
     try {
-      const { employee } = await addEmployeeApi({
+      const { undoPayload, employee } = await this.api.addEmployee({
         db: this.db,
         activityLog: this.activityLog,
-        employee: payload
+        employee: { ...payload }
       });
+      void undoPayload;
       this.closeAddEmployeeModal({ preserveForm: false });
+      this.showAddEmployeeModal = false;
       await this.loadData();
       this.applyFilters();
-      const store = this.$store?.app;
-      if (store && typeof store.showToast === 'function') {
-        const name = `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || 'Employee';
-        store.showToast({ type: 'success', message: `${name} added.` });
-      }
+      this.toast('Employee added', 'success');
       const timelineStore = this.$store?.activityLog;
       if (timelineStore && typeof timelineStore.record === 'function') {
         const name = `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || 'Employee';
@@ -1387,12 +1430,12 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       }
     } catch (error) {
       console.error('Failed to add employee', error);
-      this.addEmployeeModal.errors = {
-        ...this.addEmployeeModal.errors,
+      this.formErrors = {
+        ...this.formErrors,
         form: 'Unable to add employee. Please try again.'
       };
     } finally {
-      this.addEmployeeModal.saving = false;
+      this.formSaving = false;
     }
   },
   toast(message, type = 'info', options = {}) {
@@ -1702,18 +1745,16 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       statuses,
       employmentTypes
     };
-    if (!this.addEmployeeModal.open) {
-      if (!this.addEmployeeModal.form.role || !roles.includes(this.addEmployeeModal.form.role)) {
-        this.addEmployeeModal.form.role = roles[0] || '';
+    if (!this.showAddEmployeeModal) {
+      if (!this.form.role || !roles.includes(this.form.role)) {
+        this.form.role = roles[0] || '';
       }
-      if (!this.addEmployeeModal.form.status || !statuses.includes(this.addEmployeeModal.form.status)) {
-        this.addEmployeeModal.form.status = statuses[0] || '';
+      if (!this.form.status || !statuses.includes(this.form.status)) {
+        this.form.status = statuses[0] || '';
       }
-      if (
-        !this.addEmployeeModal.form.employmentType ||
-        !employmentTypes.includes(this.addEmployeeModal.form.employmentType)
-      ) {
-        this.addEmployeeModal.form.employmentType = employmentTypes[0] || '';
+      if (!this.form.employmentType || !employmentTypes.includes(this.form.employmentType)) {
+        this.form.employmentType = employmentTypes[0] || '';
+        this.form.positionStatus = mapPositionStatus(this.form.employmentType) || this.form.positionStatus;
       }
     }
   },
