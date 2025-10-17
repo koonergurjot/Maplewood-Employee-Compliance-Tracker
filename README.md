@@ -53,7 +53,7 @@ Read the full project overview in [docs/OVERVIEW.md](docs/OVERVIEW.md).
    npm run build
    ```
 
-   Serving the repository root directly (for example, via `npx serve .`) will break Dexie, XLSX, and Alpine imports because the bare module specifiers are only resolved by Vite's dev server or the bundled build. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for more deployment details.
+   Serving the repository root directly (for example, via `npx serve .`) will break Dexie, XLSX, and Alpine imports because the bare module specifiers are only resolved by Vite's dev server or the bundled build. Always upload the full contents of the `dist/` folder (including `index.html`) rather than copying an individual hashed JavaScript file. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for more deployment details.
 
 ## Dashboard Tips
 

@@ -99,7 +99,6 @@ const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
 const CLOUD_LAST_SYNC_STORAGE_KEY = 'maplewood:cloud:lastSync';
 
 const DEFAULT_APP_FLAGS = { USE_V2_MAIN: true };
-const USE_V2_STORAGE_KEY = 'USE_V2_MAIN';
 const V2_COMPONENT_REGISTRY_KEY = '__V2_ALPINE_COMPONENTS__';
 const ACTIVITY_TIMELINE_LIMIT = 100;
 const FILTERS_STORAGE_KEY = 'filters';
@@ -144,6 +143,34 @@ function registerV2Component(name, definition) {
     registry.add(name);
   }
   return Alpine.data(name, definition);
+}
+
+function registerServiceWorker() {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return;
+  }
+
+  if (import.meta.env?.DEV) {
+    return;
+  }
+
+  if (window.__SW_REGISTERED__) {
+    return;
+  }
+
+  const buildHash =
+    (import.meta.env?.VITE_BUILD_HASH && String(import.meta.env.VITE_BUILD_HASH)) ||
+    Date.now().toString(36);
+
+  navigator.serviceWorker
+    .register(`/sw.js?build=${encodeURIComponent(buildHash)}`)
+    .then((registration) => {
+      window.__SW_REGISTERED__ = true;
+      console.info('Service worker registered', registration.scope);
+    })
+    .catch((error) => {
+      console.warn('Service worker registration failed:', error);
+    });
 }
 
 async function ensureSeedRequirements(db) {
@@ -221,43 +248,24 @@ function buildActivitySummary(summary, details, timestampIso) {
   const approvedTime = approvedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return `${base} Approved by ${approvedBy} at ${approvedTime}.`;
 }
-const existingFlags = typeof window.APP_FLAGS === 'object' && window.APP_FLAGS !== null ? window.APP_FLAGS : {};
+const existingFlags =
+  typeof window !== 'undefined' && typeof window.APP_FLAGS === 'object' && window.APP_FLAGS !== null
+    ? window.APP_FLAGS
+    : {};
 const appFlagsTarget = { ...DEFAULT_APP_FLAGS, ...existingFlags };
 
 if (typeof window !== 'undefined') {
-  try {
-    const storedValue = window.localStorage?.getItem(USE_V2_STORAGE_KEY);
-    if (storedValue === 'false') {
-      appFlagsTarget.USE_V2_MAIN = false;
-    } else if (storedValue === 'true') {
-      appFlagsTarget.USE_V2_MAIN = true;
+  window.APP_FLAGS = new Proxy(appFlagsTarget, {
+    set(target, property, value) {
+      target[property] = value;
+      document.dispatchEvent(
+        new CustomEvent('app-flags:changed', {
+          detail: { property, value }
+        })
+      );
+      return true;
     }
-  } catch (error) {
-    console.warn('Failed to read USE_V2_MAIN override from localStorage.', error);
-  }
-}
-
-window.APP_FLAGS = new Proxy(appFlagsTarget, {
-  set(target, property, value) {
-    target[property] = value;
-    document.dispatchEvent(
-      new CustomEvent('app-flags:changed', {
-        detail: { property, value }
-      })
-    );
-    return true;
-  }
-});
-
-function toggleUseV2MainFlag() {
-  const nextValue = !(window.APP_FLAGS?.USE_V2_MAIN ?? DEFAULT_APP_FLAGS.USE_V2_MAIN);
-  try {
-    window.localStorage?.setItem(USE_V2_STORAGE_KEY, String(nextValue));
-  } catch (error) {
-    console.warn('Failed to persist USE_V2_MAIN flag to localStorage.', error);
-  }
-  window.APP_FLAGS.USE_V2_MAIN = nextValue;
-  window.location.reload();
+  });
 }
 
 function normalizeDateInputValue(value) {
@@ -305,24 +313,6 @@ function isTextInput(element) {
   }
   return tag === 'textarea' || element.isContentEditable;
 }
-
-document.addEventListener('keydown', event => {
-  if (!event.ctrlKey || !event.altKey) {
-    return;
-  }
-
-  const key = event.key?.toLowerCase();
-  if (key !== 'v') {
-    return;
-  }
-
-  if (isTextInput(event.target)) {
-    return;
-  }
-
-  event.preventDefault();
-  toggleUseV2MainFlag();
-});
 
 function createAppStore() {
   const store = {
@@ -879,13 +869,11 @@ const v2DashboardAppDefinition = () => ({
     pendingImportsLoading: false,
     pendingImportsError: '',
     approvingBatchId: '',
-    commitLocalDisabled: true
+    commitLocalDisabled: true,
+    submitDisabled: true,
+    headerRowNumber: null
   },
   init() {
-    if (!window.APP_FLAGS?.USE_V2_MAIN) {
-      console.info('Legacy dashboard active; skipping v2 bootstrap.');
-      return;
-    }
     const savedFilters = this.readSavedFilters();
     const urlFilters = this.readFiltersFromUrl();
     const normalizedFilters = this.normalizeFilters({
@@ -4091,6 +4079,9 @@ async function bootApp() {
   registerV2Component('v2DashboardApp', v2DashboardAppDefinition);
 
   Alpine.start();
+
+  registerServiceWorker();
+}
 
   try {
     const importerModule = await loadSeniorityImporterModule();
