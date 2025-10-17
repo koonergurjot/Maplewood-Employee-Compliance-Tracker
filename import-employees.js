@@ -32,7 +32,7 @@ import { warnOnce } from './src/compat/deprecations.js';
     return Boolean(getAppStore());
   }
 
-  const SAMPLE_CSV_URL = '/sample-employees.csv';
+  const SAMPLE_CSV_URL = 'sample-employees.csv';
 
   const REQUIRED_DEXIE_STORES = Object.freeze([
     'employees',
