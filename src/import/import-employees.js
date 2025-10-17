@@ -13,15 +13,37 @@ import {
 const MAX_HEADER_SCAN = 10;
 
 const SENIORITY_PREVIEW_COLUMNS = [
-  'First Name',
-  'Last Name',
+  'Name',
+  'Seniority Hours',
   'Job Class',
   'Job Title',
-  'Position Status',
-  'Seniority Hours',
-  'Employee ID',
-  'Ranking'
+  'Ranking',
+  'Position Status'
 ];
+
+const SENIORITY_MAPPING_FIELD_ORDER = [
+  'name',
+  'firstName',
+  'lastName',
+  'seniorityHours',
+  'jobClass',
+  'jobTitle',
+  'ranking',
+  'positionStatus',
+  'employeeId'
+];
+
+const SENIORITY_MAPPING_LABELS = {
+  name: 'Employee Name',
+  firstName: 'First Name',
+  lastName: 'Last Name',
+  seniorityHours: 'Seniority Hours',
+  jobClass: 'Job Class',
+  jobTitle: 'Job Title',
+  ranking: 'Ranking',
+  positionStatus: 'Position Status',
+  employeeId: 'Employee ID'
+};
 
 let cachedXlsx = null;
 let xlsxLoadPromise = null;
@@ -65,11 +87,7 @@ const parseFloatValue = value => {
     return 0;
   }
 
-  const sanitized = normalized.replace(/[, ]+/g, '');
-  if (!sanitized) {
-    return 0;
-  }
-
+  const sanitized = normalized.replace(/,/g, '');
   const numeric = Number.parseFloat(sanitized);
   return Number.isFinite(numeric) ? numeric : 0;
 };
@@ -151,7 +169,7 @@ const normalizeImportedStatus = value => {
   }
 
   const mapped = mapPositionStatus(normalized, normalized);
-  if (mapped) {
+  if (mapped === 'FT' || mapped === 'PT' || mapped === 'Casual') {
     return mapped;
   }
 
@@ -161,11 +179,11 @@ const normalizeImportedStatus = value => {
     return 'Casual';
   }
 
-  if (collapsed.includes('full') || collapsed.includes('ft')) {
+  if (collapsed.includes('full') || collapsed.startsWith('ft')) {
     return 'FT';
   }
 
-  if (collapsed.includes('part') || collapsed.includes('pt')) {
+  if (collapsed.includes('part') || collapsed.startsWith('pt')) {
     return 'PT';
   }
 
@@ -511,16 +529,41 @@ const buildMappingLabels = (headerRow, mapping) => {
   return labels;
 };
 
+const buildMappingRows = (headerRow = [], mapping = {}) => {
+  const rows = [];
+  const { columns = {}, meta = {} } = mapping;
+
+  const addRow = (fieldKey, index) => {
+    if (typeof index !== 'number' || index < 0) {
+      return;
+    }
+    const sourceHeader = normalizeHeaderLabel(headerRow[index]);
+    rows.push({
+      fieldKey,
+      sourceHeader: sourceHeader || '—',
+      mappedField: SENIORITY_MAPPING_LABELS[fieldKey] || fieldKey
+    });
+  };
+
+  for (const fieldKey of SENIORITY_MAPPING_FIELD_ORDER) {
+    if (fieldKey === 'firstName' || fieldKey === 'lastName') {
+      addRow(fieldKey, meta[fieldKey]);
+    } else {
+      addRow(fieldKey, columns[fieldKey]);
+    }
+  }
+
+  return rows;
+};
+
 const buildPreview = employees => {
-  const rows = employees.slice(0, 10).map(employee => ({
-    'First Name': employee.firstName,
-    'Last Name': employee.lastName,
-    'Job Class': employee.jobClass,
-    'Job Title': employee.jobTitle,
-    'Position Status': employee.positionStatus,
-    'Seniority Hours': employee.seniorityHours,
-    'Employee ID': employee.employeeId,
-    Ranking: employee.ranking ?? ''
+  const rows = employees.slice(0, 5).map(employee => ({
+    Name: buildFullName(employee.firstName, employee.lastName) || employee.fullName || '',
+    'Seniority Hours': employee.seniorityHours ?? 0,
+    'Job Class': employee.jobClass || '',
+    'Job Title': employee.jobTitle || '',
+    Ranking: employee.ranking ?? '',
+    'Position Status': employee.positionStatus || ''
   }));
 
   return {
@@ -566,7 +609,9 @@ export async function runSeniorityDryRun(file) {
 
   const summary = { added, updated, skipped: skipped.length };
   const mappingLabels = buildMappingLabels(headerInfo.row, mapping);
+  const mappingRows = buildMappingRows(headerInfo.row, mapping);
   const preview = buildPreview(employees);
+  const headerRowNumber = headerInfo.index + 1;
 
   lastImportContext = {
     mode: 'seniority',
@@ -580,6 +625,8 @@ export async function runSeniorityDryRun(file) {
   return {
     summary,
     mapping: mappingLabels,
+    mappingRows,
+    headerRowNumber,
     preview,
     skipped
   };

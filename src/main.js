@@ -725,11 +725,13 @@ registerV2Component('v2DashboardApp', () => ({
     commitLoading: false,
     summary: null,
     mapping: null,
+    mappingRows: [],
     previewRows: [],
     previewColumns: [],
     previewTotal: 0,
     error: '',
-    commitDisabled: true
+    commitDisabled: true,
+    headerRowNumber: null
   },
   init() {
     if (!window.APP_FLAGS?.USE_V2_MAIN) {
@@ -999,6 +1001,7 @@ registerV2Component('v2DashboardApp', () => ({
     this.importDrawer.fileName = '';
     this.importDrawer.summary = null;
     this.importDrawer.mapping = null;
+    this.importDrawer.mappingRows = [];
     this.importDrawer.previewRows = [];
     this.importDrawer.previewColumns = [];
     this.importDrawer.previewTotal = 0;
@@ -1006,6 +1009,7 @@ registerV2Component('v2DashboardApp', () => ({
     this.importDrawer.dryRunLoading = false;
     this.importDrawer.commitLoading = false;
     this.importDrawer.commitDisabled = true;
+    this.importDrawer.headerRowNumber = null;
 
     this.updateImportDrawerCommitState();
 
@@ -1043,10 +1047,12 @@ registerV2Component('v2DashboardApp', () => ({
     this.importDrawer.commitLoading = false;
     this.importDrawer.summary = null;
     this.importDrawer.mapping = null;
+    this.importDrawer.mappingRows = [];
     this.importDrawer.previewRows = [];
     this.importDrawer.previewColumns = [];
     this.importDrawer.previewTotal = 0;
     this.importDrawer.error = '';
+    this.importDrawer.headerRowNumber = null;
     this.updateImportDrawerCommitState();
     if (this.$refs.importFileInput) {
       this.$refs.importFileInput.value = '';
@@ -1468,6 +1474,19 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.importDrawer.summary = summary;
     const mapping = result && typeof result.mapping === 'object' ? result.mapping : (result && typeof result.columns === 'object' ? result.columns : null);
     this.importDrawer.mapping = mapping;
+    const mappingRows = Array.isArray(result?.mappingRows)
+      ? result.mappingRows
+          .filter(row => row && typeof row === 'object')
+          .map((row, index) => ({
+            key: typeof row.fieldKey === 'string' && row.fieldKey ? row.fieldKey : `field-${index}`,
+            fieldKey: typeof row.fieldKey === 'string' ? row.fieldKey : '',
+            sourceHeader: row.sourceHeader != null ? String(row.sourceHeader) : '—',
+            mappedField: row.mappedField != null ? String(row.mappedField) : ''
+          }))
+      : [];
+    this.importDrawer.mappingRows = mappingRows;
+    const headerRowNumber = Number(result?.headerRowNumber);
+    this.importDrawer.headerRowNumber = Number.isFinite(headerRowNumber) && headerRowNumber > 0 ? headerRowNumber : null;
     let previewRows = [];
     let previewColumns = [];
     let total = 0;
@@ -1521,10 +1540,12 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.importDrawer.fileName = file ? file.name : '';
     this.importDrawer.summary = null;
     this.importDrawer.mapping = null;
+    this.importDrawer.mappingRows = [];
     this.importDrawer.previewRows = [];
     this.importDrawer.previewColumns = [];
     this.importDrawer.previewTotal = 0;
     this.importDrawer.error = '';
+    this.importDrawer.headerRowNumber = null;
     this.updateImportDrawerCommitState();
     if (file) {
       await this.runImportDryRun(file);
