@@ -92,76 +92,76 @@ export async function deleteEmployee({ db, employeeId, activityLog }) {
     return;
   }
 
-  const employeeRequirementsTable = db.employeeRequirements;
-
-  let requirementIds = [];
-
-  if (employeeRequirementsTable?.where) {
-    try {
-      requirementIds = await employeeRequirementsTable
-        .where('[employeeId+requirementId]')
-        .startsWith([employeeId])
-        .primaryKeys();
-    } catch (error) {
-      if (error?.name !== 'InvalidStateError' && error?.name !== 'DataError') {
-        throw error;
-      }
-    }
-  }
-
-  if (requirementIds.length === 0 && employeeRequirementsTable?.filter) {
-    try {
-      const records = await employeeRequirementsTable
-        .filter(record => record?.employeeId === employeeId)
-        .toArray();
-      requirementIds = records
-        .map(record => record?.id)
-        .filter(id => id != null);
-    } catch (error) {
-      if (error?.name !== 'InvalidStateError') {
-        throw error;
-      }
-    }
-  }
-
-  await db.transaction('rw', db.employees, db.employeeRequirements, async (transaction) => {
-    const employeesTable = transaction.table('employees');
-    const transactionEmployeeRequirementsTable = transaction.table('employeeRequirements');
-
-    if (requirementIds.length > 0 && transactionEmployeeRequirementsTable?.bulkDelete) {
-      await transactionEmployeeRequirementsTable.bulkDelete(requirementIds);
-    } else if (requirementIds.length > 0 && typeof transactionEmployeeRequirementsTable?.delete === 'function') {
-      await Promise.all(requirementIds.map(id => transactionEmployeeRequirementsTable.delete(id)));
-    }
   const deleteWithinTransaction = async (useFilterFallback = false) => {
-    await db.transaction('rw', db.employees, db.employeeRequirements, async () => {
-      const employeesTable = db.table('employees');
-      const employeeRequirementsTable = db.table('employeeRequirements');
+    await db.transaction('rw', db.employees, db.employeeRequirements, async transaction => {
+      const employeesStore = transaction.table('employees');
+      const employeeRequirementsStore = transaction.table('employeeRequirements');
 
-      const shouldUseFilter = useFilterFallback || !employeeRequirementsTable?.where;
-
-      if (shouldUseFilter) {
-        if (typeof employeeRequirementsTable?.filter === 'function') {
-          await employeeRequirementsTable
-            .filter(record => record?.employeeId === employeeId)
-            .delete();
-        } else if (typeof employeeRequirementsTable?.toArray === 'function') {
-          const records = await employeeRequirementsTable.toArray();
-          const matches = records.filter(record => record?.employeeId === employeeId);
-          if (matches.length && typeof employeeRequirementsTable?.bulkDelete === 'function') {
-            await employeeRequirementsTable.bulkDelete(matches.map(match => match.id));
-          } else if (matches.length && typeof employeeRequirementsTable?.delete === 'function') {
-            await Promise.all(matches.map(match => employeeRequirementsTable.delete(match.id)));
-          }
+      const deleteByIndex = async () => {
+        if (typeof employeeRequirementsStore?.where !== 'function') {
+          throw new Error('Missing where function');
         }
-      } else {
-        await employeeRequirementsTable
+
+        await employeeRequirementsStore
           .where('[employeeId+requirementId]')
           .startsWith([employeeId])
           .delete();
+      };
+
+      const deleteByFilter = async () => {
+        if (typeof employeeRequirementsStore?.filter === 'function') {
+          const matches = await employeeRequirementsStore
+            .filter(record => record?.employeeId === employeeId)
+            .toArray();
+          const ids = matches
+            .map(record => record?.id)
+            .filter(id => id != null);
+
+          if (ids.length > 0) {
+            if (typeof employeeRequirementsStore?.bulkDelete === 'function') {
+              await employeeRequirementsStore.bulkDelete(ids);
+              return;
+            }
+
+            if (typeof employeeRequirementsStore?.delete === 'function') {
+              await Promise.all(ids.map(id => employeeRequirementsStore.delete(id)));
+              return;
+            }
+          }
+        }
+
+        if (typeof employeeRequirementsStore?.toArray === 'function') {
+          const records = await employeeRequirementsStore.toArray();
+          const ids = records
+            .filter(record => record?.employeeId === employeeId)
+            .map(record => record?.id)
+            .filter(id => id != null);
+
+          if (ids.length > 0) {
+            if (typeof employeeRequirementsStore?.bulkDelete === 'function') {
+              await employeeRequirementsStore.bulkDelete(ids);
+            } else if (typeof employeeRequirementsStore?.delete === 'function') {
+              await Promise.all(ids.map(id => employeeRequirementsStore.delete(id)));
+            }
+          }
+        }
+      };
+
+      try {
+        if (useFilterFallback) {
+          await deleteByFilter();
+        } else {
+          await deleteByIndex();
+        }
+      } catch (error) {
+        if (!useFilterFallback && (error?.name === 'InvalidStateError' || error?.name === 'DataError')) {
+          await deleteByFilter();
+        } else {
+          throw error;
+        }
       }
 
-      await employeesTable.delete(employeeId);
+      await employeesStore.delete(employeeId);
     });
   };
 
@@ -292,14 +292,48 @@ export class DeleteEmployee {
         return { employee: null, employeeRequirements: [] };
       }
 
-      const employeeRequirements = await employeeRequirementsTable
-        .where('employeeId')
-        .equals(this.employeeId)
-        .toArray();
+      const loadEmployeeRequirements = async () => {
+        try {
+          if (typeof employeeRequirementsTable?.where === 'function') {
+            return await employeeRequirementsTable
+              .where('[employeeId+requirementId]')
+              .startsWith([this.employeeId])
+              .toArray();
+          }
+        } catch (error) {
+          if (error?.name !== 'InvalidStateError' && error?.name !== 'DataError') {
+            throw error;
+          }
+        }
+
+        if (typeof employeeRequirementsTable?.filter === 'function') {
+          return employeeRequirementsTable
+            .filter(record => record?.employeeId === this.employeeId)
+            .toArray();
+        }
+
+        if (typeof employeeRequirementsTable?.toArray === 'function') {
+          const records = await employeeRequirementsTable.toArray();
+          return records.filter(record => record?.employeeId === this.employeeId);
+        }
+
+        return [];
+      };
+
+      const employeeRequirements = await loadEmployeeRequirements();
 
       await employeesTable.delete(this.employeeId);
       if (employeeRequirements.length) {
-        await employeeRequirementsTable.bulkDelete(employeeRequirements.map(er => er.id));
+        const ids = employeeRequirements
+          .map(er => er?.id)
+          .filter(id => id != null);
+        if (ids.length) {
+          if (typeof employeeRequirementsTable?.bulkDelete === 'function') {
+            await employeeRequirementsTable.bulkDelete(ids);
+          } else if (typeof employeeRequirementsTable?.delete === 'function') {
+            await Promise.all(ids.map(id => employeeRequirementsTable.delete(id)));
+          }
+        }
       }
 
       return {
