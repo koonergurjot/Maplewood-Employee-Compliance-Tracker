@@ -633,6 +633,7 @@ export async function runSeniorityDryRun(file) {
     mappingRows,
     skipped,
     headerRow: headerInfo.row,
+    records
     headerRowNumber,
     fileName,
     preview
@@ -644,7 +645,10 @@ export async function runSeniorityDryRun(file) {
     mappingRows,
     headerRowNumber,
     preview,
-    skipped
+    skipped,
+    employees,
+    rows: records,
+    headerRow: headerInfo.row
   };
 }
 
