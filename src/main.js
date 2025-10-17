@@ -1,5 +1,4 @@
 import './polyfills/async-function-call.js';
-import './import/import-employees.js';
 import Alpine from 'alpinejs';
 import { qs } from './utils/dom.js';
 import miniAnalyticsTemplate from './v2/mini-analytics.html?raw';
@@ -112,6 +111,20 @@ const DEFAULT_FILTER_STATE = {
   search: '',
   analytics: null
 };
+
+let seniorityImporterModulePromise = null;
+
+function loadSeniorityImporterModule() {
+  if (!seniorityImporterModulePromise) {
+    seniorityImporterModulePromise = import('./import/import-employees.js')
+      .catch(error => {
+        console.error('Failed to load seniority importer module', error);
+        return null;
+      });
+  }
+
+  return seniorityImporterModulePromise;
+}
 
 function getV2ComponentRegistry() {
   if (typeof window === 'undefined') {
@@ -4046,13 +4059,24 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
   }
 });
 
-function bootApp() {
+async function bootApp() {
   if (typeof window === 'undefined') {
     return;
   }
 
+  let initialDatabase = null;
+  try {
+    initialDatabase = await openDatabase();
+  } catch (error) {
+    console.error('Failed to open database before boot', error);
+  }
+
   const existingAppStore = typeof window.AppStore === 'function' ? window.AppStore() : null;
   appStore = existingAppStore && typeof existingAppStore === 'object' ? existingAppStore : createAppStore();
+  if (initialDatabase && !appStore.db) {
+    appStore.db = initialDatabase;
+  }
+
   Alpine.store('app', appStore);
   window.AppStore = function AppStore() {
     return appStore;
@@ -4067,27 +4091,41 @@ function bootApp() {
   registerV2Component('v2DashboardApp', v2DashboardAppDefinition);
 
   Alpine.start();
+
+  try {
+    const importerModule = await loadSeniorityImporterModule();
+    if (importerModule && typeof importerModule.registerSeniorityImporter === 'function') {
+      const getDb = initialDatabase ? () => initialDatabase : () => openDatabase();
+      importerModule.registerSeniorityImporter({
+        getDb,
+        getStore: () => appStore
+      });
+    }
+  } catch (error) {
+    console.error('Failed to configure seniority importer', error);
+  }
 }
 
-try {
-  bootApp();
-  if (typeof window !== 'undefined') {
-    window.AppBootOk = true;
-  }
-} catch (error) {
-  console.error('App boot failed:', error);
-  if (typeof window !== 'undefined') {
-    window.AppBootOk = false;
-    window.AppStore = function AppStore() {
-      return null;
-    };
+bootApp()
+  .then(() => {
+    if (typeof window !== 'undefined') {
+      window.AppBootOk = true;
+    }
+  })
+  .catch(error => {
+    console.error('App boot failed:', error);
+    if (typeof window !== 'undefined') {
+      window.AppBootOk = false;
+      window.AppStore = function AppStore() {
+        return null;
+      };
 
-    const el = typeof document !== 'undefined' ? document.getElementById('app-v2') || document.body : null;
-    if (el) {
-      el.innerHTML = `<div style="padding:16px;font-family:system-ui">
+      const el = typeof document !== 'undefined' ? document.getElementById('app-v2') || document.body : null;
+      if (el) {
+        el.innerHTML = `<div style="padding:16px;font-family:system-ui">
     <h2>App failed to start</h2>
     <pre style="white-space:pre-wrap;background:#f6f8fa;padding:12px;border-radius:8px">${(error.stack || error.message || error)}</pre>
   </div>`;
+      }
     }
-  }
-}
+  });

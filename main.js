@@ -12,7 +12,6 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
 import { qs } from './src/utils/dom.js';
 
 import './styles.css';
-import './import-employees.js';
 import './onboarding.js';
 import './src/debug-hitboxes.js';
 import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup, putEmployeeRecord, getDexie, openDatabase } from './db.js';
@@ -26,6 +25,20 @@ if (hasWindowObject && window.APP_FLAGS?.USE_V2_MAIN) {
 }
 
 const skipLegacyBootstrap = hasWindowObject && Boolean(window.APP_FLAGS?.USE_V2_MAIN);
+
+let legacyImporterModulePromise = null;
+
+function ensureLegacyImporterReady() {
+  if (!legacyImporterModulePromise) {
+    legacyImporterModulePromise = import('./import-employees.js')
+      .catch(error => {
+        console.error('Failed to load legacy importer module', error);
+        return null;
+      });
+  }
+
+  return legacyImporterModulePromise;
+}
 
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
@@ -5619,8 +5632,22 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
     }
 
   if (!skipLegacyBootstrap) {
-    window.addEventListener('DOMContentLoaded', ()=> {
-      if (window.__initImportUI) window.__initImportUI();
+    ensureLegacyImporterReady();
+
+    window.addEventListener('DOMContentLoaded', () => {
+      ensureLegacyImporterReady()
+        .then(() => {
+          if (typeof window.__initImportUI === 'function') {
+            try {
+              window.__initImportUI();
+            } catch (error) {
+              console.error('Failed to initialize legacy importer UI', error);
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Legacy importer module failed to load before init', error);
+        });
     });
 
     Alpine.start();

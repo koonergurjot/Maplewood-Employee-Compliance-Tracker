@@ -226,7 +226,7 @@ const determineEmploymentType = (record, match) => {
   return 'FT';
 };
 
-const resolveStore = () => {
+const resolveLegacyStore = () => {
   if (typeof window === 'undefined') {
     return null;
   }
@@ -352,6 +352,69 @@ const parseFileToRows = async file => {
   }
 
   return parseCsvFile(file);
+};
+
+let databaseProvider = null;
+let storeProvider = null;
+
+const resolveConfiguredStore = () => {
+  if (typeof storeProvider === 'function') {
+    try {
+      const store = storeProvider();
+      return store ?? null;
+    } catch (error) {
+      console.warn('Seniority importer: custom store provider failed', error);
+    }
+  }
+
+  return resolveLegacyStore();
+};
+
+const resolveDatabaseInstance = async () => {
+  if (typeof databaseProvider === 'function') {
+    try {
+      const result = databaseProvider();
+      return await Promise.resolve(result);
+    } catch (error) {
+      console.warn('Seniority importer: custom database provider failed', error);
+    }
+  }
+
+  return openDatabase();
+};
+
+const configureImporterProviders = options => {
+  if (!options || typeof options !== 'object') {
+    return;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(options, 'getDb')
+    || Object.prototype.hasOwnProperty.call(options, 'db')
+  ) {
+    if (typeof options.getDb === 'function') {
+      databaseProvider = options.getDb;
+    } else if (options.db) {
+      const dbInstance = options.db;
+      databaseProvider = () => dbInstance;
+    } else {
+      databaseProvider = null;
+    }
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(options, 'getStore')
+    || Object.prototype.hasOwnProperty.call(options, 'store')
+  ) {
+    if (typeof options.getStore === 'function') {
+      storeProvider = options.getStore;
+    } else if (options.store) {
+      const storeInstance = options.store;
+      storeProvider = () => storeInstance;
+    } else {
+      storeProvider = null;
+    }
+  }
 };
 
 const sanitizeRows = rows => {
@@ -613,7 +676,7 @@ export async function runSeniorityDryRun(file) {
     throw new Error('No employee data rows were detected after the header row.');
   }
 
-  const db = await openDatabase();
+  const db = await resolveDatabaseInstance();
   const existingEmployees = await db.employees.toArray();
   const indexes = buildExistingIndexes(existingEmployees);
   const { employees, added, updated } = mergeWithExisting(records, indexes);
@@ -633,7 +696,7 @@ export async function runSeniorityDryRun(file) {
     mappingRows,
     skipped,
     headerRow: headerInfo.row,
-    records
+    records,
     headerRowNumber,
     fileName,
     preview
@@ -789,7 +852,7 @@ export async function commitSeniorityImport() {
   }
 
   const { employees, summary } = lastImportContext;
-  const db = await openDatabase();
+  const db = await resolveDatabaseInstance();
   const command = new ImportEmployees(db, { employees });
   const result = await command.execute();
 
@@ -797,7 +860,7 @@ export async function commitSeniorityImport() {
   const updated = result?.updatedSnapshots?.length || 0;
   const skipped = summary?.skipped || 0;
 
-  const store = resolveStore();
+  const store = resolveConfiguredStore();
   if (store && typeof store.loadData === 'function') {
     try {
       await store.loadData();
@@ -821,21 +884,35 @@ export async function commitSeniorityImport() {
   return { added, updated, skipped };
 }
 
+export function registerSeniorityImporter(options = {}) {
+  configureImporterProviders(options);
+
+  if (typeof window !== 'undefined') {
+    window.importEmployeesSeniorityDryRun = runSeniorityDryRun;
+    window.importEmployeesSeniorityCommit = commitSeniorityImport;
+    window.importEmployeesSenioritySubmitForApproval = submitSeniorityImportForApproval;
+    window.importSeniorityDryRun = runSeniorityDryRun;
+    window.importSeniorityCommit = commitSeniorityImport;
+    window.importSenioritySubmitForApproval = submitSeniorityImportForApproval;
+    window.submitSeniorityImportForApproval = submitSeniorityImportForApproval;
+
+    if (typeof window.importEmployeesDryRun !== 'function') {
+      window.importEmployeesDryRun = runSeniorityDryRun;
+    }
+
+    if (typeof window.importEmployeesCommit !== 'function') {
+      window.importEmployeesCommit = commitSeniorityImport;
+    }
+  }
+
+  return {
+    dryRun: runSeniorityDryRun,
+    commit: commitSeniorityImport,
+    submit: submitSeniorityImportForApproval
+  };
+}
+
 if (typeof window !== 'undefined') {
-  window.importEmployeesSeniorityDryRun = runSeniorityDryRun;
-  window.importEmployeesSeniorityCommit = commitSeniorityImport;
-  window.importEmployeesSenioritySubmitForApproval = submitSeniorityImportForApproval;
-  window.importSeniorityDryRun = runSeniorityDryRun;
-  window.importSeniorityCommit = commitSeniorityImport;
-  window.importSenioritySubmitForApproval = submitSeniorityImportForApproval;
-  window.submitSeniorityImportForApproval = submitSeniorityImportForApproval;
-
-  if (typeof window.importEmployeesDryRun !== 'function') {
-    window.importEmployeesDryRun = runSeniorityDryRun;
-  }
-
-  if (typeof window.importEmployeesCommit !== 'function') {
-    window.importEmployeesCommit = commitSeniorityImport;
-  }
+  registerSeniorityImporter();
 }
 
