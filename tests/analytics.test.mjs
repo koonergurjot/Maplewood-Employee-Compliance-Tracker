@@ -43,3 +43,11 @@ test('analytics summary counts at-risk assignments even when not expiring soon',
   assert.equal(summary.atRisk[0].atRiskCount, 1, 'at-risk count should include pending record');
   assert.equal(summary.atRisk[0].expiringSoonCount, 0, 'expiring soon count should remain zero');
 });
+
+test('completed requirements with expired certificates are treated as overdue', () => {
+  const yesterday = daysFromToday(-1);
+  const state = evaluateRequirementState({ status: 'Completed', expiresOn: yesterday });
+
+  assert.equal(state.compliant, false, 'expired completions should not be compliant');
+  assert.equal(state.overdue, true, 'expired completions should be overdue');
+});
