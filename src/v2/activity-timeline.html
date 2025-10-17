@@ -1,24 +1,12 @@
-<div class="space-y-4" style="padding:1.25rem 1.5rem;">
-  <div class="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-    <div>
-      <h2 class="text-lg font-semibold leading-tight">Recent activity</h2>
-      <p class="text-sm text-muted">Showing the last 20 updates.</p>
+<section x-data="{ logs: activityLog }" class="p-4 overflow-y-auto">
+  <h2 class="text-lg font-semibold mb-3">Activity Timeline</h2>
+  <template x-for="a in logs" :key="a.createdAt">
+    <div class="border-l-2 border-indigo-500 pl-3 mb-2">
+      <div class="text-sm text-slate-700" x-text="a.summary"></div>
+      <div class="text-xs text-slate-400" x-text="new Date(a.createdAt).toLocaleString()"></div>
     </div>
-  </div>
-  <template x-if="!$store.activityLog.items.length">
-    <p class="text-sm text-muted">No activity yet. Actions you take will show up here.</p>
   </template>
-  <ol class="space-y-3" role="list" x-show="$store.activityLog.items.length">
-    <template x-for="item in $store.activityLog.items.slice(0, 20)" :key="item.id">
-      <li style="padding:0.75rem 1rem;border-radius:0.75rem;border:1px solid var(--border-soft);">
-        <div class="flex flex-col gap-2">
-          <div class="flex flex-wrap items-baseline justify-between gap-2">
-            <span class="text-xs font-semibold uppercase tracking-wide text-muted" x-text="item.type"></span>
-            <time class="text-xs text-muted" :datetime="item.timestampIso" x-text="item.timeLabel"></time>
-          </div>
-          <p class="text-sm leading-snug" x-text="item.summary"></p>
-        </div>
-      </li>
-    </template>
-  </ol>
-</div>
+  <template x-if="!logs.length">
+    <p class="text-slate-400 text-sm italic">No activity yet.</p>
+  </template>
+</section>

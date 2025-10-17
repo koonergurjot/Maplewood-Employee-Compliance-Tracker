@@ -150,68 +150,54 @@ async function ensureSeedRequirements(db) {
   });
 }
 
-function formatActivityTimestamp(date) {
-  try {
-    return date.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    });
-  } catch (error) {
-    console.warn('Failed to format activity timestamp', error);
-    return date.toISOString();
+function cloneActivityDetail(value) {
+  if (value instanceof Date) {
+    return value.toISOString();
   }
+  if (Array.isArray(value)) {
+    return value.map(item => cloneActivityDetail(item));
+  }
+  if (value && typeof value === 'object') {
+    const output = {};
+    for (const [key, entryValue] of Object.entries(value)) {
+      if (typeof entryValue === 'function') {
+        continue;
+      }
+      output[key] = cloneActivityDetail(entryValue);
+    }
+    return output;
+  }
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    return null;
+  }
+  return value;
 }
 
-function createActivityTimelineStore() {
-  return {
-    items: [],
-    record(entry) {
-      if (!entry || typeof entry !== 'object') {
-        return null;
-      }
+function ensureSentencePeriod(text) {
+  const trimmed = typeof text === 'string' ? text.trim() : '';
+  if (!trimmed) {
+    return '';
+  }
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
 
-      let timestamp = null;
-      if (typeof entry.timestamp === 'number' && Number.isFinite(entry.timestamp)) {
-        timestamp = entry.timestamp;
-      } else if (typeof entry.timestamp === 'string') {
-        const parsed = Date.parse(entry.timestamp);
-        if (Number.isFinite(parsed)) {
-          timestamp = parsed;
-        }
-      }
-
-      const date = new Date(Number.isFinite(timestamp) ? timestamp : Date.now());
-      if (Number.isNaN(date.getTime())) {
-        date.setTime(Date.now());
-      }
-
-      const type = (entry.type || entry.actionType || 'Activity').toString();
-      const summary = typeof entry.summary === 'string' && entry.summary.trim()
-        ? entry.summary.trim()
-        : type;
-      const normalized = {
-        id: entry.id || entry.key || generateId(),
-        actionType: entry.actionType || null,
-        type,
-        summary,
-        timestamp: date.getTime(),
-        timestampIso: date.toISOString(),
-        timeLabel: formatActivityTimestamp(date),
-        metadata: entry.metadata || null,
-        targets: entry.targets || null
-      };
-
-      const nextItems = (Array.isArray(this.items) ? this.items : []).filter(item => item && item.id !== normalized.id);
-      nextItems.unshift(normalized);
-      if (nextItems.length > ACTIVITY_TIMELINE_LIMIT) {
-        nextItems.length = ACTIVITY_TIMELINE_LIMIT;
-      }
-      this.items = nextItems;
-      return normalized;
-    }
-  };
+function buildActivitySummary(summary, details, timestampIso) {
+  const base = ensureSentencePeriod(summary);
+  if (!details || typeof details !== 'object') {
+    return base;
+  }
+  const approvalDetails = details.approval && typeof details.approval === 'object' ? details.approval : details;
+  const approvedBy = approvalDetails?.approvedBy || approvalDetails?.by;
+  if (!approvedBy) {
+    return base;
+  }
+  const approvedAtSource = approvalDetails?.approvedAt || approvalDetails?.at || timestampIso;
+  let approvedDate = new Date(approvedAtSource);
+  if (Number.isNaN(approvedDate.getTime())) {
+    approvedDate = new Date(timestampIso);
+  }
+  const approvedTime = approvedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `${base} Approved by ${approvedBy} at ${approvedTime}.`;
 }
 const existingFlags = typeof window.APP_FLAGS === 'object' && window.APP_FLAGS !== null ? window.APP_FLAGS : {};
 const appFlagsTarget = { ...DEFAULT_APP_FLAGS, ...existingFlags };
@@ -489,7 +475,9 @@ function normalizeWindowDays(value, fallback = ANALYTICS_EXPIRING_WINDOW_DAYS) {
 
 const v2DashboardAppDefinition = () => ({
   db: null,
-  activityLog: null,
+  activityLog: [],
+  activityLogLoaded: false,
+  _activityLogLoading: null,
   partials: {
     miniAnalytics: '',
     requirementsGrid: '',
@@ -1054,16 +1042,93 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     link.click();
     URL.revokeObjectURL(url);
   },
-  async initActivityLog() {
-    if (!this.db || this.activityLog) {
+  async initActivityLog(force = false) {
+    if (!this.db) {
       return;
     }
-    try {
-      const { default: ActivityLog } = await import('../activity-log.js');
-      this.activityLog = await ActivityLog.init(this.db);
-    } catch (error) {
-      console.error('Failed to initialize activity log', error);
+
+    if (this.activityLogLoaded && !force) {
+      return;
     }
+
+    if (this._activityLogLoading) {
+      await this._activityLogLoading;
+      return;
+    }
+
+    const table = this.db.activities;
+    if (!table || typeof table.orderBy !== 'function') {
+      this.activityLogLoaded = true;
+      if (force) {
+        this.activityLog.splice(0);
+      }
+      return;
+    }
+
+    this._activityLogLoading = (async () => {
+      try {
+        const records = await table.orderBy('createdAt').reverse().limit(ACTIVITY_TIMELINE_LIMIT).toArray();
+        const normalized = Array.isArray(records)
+          ? records.map(entry => ({
+              id: entry?.id ?? entry?.key ?? generateId(),
+              type: typeof entry?.type === 'string' && entry.type ? entry.type : 'activity',
+              summary: typeof entry?.summary === 'string' ? entry.summary : '',
+              details: entry?.details && typeof entry.details === 'object' ? cloneActivityDetail(entry.details) : {},
+              createdAt: entry?.createdAt || new Date().toISOString()
+            }))
+          : [];
+        this.activityLog.splice(0, this.activityLog.length, ...normalized);
+      } catch (error) {
+        console.error('Failed to load activity log', error);
+        if (force) {
+          this.activityLog.splice(0);
+        }
+      } finally {
+        this.activityLogLoaded = true;
+        this._activityLogLoading = null;
+      }
+    })();
+
+    await this._activityLogLoading;
+  },
+  async recordActivity({ type, summary, details = {} } = {}) {
+    if (!this.db) {
+      return null;
+    }
+
+    await this.initActivityLog();
+
+    const table = this.db.activities;
+    const normalizedType = typeof type === 'string' && type.trim() ? type.trim() : 'activity';
+    const normalizedDetails = cloneActivityDetail(details);
+    const timestampIso = new Date().toISOString();
+    const finalSummary = buildActivitySummary(summary || normalizedType, normalizedDetails, timestampIso);
+    const entry = {
+      type: normalizedType,
+      summary: finalSummary,
+      details: normalizedDetails,
+      createdAt: timestampIso
+    };
+
+    if (table && typeof table.add === 'function') {
+      try {
+        entry.id = await table.add(entry);
+      } catch (error) {
+        console.error('Failed to persist activity entry', error);
+      }
+    }
+
+    if (entry.id == null) {
+      entry.id = `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    this.activityLog.unshift(entry);
+    if (this.activityLog.length > ACTIVITY_TIMELINE_LIMIT) {
+      this.activityLog.length = ACTIVITY_TIMELINE_LIMIT;
+    }
+
+    console.info('Activity:', finalSummary);
+    return entry;
   },
   openAddRequirement() {
     this.showAddRequirementModal = true;
@@ -1167,7 +1232,6 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
 
     this.addRequirementModal.saving = true;
     try {
-      await this.initActivityLog();
       const command = new AddRequirement(this.db, {
         requirement,
         initialStatus: 'Pending',
@@ -1183,36 +1247,15 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       if (store && typeof store.showToast === 'function') {
         store.showToast({ type: 'success', message: successMessage });
       }
-      let activityEntry = null;
-      if (this.activityLog && typeof this.activityLog.record === 'function') {
-        try {
-          activityEntry = await this.activityLog.record({
-            actionType: 'AddRequirement',
-            actor: 'user',
-            targets: [{ type: 'requirement', id: requirement.id }],
-            metadata: {
-              requirement,
-              initialStatus: 'Pending'
-            },
-            supportsUndo: false
-          });
-        } catch (error) {
-          console.error('Failed to record requirement creation activity', error);
+      await this.recordActivity({
+        type: 'requirement:add',
+        summary: successMessage,
+        details: {
+          requirementId: requirement.id,
+          defaultExpiryDays: requirement.defaultExpiryDays,
+          color: requirement.color || null
         }
-      }
-      const timelineStore = this.$store?.activityLog;
-      if (timelineStore && typeof timelineStore.record === 'function') {
-        timelineStore.record({
-          type: 'Requirement',
-          actionType: 'AddRequirement',
-          summary: successMessage,
-          timestamp: activityEntry?.timestamp ?? Date.now(),
-          metadata: {
-            requirementId: requirement.id,
-            defaultExpiryDays: requirement.defaultExpiryDays
-          }
-        });
-      }
+      });
     } catch (error) {
       console.error('Failed to add requirement', error);
       this.addRequirementModal.errors = {
@@ -1357,7 +1400,6 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       this.$nextTick(() => this.focusFirstInvalidAddEmployeeField(errors));
       return;
     }
-    await this.initActivityLog();
     const payload = this.buildAddEmployeePayload();
     this.addEmployeeModal.saving = true;
     try {
@@ -1374,17 +1416,19 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
         const name = `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || 'Employee';
         store.showToast({ type: 'success', message: `${name} added.` });
       }
-      const timelineStore = this.$store?.activityLog;
-      if (timelineStore && typeof timelineStore.record === 'function') {
-        const name = `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || 'Employee';
-        timelineStore.record({
-          type: 'Add employee',
-          actionType: 'AddEmployee',
-          summary: `${name} added`,
-          timestamp: Date.now(),
-          metadata: { employeeId: employee?.id || payload.id }
-        });
-      }
+      const employeeName = `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim() || 'Employee';
+      const roleLabel = employee?.role ? ` (${employee.role})` : '';
+      await this.recordActivity({
+        type: 'employee:add',
+        summary: `Added employee ${employeeName}${roleLabel}`,
+        details: {
+          employeeId: employee?.id || payload.id,
+          role: employee?.role || '',
+          status: employee?.status || '',
+          employmentType: employee?.employmentType || '',
+          createdAt: employee?.createdAt
+        }
+      });
     } catch (error) {
       console.error('Failed to add employee', error);
       this.addEmployeeModal.errors = {
@@ -1599,16 +1643,21 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       if (store && typeof store.showToast === 'function') {
         store.showToast({ type: 'success', message });
       }
-      const timelineStore = this.$store?.activityLog;
-      if (timelineStore && typeof timelineStore.record === 'function') {
-        timelineStore.record({
-          type: mode === 'seniority' ? 'Seniority import' : 'Import',
-          actionType: mode === 'seniority' ? 'ImportEmployeesSeniority' : 'ImportEmployees',
-          summary: message,
-          timestamp: Date.now(),
-          metadata: summary
-        });
-      }
+      const total = summary.added + summary.updated;
+      const sourceLabel = mode === 'seniority' ? 'seniority' : 'employees';
+      const approvedBy = (window.APP_FLAGS?.currentUserName && String(window.APP_FLAGS.currentUserName).trim())
+        || 'Admin';
+      await this.recordActivity({
+        type: 'import',
+        summary: `Imported ${total} employees (${sourceLabel}). ${summary.updated} updated. ${summary.added} added.`,
+        details: {
+          ...summary,
+          source: sourceLabel,
+          total,
+          approvedBy,
+          approvedAt: new Date().toISOString()
+        }
+      });
     } catch (error) {
       console.error('Import commit failed', error);
       const message = error?.message ? String(error.message) : 'Commit failed. Check the console for details.';
@@ -2070,48 +2119,22 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     for (const record of updates) {
       this.setEmployeeRequirement(record);
     }
-    await this.initActivityLog();
-    let activityEntry = null;
-    if (this.activityLog) {
-      try {
-        activityEntry = await this.activityLog.record({
-          actionType: 'bulk-update-requirement',
-          actor: 'user',
-          targets: employeeIds.map(id => ({ type: 'employee', id })),
-          metadata: {
-            requirementId,
-            requirementName: requirement.name,
-            action,
-            count: updates.length,
-            date: dateValue || null,
-            reason: reason || null
-          },
-          supportsUndo: false
-        });
-      } catch (error) {
-        console.error('Failed to record bulk activity', error);
-      }
-    }
     if (updates.length) {
-      const timelineStore = this.$store?.activityLog;
-      if (timelineStore && typeof timelineStore.record === 'function') {
-        const actionLabel = this.bulkActionLabel(action);
-        const summary = `${actionLabel} · ${requirement.name} (${updates.length} ${updates.length === 1 ? 'employee' : 'employees'})`;
-        timelineStore.record({
-          ...(activityEntry || {}),
-          type: 'Bulk update',
-          summary,
-          timestamp: activityEntry?.timestamp ?? Date.now(),
-          metadata: {
-            requirementId,
-            requirementName: requirement.name,
-            action,
-            count: updates.length,
-            date: dateValue || null,
-            reason: reason || null
-          }
-        });
-      }
+      const actionLabel = this.bulkActionLabel(action);
+      const peopleLabel = updates.length === 1 ? 'employee' : 'employees';
+      await this.recordActivity({
+        type: 'requirement:bulk-update',
+        summary: `${actionLabel} · ${requirement.name} (${updates.length} ${peopleLabel})`,
+        details: {
+          requirementId,
+          requirementName: requirement.name,
+          action,
+          count: updates.length,
+          date: dateValue || null,
+          reason: reason || null,
+          employeeIds
+        }
+      });
     }
     this.refreshAnalytics();
     this.applyFilters();
@@ -2627,9 +2650,22 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.applyFilters();
     await this.loadData();
     this.applyFilters();
-    this.activityLog?.record?.({
-      type: 'EditRequirement',
-      summary: `${checked ? 'Completed' : 'Cleared'} ${this.requirementById(reqId)?.name}`
+    const requirement = this.requirementById(reqId);
+    const employee = this.employees.find(emp => emp.id === empId);
+    const employeeName = employee
+      ? `${normalizeString(employee.firstName)} ${normalizeString(employee.lastName)}`.trim() || 'Employee'
+      : 'Employee';
+    const requirementName = requirement?.name || 'Requirement';
+    await this.recordActivity({
+      type: 'requirement:status',
+      summary: `${checked ? 'Completed' : 'Cleared'} ${requirementName} for ${employeeName}`,
+      details: {
+        employeeId: empId,
+        requirementId: reqId,
+        status: row.status,
+        completedOn: row.completedOn || null,
+        expiresOn: row.expiresOn || null
+      }
     });
   },
   getEmployeeRequirement(employeeId, requirementId) {
@@ -2799,48 +2835,22 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       payload.createdAt = new Date().toISOString();
       await table.put(payload);
     }
-    await this.initActivityLog();
-    let activityEntry = null;
-    if (this.activityLog) {
-      try {
-        activityEntry = await this.activityLog.record({
-          actionType: 'update-requirement',
-          actor: 'user',
-          targets: [{ type: 'employee', id: employeeId }],
-          metadata: {
-            requirementId,
-            status: payload.status,
-            completedOn: payload.completedOn,
-            expiresOn: payload.expiresOn
-          },
-          supportsUndo: false
-        });
-      } catch (error) {
-        console.error('Failed to record inline edit activity', error);
+    const employee = this.employees.find(emp => emp.id === employeeId);
+    const requirement = this.requirements.find(req => req.id === requirementId);
+    const employeeName = `${normalizeString(employee?.firstName)} ${normalizeString(employee?.lastName)}`.trim() || 'Employee';
+    const requirementName = requirement?.name || 'Requirement';
+    const statusLabel = normalizeStatus(payload.status);
+    await this.recordActivity({
+      type: 'requirement:edit',
+      summary: `${requirementName} updated for ${employeeName} (${statusLabel})`,
+      details: {
+        requirementId,
+        status: statusLabel,
+        completedOn: payload.completedOn,
+        expiresOn: payload.expiresOn,
+        employeeId
       }
-    }
-    const timelineStore = this.$store?.activityLog;
-    if (timelineStore && typeof timelineStore.record === 'function') {
-      const employee = this.employees.find(emp => emp.id === employeeId);
-      const requirement = this.requirements.find(req => req.id === requirementId);
-      const employeeName = `${normalizeString(employee?.firstName)} ${normalizeString(employee?.lastName)}`.trim() || 'Employee';
-      const requirementName = requirement?.name || 'Requirement';
-      const statusLabel = normalizeStatus(payload.status);
-      const summary = `${requirementName} updated for ${employeeName} (${statusLabel})`;
-      timelineStore.record({
-        ...(activityEntry || {}),
-        type: 'Requirement',
-        summary,
-        timestamp: activityEntry?.timestamp ?? Date.now(),
-        metadata: {
-          requirementId,
-          status: statusLabel,
-          completedOn: payload.completedOn,
-          expiresOn: payload.expiresOn,
-          employeeId
-        }
-      });
-    }
+    });
     this.setEmployeeRequirement(payload);
     this.refreshAnalytics();
     this.closeEditor();
@@ -2876,9 +2886,6 @@ function bootApp() {
   }
 
   window.Alpine = Alpine;
-
-  const activityTimelineStore = createActivityTimelineStore();
-  Alpine.store('activityLog', activityTimelineStore);
 
   registerV2Component('v2DashboardApp', v2DashboardAppDefinition);
 
