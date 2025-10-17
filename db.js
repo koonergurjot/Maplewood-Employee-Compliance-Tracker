@@ -234,6 +234,11 @@ function defineSchema(db) {
       'id, employeeId, lastName, firstName, role, employmentType, status, seniorityHours, jobClass, jobTitle, ranking, positionStatus, [employeeId+lastName+firstName]'
   };
 
+  const v14Stores = {
+    ...v13Stores,
+    activities: '++id, type, createdAt'
+  };
+
   db.version(8).stores(v8Stores);
   db.version(9).stores(v9Stores);
   db.version(10).stores(v10Stores).upgrade(async tx => {
@@ -398,6 +403,8 @@ function defineSchema(db) {
         console.warn('Failed to backfill employee seniority fields', error);
       }
     });
+
+  db.version(14).stores(v14Stores);
 
   db.on('populate', tx => {
     tx.table('requirements').bulkAdd(getDefaultRequirementSeeds());
