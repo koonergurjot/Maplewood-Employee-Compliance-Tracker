@@ -1106,3 +1106,8 @@ body {
   border-color: rgba(107, 114, 128, 0.45);
 }
 
+.requirements-table.compact td,
+.requirements-table.compact th {
+  padding: 6px 8px;
+}
+

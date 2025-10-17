@@ -19,7 +19,7 @@
   </template>
 
   <div class="grid-scroll" role="region" aria-label="Scrollable requirements table" x-show="!loading && filteredEmployees.length">
-    <table class="min-w-full text-sm text-slate-700 requirements-table">
+    <table class="min-w-full text-sm text-slate-700 requirements-table" :class="{'compact': $store.ui.compact}">
       <thead class="text-xs uppercase tracking-wide text-slate-500">
         <tr>
           <th scope="col" class="sticky-header sticky left-0 px-4 py-3 text-left">Employee</th>
