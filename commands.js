@@ -676,7 +676,12 @@ export class ImportEmployees {
       return {
         addedEmployees,
         addedEmployeeRequirements,
-        updatedSnapshots
+        updatedSnapshots,
+        summary: {
+          added: addedEmployees.length,
+          updated: updatedSnapshots.length,
+          skipped: Math.max(0, this.employees.length - addedEmployees.length - updatedSnapshots.length)
+        }
       };
     });
   }

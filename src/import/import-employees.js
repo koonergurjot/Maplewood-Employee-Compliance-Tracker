@@ -619,7 +619,8 @@ export async function runSeniorityDryRun(file) {
     summary,
     mapping: mappingLabels,
     skipped,
-    headerRow: headerInfo.row
+    headerRow: headerInfo.row,
+    records
   };
 
   return {
@@ -628,7 +629,10 @@ export async function runSeniorityDryRun(file) {
     mappingRows,
     headerRowNumber,
     preview,
-    skipped
+    skipped,
+    employees,
+    rows: records,
+    headerRow: headerInfo.row
   };
 }
 

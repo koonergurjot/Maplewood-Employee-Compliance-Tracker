@@ -10,6 +10,13 @@ import addRequirementModalTemplate from './v2/add-requirement-modal.html?raw';
 import bulkActionsTemplate from './v2/bulk-actions.html?raw';
 import activityTimelineTemplate from './v2/activity-timeline.html?raw';
 import employeeProfileTemplate from './v2/employee-profile.html?raw';
+import {
+  approveImport as approveSupabaseImport,
+  getClient as getSupabaseClient,
+  hasSupabaseConfig,
+  pullEmployeesSince,
+  upsertPendingImport as submitImportForApproval
+} from './cloud/supabase.js';
 const inlineEditTemplate = `
 <template>
   <div class="inline-overlay" x-show="activeEditor.open" x-transition.opacity @click="closeEditor" aria-hidden="true"></div>
@@ -90,6 +97,7 @@ import {
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
+const CLOUD_LAST_SYNC_STORAGE_KEY = 'maplewood:cloud:lastSync';
 
 const DEFAULT_APP_FLAGS = { USE_V2_MAIN: true };
 const USE_V2_STORAGE_KEY = 'USE_V2_MAIN';
@@ -718,6 +726,8 @@ const v2DashboardAppDefinition = () => ({
     completedOn: '',
     expiresOn: ''
   },
+  cloudAvailable: hasSupabaseConfig(),
+  lastCloudSync: '',
   importDrawer: {
     open: false,
     mode: 'employees',
@@ -733,7 +743,21 @@ const v2DashboardAppDefinition = () => ({
     previewTotal: 0,
     error: '',
     commitDisabled: true,
-    headerRowNumber: null
+    headerRowNumber: null,
+    submitDisabled: true,
+    submitLoading: false,
+    awaitingApproval: false,
+    pendingBatchId: '',
+    approvalMessage: '',
+    pendingRows: [],
+    pendingRawRows: [],
+    pendingSummary: null,
+    pendingHeader: null,
+    adminMode: false,
+    pendingImports: [],
+    pendingImportsLoading: false,
+    pendingImportsError: '',
+    approvingBatchId: ''
   },
   init() {
     if (!window.APP_FLAGS?.USE_V2_MAIN) {
@@ -813,8 +837,17 @@ const v2DashboardAppDefinition = () => ({
     try {
       this.loading = true;
       await this.loadPartials();
+      this.cloudAvailable = hasSupabaseConfig();
+      this.lastCloudSync = this.readLastCloudSync();
       this.db = await openDatabase();
       await ensureSeedRequirements(this.db);
+      if (this.cloudAvailable) {
+        try {
+          await this.syncFromCloud();
+        } catch (syncError) {
+          console.warn('Cloud sync failed during bootstrap', syncError);
+        }
+      }
       await this.initActivityLog();
       await this.loadData();
       this.applyFilters();
@@ -1048,6 +1081,20 @@ const v2DashboardAppDefinition = () => ({
     this.importDrawer.previewTotal = 0;
     this.importDrawer.error = '';
     this.importDrawer.headerRowNumber = null;
+    this.importDrawer.submitDisabled = true;
+    this.importDrawer.submitLoading = false;
+    this.importDrawer.awaitingApproval = false;
+    this.importDrawer.pendingBatchId = '';
+    this.importDrawer.approvalMessage = '';
+    this.importDrawer.pendingRows = [];
+    this.importDrawer.pendingRawRows = [];
+    this.importDrawer.pendingSummary = null;
+    this.importDrawer.pendingHeader = null;
+    this.importDrawer.pendingImportsError = '';
+    this.importDrawer.approvingBatchId = '';
+    this.importDrawer.adminMode = false;
+    this.importDrawer.pendingImports = [];
+    this.importDrawer.pendingImportsLoading = false;
     this.updateImportDrawerCommitState();
     if (this.$refs.importFileInput) {
       this.$refs.importFileInput.value = '';
@@ -1055,8 +1102,251 @@ const v2DashboardAppDefinition = () => ({
   },
   updateImportDrawerCommitState() {
     const state = this.importDrawer;
-    const disabled = !state.file || !state.summary || state.dryRunLoading || state.commitLoading;
-    state.commitDisabled = disabled;
+    const hasSummary = Boolean(state.summary);
+    const submitDisabled = !hasSummary || state.dryRunLoading || state.submitLoading || !this.cloudAvailable;
+    state.submitDisabled = submitDisabled || state.awaitingApproval;
+    const disabled = !state.file || !hasSummary || state.dryRunLoading || state.commitLoading || state.submitLoading;
+    state.commitDisabled = disabled || state.awaitingApproval;
+  },
+  readLastCloudSync() {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return '';
+    }
+    try {
+      return window.localStorage.getItem(CLOUD_LAST_SYNC_STORAGE_KEY) || '';
+    } catch (error) {
+      console.warn('Unable to read cloud sync timestamp', error);
+      return '';
+    }
+  },
+  writeLastCloudSync(value) {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      this.lastCloudSync = value || '';
+      return;
+    }
+    try {
+      if (value) {
+        window.localStorage.setItem(CLOUD_LAST_SYNC_STORAGE_KEY, value);
+      } else {
+        window.localStorage.removeItem(CLOUD_LAST_SYNC_STORAGE_KEY);
+      }
+      this.lastCloudSync = value || '';
+    } catch (error) {
+      console.warn('Unable to persist cloud sync timestamp', error);
+      this.lastCloudSync = value || '';
+    }
+  },
+  currentUserName() {
+    const flags = typeof window !== 'undefined' ? window.APP_FLAGS || {} : {};
+    const fromFlags = typeof flags.currentUserName === 'string' && flags.currentUserName.trim()
+      ? flags.currentUserName.trim()
+      : '';
+    if (fromFlags) {
+      return fromFlags;
+    }
+    if (typeof flags.currentUserEmail === 'string' && flags.currentUserEmail.trim()) {
+      return flags.currentUserEmail.trim();
+    }
+    return '';
+  },
+  computeLatestSyncTimestamp(employees = [], requirements = []) {
+    const timestamps = [];
+    const collect = value => {
+      if (!value) {
+        return;
+      }
+      try {
+        const iso = new Date(value).toISOString();
+        timestamps.push(iso);
+      } catch (_) {
+        // ignore parse errors
+      }
+    };
+    employees.forEach(entry => collect(entry?.updatedAt));
+    requirements.forEach(entry => collect(entry?.updatedAt));
+    timestamps.sort();
+    return timestamps.length ? timestamps[timestamps.length - 1] : '';
+  },
+  async syncFromCloud(force = false) {
+    if (!this.db || !this.cloudAvailable) {
+      return;
+    }
+    const since = force ? '' : this.readLastCloudSync();
+    const safeSince = typeof since === 'string' && since ? since : '';
+    const result = await pullEmployeesSince(safeSince);
+    if (!result) {
+      return;
+    }
+    const employees = Array.isArray(result.employees) ? result.employees : [];
+    const requirements = Array.isArray(result.employeeRequirements) ? result.employeeRequirements : [];
+    if (employees.length || requirements.length) {
+      await this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async () => {
+        if (employees.length) {
+          await this.db.employees.bulkPut(employees);
+        }
+        if (requirements.length) {
+          await this.db.employeeRequirements.bulkPut(requirements);
+        }
+      });
+    }
+    const nextCursor = result.cursor || this.computeLatestSyncTimestamp(employees, requirements) || new Date().toISOString();
+    if (nextCursor) {
+      this.writeLastCloudSync(nextCursor);
+    }
+  },
+  async submitImportForCloudApproval() {
+    if (!this.cloudAvailable) {
+      this.toast('Cloud sync is not configured.', 'error');
+      return;
+    }
+    if (this.importDrawer.submitLoading) {
+      return;
+    }
+    const rows = Array.isArray(this.importDrawer.pendingRows) ? this.importDrawer.pendingRows : [];
+    if (!rows.length) {
+      this.toast('Run a dry-run before submitting for approval.', 'error');
+      return;
+    }
+    const rawRows = Array.isArray(this.importDrawer.pendingRawRows) ? this.importDrawer.pendingRawRows : [];
+    const payloadRows = rows.map((row, index) => ({
+      mapped: row,
+      raw: rawRows[index] || null
+    }));
+    const metadata = {
+      summary: this.importDrawer.pendingSummary,
+      mapping: this.importDrawer.mapping,
+      headerRow: this.importDrawer.pendingHeader,
+      mode: this.importDrawer.mode === 'seniority' ? 'seniority' : 'employees',
+      fileName: this.importDrawer.fileName,
+      requestedBy: this.currentUserName()
+    };
+    this.importDrawer.submitLoading = true;
+    this.importDrawer.pendingImportsError = '';
+    this.updateImportDrawerCommitState();
+    try {
+      const response = await submitImportForApproval(payloadRows, metadata);
+      this.importDrawer.pendingBatchId = response?.batchId || '';
+      this.importDrawer.awaitingApproval = true;
+      this.importDrawer.approvalMessage = 'Awaiting approval';
+      this.toast('Import submitted for approval.', 'success');
+    } catch (error) {
+      console.error('Failed to submit import for approval', error);
+      const message = error?.message ? `Submit failed: ${error.message}` : 'Submit failed. See console for details.';
+      this.setImportDrawerError(message);
+    } finally {
+      this.importDrawer.submitLoading = false;
+      this.updateImportDrawerCommitState();
+    }
+  },
+  toggleImportAdminMode() {
+    if (!this.cloudAvailable) {
+      this.toast('Cloud sync is not configured.', 'error');
+      return;
+    }
+    this.importDrawer.adminMode = !this.importDrawer.adminMode;
+    if (this.importDrawer.adminMode) {
+      this.loadPendingImports();
+    }
+  },
+  async loadPendingImports() {
+    if (!this.cloudAvailable) {
+      return;
+    }
+    const client = getSupabaseClient();
+    if (!client) {
+      this.importDrawer.pendingImports = [];
+      this.importDrawer.pendingImportsError = '';
+      return;
+    }
+    this.importDrawer.pendingImportsLoading = true;
+    this.importDrawer.pendingImportsError = '';
+    try {
+      const { data, error } = await client
+        .from('imports')
+        .select('id, status, summary, row_count, created_at, requested_by, mode, file_name')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+      if (error) {
+        throw error;
+      }
+      const pending = Array.isArray(data) ? data : [];
+      this.importDrawer.pendingImports = pending.map(entry => {
+        const summary = entry?.summary && typeof entry.summary === 'object' ? entry.summary : {};
+        const added = Number(summary.added) || 0;
+        const updated = Number(summary.updated) || 0;
+        const skipped = Number(summary.skipped) || 0;
+        const createdAt = entry?.created_at ? new Date(entry.created_at) : null;
+        const createdLabel = createdAt && !Number.isNaN(createdAt.valueOf())
+          ? createdAt.toLocaleString()
+          : '';
+        return {
+          id: entry.id,
+          status: entry.status,
+          mode: entry.mode || 'employees',
+          summary,
+          rowCount: entry.row_count || 0,
+          createdAt: entry.created_at,
+          createdAtLabel: createdLabel,
+          requestedBy: entry.requested_by || '',
+          fileName: entry.file_name || '',
+          summaryText: `${added} added, ${updated} updated, ${skipped} skipped`
+        };
+      });
+    } catch (error) {
+      console.error('Failed to load pending imports', error);
+      this.importDrawer.pendingImportsError = error?.message ? String(error.message) : 'Unable to load pending imports.';
+    } finally {
+      this.importDrawer.pendingImportsLoading = false;
+    }
+  },
+  async approvePendingImport(batchId) {
+    if (!batchId || !this.cloudAvailable) {
+      return;
+    }
+    if (this.importDrawer.approvingBatchId) {
+      return;
+    }
+    if (!this.db) {
+      this.toast('Database is not ready.', 'error');
+      return;
+    }
+    this.importDrawer.approvingBatchId = batchId;
+    this.importDrawer.pendingImportsError = '';
+    try {
+      const approvedBy = this.currentUserName() || undefined;
+      const result = await approveSupabaseImport(batchId, { approvedBy });
+      const employees = Array.isArray(result?.employees) ? result.employees : [];
+      const requirements = Array.isArray(result?.employeeRequirements) ? result.employeeRequirements : [];
+      if (employees.length || requirements.length) {
+        await this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async () => {
+          if (employees.length) {
+            await this.db.employees.bulkPut(employees);
+          }
+          if (requirements.length) {
+            await this.db.employeeRequirements.bulkPut(requirements);
+          }
+        });
+      }
+      if (result?.cursor) {
+        this.writeLastCloudSync(result.cursor);
+      } else {
+        const cursor = this.computeLatestSyncTimestamp(employees, requirements);
+        if (cursor) {
+          this.writeLastCloudSync(cursor);
+        }
+      }
+      await this.syncFromCloud(true);
+      await this.loadPendingImports();
+      await this.loadData();
+      this.toast('Import approved and synced.', 'success');
+    } catch (error) {
+      console.error('Failed to approve import', error);
+      const message = error?.message ? String(error.message) : 'Approval failed.';
+      this.importDrawer.pendingImportsError = message;
+      this.toast('Approval failed. See console for details.', 'error');
+    } finally {
+      this.importDrawer.approvingBatchId = '';
+    }
   },
   downloadSampleCSV() {
     if (this.importDrawer.mode === 'seniority') {
@@ -1585,6 +1875,10 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     const { toast = true } = options;
     const safeMessage = message ? String(message) : 'Import failed.';
     this.importDrawer.error = safeMessage;
+    this.importDrawer.submitLoading = false;
+    this.importDrawer.awaitingApproval = false;
+    this.importDrawer.pendingBatchId = '';
+    this.importDrawer.approvalMessage = '';
     this.updateImportDrawerCommitState();
     if (toast) {
       const store = this.$store?.app;
@@ -1609,6 +1903,19 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.importDrawer.summary = summary;
     const mapping = result && typeof result.mapping === 'object' ? result.mapping : (result && typeof result.columns === 'object' ? result.columns : null);
     this.importDrawer.mapping = mapping;
+    const pendingEmployees = Array.isArray(result?.employees)
+      ? result.employees.filter(row => row && typeof row === 'object')
+      : [];
+    this.importDrawer.pendingRows = pendingEmployees;
+    this.importDrawer.pendingRawRows = Array.isArray(result?.rows)
+      ? result.rows.filter(row => row && typeof row === 'object')
+      : [];
+    this.importDrawer.pendingSummary = summary;
+    this.importDrawer.pendingHeader = Array.isArray(result?.headerRow) ? [...result.headerRow] : null;
+    this.importDrawer.awaitingApproval = false;
+    this.importDrawer.pendingBatchId = '';
+    this.importDrawer.approvalMessage = '';
+    this.importDrawer.submitLoading = false;
     const mappingRows = Array.isArray(result?.mappingRows)
       ? result.mappingRows
           .filter(row => row && typeof row === 'object')
@@ -1681,6 +1988,14 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.importDrawer.previewTotal = 0;
     this.importDrawer.error = '';
     this.importDrawer.headerRowNumber = null;
+    this.importDrawer.pendingRows = [];
+    this.importDrawer.pendingRawRows = [];
+    this.importDrawer.pendingSummary = null;
+    this.importDrawer.pendingHeader = null;
+    this.importDrawer.awaitingApproval = false;
+    this.importDrawer.pendingBatchId = '';
+    this.importDrawer.approvalMessage = '';
+    this.importDrawer.submitLoading = false;
     this.updateImportDrawerCommitState();
     if (file) {
       await this.runImportDryRun(file);
