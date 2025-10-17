@@ -19,129 +19,73 @@
   </template>
 
   <div class="grid-scroll" role="region" aria-label="Scrollable requirements table" x-show="!loading && filteredEmployees.length">
-    <table class="requirements-table has-selection-column">
-      <thead>
+    <table class="min-w-full text-sm text-slate-700 requirements-table">
+      <thead class="text-xs uppercase tracking-wide text-slate-500">
         <tr>
-          <th scope="col" class="sticky-select sticky-header checkbox-cell">
-            <span class="sr-only">Select all employees</span>
-            <input
-              type="checkbox"
-              class="checkbox-input"
-              x-ref="selectAllCheckbox"
-              :checked="areAllVisibleSelected()"
-              @change="toggleSelectAll($event.target.checked)"
-              aria-label="Select all filtered employees"
-              x-effect="if ($refs.selectAllCheckbox) { $refs.selectAllCheckbox.indeterminate = hasSomeVisibleSelected() && !areAllVisibleSelected(); }"
-            />
-          </th>
-          <template x-for="column in gridInfoColumns()" :key="`header-${column.key}`">
-            <th
-              scope="col"
-              :class="[column.headerClass, column.key === 'name' ? 'sticky left-0 z-20 bg-white' : '']"
-            >
-              <span x-text="column.label"></span>
-            </th>
-          </template>
+          <th scope="col" class="sticky left-0 z-10 bg-white px-4 py-3 text-left">Employee</th>
           <template x-for="req in gridOrderedRequirements()" :key="req.id">
-            <th scope="col" class="sticky-header requirement-header">
-              <div class="requirement-head">
-                <span class="requirement-name" x-text="req.name"></span>
-                <span class="requirement-tag" x-show="req.defaultExpiryDays" x-text="req.defaultExpiryDays + 'd'"></span>
-              </div>
-            </th>
+            <th class="px-4 py-3 text-left whitespace-nowrap" x-text="req.name"></th>
           </template>
         </tr>
       </thead>
-      <tbody>
+      <tbody class="divide-y divide-slate-200">
         <template x-for="employee in filteredEmployees" :key="employee.id">
-          <tr :class="{ 'row-selected': isEmployeeSelected(employee.id) }">
-            <td class="sticky-select checkbox-cell">
-              <input
-                type="checkbox"
-                class="checkbox-input"
-                :aria-label="`Select ${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Select employee'"
-                :checked="isEmployeeSelected(employee.id)"
-                @change="toggleEmployeeSelection(employee.id, $event.target.checked)"
-              />
-            </td>
-            <template x-for="column in gridInfoColumns()" :key="`${employee.id}-${column.key}`">
-              <template x-if="column.key === 'name'">
-                <th scope="row" :class="[column.cellClass, 'sticky left-0 z-10 bg-white']">
-                  <div class="flex items-center gap-3">
-                    <div class="relative">
-                      <div
-                        class="h-8 w-8 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-semibold"
-                        x-text="(employee.firstName?.[0]||'') + (employee.lastName?.[0]||'')"
-                      ></div>
-                      <svg viewBox="0 0 24 24" class="absolute -bottom-1 -right-1 h-5 w-5">
-                        <circle cx="12" cy="12" r="10" stroke-width="3" fill="none" class="stroke-slate-200"></circle>
-                        <circle
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke-width="3"
-                          fill="none"
-                          :style="`stroke-dasharray:${(employeeCompliancePercent(employee.id)/100)*62.83} 62.83;transition:stroke-dasharray .25s`"
-                          :class="employeeCompliancePercent(employee.id)>=90?'stroke-emerald-500':employeeCompliancePercent(employee.id)>=70?'stroke-amber-500':'stroke-rose-500'"
-                        ></circle>
-                      </svg>
-                    </div>
-                    <div>
-                      <div class="font-medium" x-text="employee.fullName || (employee.firstName+' '+employee.lastName)"></div>
-                      <div class="text-xs text-slate-500" x-text="(employee.role||'—') + ' • ' + (employee.status||'—')"></div>
-                    </div>
-                    <div class="ml-auto flex items-center gap-2">
-                      <button
-                        type="button"
-                        class="text-slate-500 hover:text-slate-700"
-                        @click.stop="openProfile(employee.id)"
-                        title="Details"
-                      >⋯</button>
-                      <button
-                        type="button"
-                        class="text-rose-600 hover:text-rose-800 text-xs"
-                        title="Delete Employee"
-                        @click.stop="confirmAndDeleteEmployee(employee.id)"
-                      >🗑 Delete</button>
-                    </div>
+          <tr class="bg-white">
+            <th scope="row" class="sticky left-0 z-10 bg-white px-4 py-3 align-top">
+              <div class="flex items-start gap-3">
+                <div class="relative h-8 w-8 shrink-0 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-semibold">
+                  <span x-text="(employee.firstName?.[0]||'') + (employee.lastName?.[0]||'')"></span>
+                  <svg viewBox="0 0 24 24" class="absolute -bottom-1 -right-1 h-5 w-5">
+                    <circle cx="12" cy="12" r="10" stroke-width="3" fill="none" class="stroke-slate-200"></circle>
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke-width="3"
+                      fill="none"
+                      :style="`stroke-dasharray:${(employeeCompliancePercent(employee.id)/100)*62.83} 62.83;transition:stroke-dasharray .25s`"
+                      :class="employeeCompliancePercent(employee.id)>=90?'stroke-emerald-500':employeeCompliancePercent(employee.id)>=70?'stroke-amber-500':'stroke-rose-500'"
+                    ></circle>
+                  </svg>
+                </div>
+                <div class="min-w-0 flex-1 space-y-1">
+                  <div class="font-medium text-slate-900" x-text="employee.fullName || (employee.firstName+' '+employee.lastName)"></div>
+                  <div class="text-xs text-slate-500">
+                    <span x-text="employee.role || '—'"></span>
+                    <span class="mx-1 text-slate-400" aria-hidden="true">•</span>
+                    <span x-text="employee.status || '—'"></span>
                   </div>
-                </th>
-              </template>
-              <template x-if="column.key !== 'name'">
-                <td :class="column.cellClass">
-                  <span class="employee-info-meta" x-text="gridInfoCellText(employee, column.key)"></span>
-                </td>
-              </template>
-            </template>
-            <template x-for="req in gridOrderedRequirements()" :key="req.id">
-              <td x-data="{ cell: getRequirementCell(employee.id, req.id) }">
-                <div class="cell">
-                  <label class="inline-flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      class="checkbox-input"
-                      :checked="cell.status==='Completed'"
-                      @change="toggleRequirement(employee.id, req.id, $event.target.checked)"
-                    />
-                    <span
-                      class="badge"
-                      :class="{
-                        'badge-green': cell.status==='Completed' && !cellWarn(cell) && !cellExpired(cell),
-                        'badge-amber': cell.status==='Completed' && cellWarn(cell),
-                        'badge-rose':  cellExpired(cell),
-                        'badge-slate': cell.status!=='Completed' && !cellExpired(cell)
-                      }"
-                      x-text="chipText(cell)"
-                    ></span>
-                  </label>
+                </div>
+                <div class="flex items-center gap-2">
                   <button
                     type="button"
-                    class="cell-sub text-left bg-transparent border-0 p-0 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500"
-                    :aria-label="`Edit ${req.name} for ${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Edit requirement'"
-                    @click="openEditor($event, employee.id, req.id)"
+                    class="text-slate-400 hover:text-slate-600"
+                    @click.stop="openProfile(employee.id)"
+                    title="Employee details"
                   >
-                    <span x-text="cellSubtext(cell)"></span>
+                    ⋯
                   </button>
+                  <button
+                    type="button"
+                    class="text-xs font-medium text-rose-600 hover:text-rose-700"
+                    title="Delete employee"
+                    @click.stop="confirmAndDeleteEmployee(employee.id)"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </th>
+            <template x-for="req in gridOrderedRequirements()" :key="req.id">
+              <td class="px-4 py-3 align-top">
+                <div x-data="requirementCell(employee.id, req.id)" x-init="init()" class="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    :checked="checked"
+                    @change="onToggle($event.target.checked)"
+                  />
+                  <span class="text-xs font-medium px-2 py-0.5 rounded" :class="badgeClass" x-text="label"></span>
                 </div>
               </td>
             </template>

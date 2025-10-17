@@ -143,6 +143,22 @@ export function getDexie() {
   return DexieRef;
 }
 
+export function getDb() {
+  if (databaseInstance) {
+    return databaseInstance;
+  }
+
+  const DexieInstance = getDexie();
+  if (!DexieInstance) {
+    throw new Error('Dexie failed to load. Call ensureDexieLoaded() before accessing the database instance.');
+  }
+
+  const db = new DexieInstance(DB_NAME);
+  defineSchema(db);
+  databaseInstance = db;
+  return databaseInstance;
+}
+
 async function loadDexie() {
   if (getDexie()) {
     return getDexie();
@@ -486,19 +502,12 @@ export async function createDatabase() {
     return databaseInstance;
   }
 
-  let DexieInstance = getDexie();
-  if (!DexieInstance) {
-    DexieInstance = await ensureDexieLoaded();
+  if (!getDexie()) {
+    const module = await ensureDexieLoaded();
+    setDexie(module);
   }
 
-  if (!DexieInstance) {
-    throw new Error('Dexie failed to load');
-  }
-
-  const db = new DexieInstance(DB_NAME);
-  defineSchema(db);
-  databaseInstance = db;
-  return databaseInstance;
+  return getDb();
 }
 
 export async function openDatabase() {
@@ -520,6 +529,124 @@ export async function openDatabase() {
   }
 
   return databaseOpenPromise;
+}
+
+export async function listRequirements() {
+  const db = await openDatabase();
+  try {
+    const table = db.table('requirements');
+    if (typeof table?.toArray === 'function') {
+      return await table.toArray();
+    }
+    return Array.isArray(db.requirements) ? db.requirements : [];
+  } catch (error) {
+    console.error('Failed to list requirements', error);
+    return [];
+  }
+}
+
+export async function listEmployees() {
+  const db = await openDatabase();
+  try {
+    const table = db.table('employees');
+    if (typeof table?.toArray === 'function') {
+      return await table.toArray();
+    }
+    return Array.isArray(db.employees) ? db.employees : [];
+  } catch (error) {
+    console.error('Failed to list employees', error);
+    return [];
+  }
+}
+
+function buildRequirementCompositeKey(employeeId, requirementId) {
+  if (employeeId == null || requirementId == null) {
+    return null;
+  }
+  return [employeeId, requirementId];
+}
+
+export async function getEmployeeRequirement(employeeId, requirementId) {
+  const compositeKey = buildRequirementCompositeKey(employeeId, requirementId);
+  if (!compositeKey) {
+    return null;
+  }
+
+  const db = await openDatabase();
+  const table = db.table('employeeRequirements');
+  if (!table) {
+    return null;
+  }
+
+  if (typeof table.where === 'function') {
+    try {
+      const query = table.where('[employeeId+requirementId]');
+      if (typeof query?.equals === 'function') {
+        const record = await query.equals(compositeKey).first();
+        if (record) {
+          return record;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to query employee requirement via compound index', error);
+    }
+  }
+
+  if (typeof table.get === 'function') {
+    try {
+      const records = await table
+        .filter(record => record?.employeeId === employeeId && record?.requirementId === requirementId)
+        .toArray();
+      return records[0] || null;
+    } catch (error) {
+      console.warn('Failed to query employee requirement via filter fallback', error);
+    }
+  }
+
+  return null;
+}
+
+export async function upsertEmployeeRequirement(payload) {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('upsertEmployeeRequirement requires a payload object');
+  }
+
+  const { employeeId, requirementId } = payload;
+  if (employeeId == null || requirementId == null) {
+    throw new Error('employeeId and requirementId are required to upsert an employee requirement');
+  }
+
+  const db = await openDatabase();
+  const table = db.table('employeeRequirements');
+  if (!table) {
+    throw new Error('employeeRequirements table is unavailable');
+  }
+
+  const nowIso = new Date().toISOString();
+  const existing = payload.id ? await table.get(payload.id) : await getEmployeeRequirement(employeeId, requirementId);
+
+  const record = {
+    ...existing,
+    ...payload,
+    employeeId,
+    requirementId,
+    updatedAt: nowIso
+  };
+
+  if (!record.id) {
+    record.id = existing?.id ?? generateId();
+  }
+  if (!record.createdAt) {
+    record.createdAt = existing?.createdAt ?? nowIso;
+  }
+
+  const statusFromCompletion = record.completedOn ? 'Completed' : 'Pending';
+  if (!record.status || record.status === existing?.status) {
+    record.status = statusFromCompletion;
+  }
+
+  await table.put(record);
+  return record;
 }
 
 function normalizeLookupType(type) {

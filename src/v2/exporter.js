@@ -4,15 +4,10 @@ const DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   day: '2-digit'
 });
 
-const DEFAULT_INFO_ORDER = ['name', 'seniorityHours', 'jobClass', 'jobTitle', 'ranking', 'positionStatus'];
+const DEFAULT_INFO_ORDER = ['name'];
 
 const INFO_LABELS = {
-  name: 'Name',
-  seniorityHours: 'Seniority Hours',
-  jobClass: 'Job Class',
-  jobTitle: 'Job Title',
-  ranking: 'Ranking',
-  positionStatus: 'Position Status'
+  name: 'Employee'
 };
 
 function formatDate(value) {
@@ -35,19 +30,14 @@ function formatRequirementCell(record) {
   if (!record) {
     return 'Pending';
   }
-  const parts = [];
-  const status = record.status ? String(record.status) : 'Pending';
-  parts.push(status);
+  const expiresOn = record.expiresOn ? new Date(record.expiresOn) : null;
+  if (expiresOn && !Number.isNaN(expiresOn.getTime()) && expiresOn < new Date()) {
+    return 'Expired';
+  }
   if (record.completedOn) {
-    parts.push(`Completed: ${formatDate(record.completedOn)}`);
+    return 'Complete';
   }
-  if (record.expiresOn) {
-    parts.push(`Expires: ${formatDate(record.expiresOn)}`);
-  }
-  if (record.notes) {
-    parts.push(`Notes: ${String(record.notes)}`);
-  }
-  return parts.join(' | ');
+  return 'Pending';
 }
 
 function toCsvValue(value) {
@@ -207,6 +197,21 @@ function orderRequirements(requirements, columnOrder) {
   return result;
 }
 
+function sortByRequirementName(a, b) {
+  const aName = a?.name ? String(a.name).toLocaleLowerCase() : '';
+  const bName = b?.name ? String(b.name).toLocaleLowerCase() : '';
+  if (!aName && !bName) {
+    return 0;
+  }
+  if (!aName) {
+    return 1;
+  }
+  if (!bName) {
+    return -1;
+  }
+  return aName.localeCompare(bName);
+}
+
 function triggerDownload(filename, data, mimeType) {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     console.warn('File downloads are not supported in this environment.');
@@ -237,7 +242,7 @@ export function exportFilteredCSV(employees, requirements, rows, columnOrder) {
     return false;
   }
   const infoOrder = resolveInfoOrder(columnOrder);
-  const requirementList = orderRequirements(requirements, columnOrder);
+  const requirementList = orderRequirements(requirements, columnOrder).slice().sort(sortByRequirementName);
 
   const header = infoOrder.map(key => getInfoLabel(key));
   for (const requirement of requirementList) {
@@ -277,9 +282,12 @@ export function exportFilteredJSON(employees, requirements, rows, columnOrder) {
   const rawEmployees = Array.isArray(employees)
     ? employees.map(employee => ({ ...(employee || {}) }))
     : [];
-  const requirementList = orderRequirements(requirements, columnOrder).map(requirement => ({
-    ...(requirement || {})
-  }));
+  const requirementList = orderRequirements(requirements, columnOrder)
+    .slice()
+    .sort(sortByRequirementName)
+    .map(requirement => ({
+      ...(requirement || {})
+    }));
   const infoOrder = resolveInfoOrder(columnOrder);
 
   const payload = {
@@ -298,7 +306,7 @@ export function exportFilteredJSON(employees, requirements, rows, columnOrder) {
         return {
           id: identifier ?? null,
           name: requirement?.name ?? '',
-          status: entry?.status ?? 'Pending',
+          status: formatRequirementCell(entry),
           completedOn: entry?.completedOn ?? null,
           expiresOn: entry?.expiresOn ?? null,
           notes: entry?.notes ?? null
