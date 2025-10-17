@@ -34,38 +34,25 @@
               x-effect="if ($refs.selectAllCheckbox) { $refs.selectAllCheckbox.indeterminate = hasSomeVisibleSelected() && !areAllVisibleSelected(); }"
             />
           </th>
-          <th scope="col" class="sticky-col sticky-header sticky-col-name employee-header" rowspan="2">
-            <span>Employee</span>
-          </th>
-          <th scope="col" class="sticky-col sticky-header sticky-info-col sticky-col-info-1 employee-header" rowspan="2">
-            <span>Seniority Hours</span>
-          </th>
-          <th scope="col" class="sticky-col sticky-header sticky-info-col sticky-col-info-2 employee-header" rowspan="2">
-            <span>Job Class</span>
-          </th>
-          <th scope="col" class="sticky-col sticky-header sticky-info-col sticky-col-info-3 employee-header" rowspan="2">
-            <span>Job Title</span>
-          </th>
-          <th scope="col" class="sticky-col sticky-header sticky-info-col sticky-col-info-4 employee-header" rowspan="2">
-            <span>Ranking</span>
-          </th>
-          <th scope="col" class="sticky-col sticky-header sticky-info-col sticky-col-info-5 employee-header" rowspan="2">
-            <span>Position Status</span>
-          </th>
+          <template x-for="column in gridInfoColumns()" :key="`header-${column.key}`">
+            <th scope="col" rowspan="2" :class="column.headerClass">
+              <span x-text="column.label"></span>
+            </th>
+          </template>
           <th class="sticky-header requirements-divider sticky-divider" role="presentation" aria-hidden="true" rowspan="2"></th>
-          <template x-if="requirements.length">
+          <template x-if="gridOrderedRequirements().length">
             <th
               scope="col"
               class="sticky-header requirements-group"
-              :colspan="requirements.length"
+              :colspan="gridOrderedRequirements().length"
             >
               Requirements
             </th>
           </template>
         </tr>
-        <template x-if="requirements.length">
+        <template x-if="gridOrderedRequirements().length">
           <tr>
-            <template x-for="req in requirements" :key="req.id">
+            <template x-for="req in gridOrderedRequirements()" :key="req.id">
               <th scope="col" class="sticky-header requirement-header">
                 <div class="requirement-head">
                   <span class="requirement-name" x-text="req.name"></span>
@@ -88,53 +75,44 @@
                 @change="toggleEmployeeSelection(employee.id, $event.target.checked)"
               />
             </td>
-            <th scope="row" class="sticky-col sticky-col-name employee-info-cell">
-              <div class="flex items-center gap-3">
-                <div class="relative">
-                  <div
-                    class="h-8 w-8 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-semibold"
-                    x-text="(employee.firstName?.[0]||'') + (employee.lastName?.[0]||'')"
-                  ></div>
-                  <svg viewBox="0 0 24 24" class="absolute -bottom-1 -right-1 h-5 w-5">
-                    <circle cx="12" cy="12" r="10" stroke-width="3" fill="none" class="stroke-slate-200"></circle>
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke-width="3"
-                      fill="none"
-                      :style="`stroke-dasharray:${(employeeCompliancePercent(employee.id)/100)*62.83} 62.83;transition:stroke-dasharray .25s`"
-                      :class="employeeCompliancePercent(employee.id)>=90?'stroke-emerald-500':employeeCompliancePercent(employee.id)>=70?'stroke-amber-500':'stroke-rose-500'"
-                    ></circle>
-                  </svg>
-                </div>
-                <div>
-                  <div class="font-medium" x-text="employee.fullName || (employee.firstName+' '+employee.lastName)"></div>
-                  <div class="text-xs text-slate-500" x-text="(employee.role||'—') + ' • ' + (employee.status||'—')"></div>
-                </div>
-                <button class="ml-auto text-slate-500 hover:text-slate-700" @click.stop="openProfile(employee.id)" title="Details">⋯</button>
-              </div>
-            </th>
-            <td class="sticky-col sticky-info-col sticky-col-info-1 employee-info-cell employee-info-cell-number">
-              <span
-                class="employee-info-meta"
-                x-text="employee.seniorityHours !== null && employee.seniorityHours !== '' ? Number(employee.seniorityHours).toLocaleString() : '—'"
-              ></span>
-            </td>
-            <td class="sticky-col sticky-info-col sticky-col-info-2 employee-info-cell">
-              <span class="employee-info-meta" x-text="employee.jobClass || '—'"></span>
-            </td>
-            <td class="sticky-col sticky-info-col sticky-col-info-3 employee-info-cell">
-              <span class="employee-info-meta" x-text="employee.jobTitle || employee.role || '—'"></span>
-            </td>
-            <td class="sticky-col sticky-info-col sticky-col-info-4 employee-info-cell">
-              <span class="employee-info-meta" x-text="employee.ranking || '—'"></span>
-            </td>
-            <td class="sticky-col sticky-info-col sticky-col-info-5 employee-info-cell">
-              <span class="employee-info-meta" x-text="employee.positionStatus || employee.status || '—'"></span>
-            </td>
+            <template x-for="column in gridInfoColumns()" :key="`${employee.id}-${column.key}`">
+              <template x-if="column.key === 'name'">
+                <th scope="row" :class="column.cellClass">
+                  <div class="flex items-center gap-3">
+                    <div class="relative">
+                      <div
+                        class="h-8 w-8 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-semibold"
+                        x-text="(employee.firstName?.[0]||'') + (employee.lastName?.[0]||'')"
+                      ></div>
+                      <svg viewBox="0 0 24 24" class="absolute -bottom-1 -right-1 h-5 w-5">
+                        <circle cx="12" cy="12" r="10" stroke-width="3" fill="none" class="stroke-slate-200"></circle>
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke-width="3"
+                          fill="none"
+                          :style="`stroke-dasharray:${(employeeCompliancePercent(employee.id)/100)*62.83} 62.83;transition:stroke-dasharray .25s`"
+                          :class="employeeCompliancePercent(employee.id)>=90?'stroke-emerald-500':employeeCompliancePercent(employee.id)>=70?'stroke-amber-500':'stroke-rose-500'"
+                        ></circle>
+                      </svg>
+                    </div>
+                    <div>
+                      <div class="font-medium" x-text="employee.fullName || (employee.firstName+' '+employee.lastName)"></div>
+                      <div class="text-xs text-slate-500" x-text="(employee.role||'—') + ' • ' + (employee.status||'—')"></div>
+                    </div>
+                    <button class="ml-auto text-slate-500 hover:text-slate-700" @click.stop="openProfile(employee.id)" title="Details">⋯</button>
+                  </div>
+                </th>
+              </template>
+              <template x-if="column.key !== 'name'">
+                <td :class="column.cellClass">
+                  <span class="employee-info-meta" x-text="gridInfoCellText(employee, column.key)"></span>
+                </td>
+              </template>
+            </template>
             <td class="requirements-divider sticky-divider" role="presentation" aria-hidden="true"></td>
-            <template x-for="req in requirements" :key="req.id">
+            <template x-for="req in gridOrderedRequirements()" :key="req.id">
               <td x-data="{ cell: getRequirementCell(employee.id, req.id) }">
                 <div class="cell">
                   <label class="inline-flex items-center gap-2 cursor-pointer" @click.stop>
