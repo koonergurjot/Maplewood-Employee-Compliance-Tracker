@@ -94,6 +94,15 @@ const DEFAULT_APP_FLAGS = { USE_V2_MAIN: true };
 const USE_V2_STORAGE_KEY = 'USE_V2_MAIN';
 const V2_COMPONENT_REGISTRY_KEY = '__V2_ALPINE_COMPONENTS__';
 const ACTIVITY_TIMELINE_LIMIT = 100;
+const FILTERS_STORAGE_KEY = 'filters';
+const DEFAULT_FILTER_STATE = {
+  roles: [],
+  status: 'all',
+  compliance: 'all',
+  expiringSoon: false,
+  search: '',
+  analytics: null
+};
 
 function getV2ComponentRegistry() {
   if (typeof window === 'undefined') {
@@ -556,14 +565,8 @@ registerV2Component('v2DashboardApp', () => ({
   },
   bulkProcessing: false,
   roleOptions: [],
-  filters: {
-    roles: [],
-    status: 'all',
-    compliance: 'all',
-    expiringSoon: false,
-    search: '',
-    analytics: null
-  },
+  filters: { ...DEFAULT_FILTER_STATE },
+  _lastSerializedFilters: '',
   complianceOptions: [
     { value: 'all', label: 'All compliance' },
     { value: 'high', label: '≥ 90%' },
@@ -751,48 +754,20 @@ registerV2Component('v2DashboardApp', () => ({
       console.info('Legacy dashboard active; skipping v2 bootstrap.');
       return;
     }
-    const savedFilters = (() => {
-      try {
-        return JSON.parse(localStorage.getItem('filters') || '{}') || {};
-      } catch (error) {
-        console.warn('Failed to parse saved filters', error);
-        return {};
-      }
-    })();
-    const defaultFilters = {
-      roles: [],
-      status: 'all',
-      compliance: 'all',
-      expiringSoon: false,
-      search: '',
-      analytics: null
-    };
-    const normalizedFilters = {
-      ...defaultFilters,
-      ...savedFilters
-    };
-    if (!Array.isArray(normalizedFilters.roles)) {
-      normalizedFilters.roles = [];
-    }
-    if (typeof normalizedFilters.status !== 'string') {
-      normalizedFilters.status = defaultFilters.status;
-    }
-    if (typeof normalizedFilters.compliance !== 'string') {
-      normalizedFilters.compliance = defaultFilters.compliance;
-    }
-    if (typeof normalizedFilters.search !== 'string') {
-      normalizedFilters.search = defaultFilters.search;
-    }
-    normalizedFilters.expiringSoon = !!normalizedFilters.expiringSoon;
+    const savedFilters = this.readSavedFilters();
+    const urlFilters = this.readFiltersFromUrl();
+    const normalizedFilters = this.normalizeFilters({
+      ...savedFilters,
+      ...urlFilters
+    });
     this.filters = normalizedFilters;
+    this.persistFilters(this.filters);
+    this.updateUrlFilters(this.filters);
     this.$watch(
       'filters',
       value => {
-        try {
-          localStorage.setItem('filters', JSON.stringify(value));
-        } catch (error) {
-          console.warn('Failed to persist filters', error);
-        }
+        this.persistFilters(value);
+        this.updateUrlFilters(value);
       },
       { deep: true }
     );
@@ -2343,6 +2318,212 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       window.print();
     } else {
       console.info('Print requested');
+    }
+  },
+  defaultFilters() {
+    return { ...DEFAULT_FILTER_STATE };
+  },
+  normalizeFilters(source = {}) {
+    const defaults = this.defaultFilters();
+    const normalized = { ...defaults, ...(source && typeof source === 'object' ? source : {}) };
+    normalized.roles = Array.isArray(normalized.roles)
+      ? normalized.roles
+          .map(role => (typeof role === 'string' ? role.trim() : role))
+          .filter(role => typeof role === 'string' && role)
+      : [];
+    normalized.status = typeof normalized.status === 'string' && normalized.status
+      ? normalized.status
+      : defaults.status;
+    normalized.compliance = typeof normalized.compliance === 'string' && normalized.compliance
+      ? normalized.compliance
+      : defaults.compliance;
+    normalized.search = typeof normalized.search === 'string' ? normalized.search : defaults.search;
+    normalized.expiringSoon = !!normalized.expiringSoon;
+    normalized.analytics = normalized.analytics && typeof normalized.analytics === 'object'
+      ? normalized.analytics
+      : defaults.analytics;
+    return normalized;
+  },
+  readSavedFilters() {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return {};
+    }
+    try {
+      const raw = window.localStorage.getItem(FILTERS_STORAGE_KEY) || '{}';
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (error) {
+      console.warn('Failed to parse saved filters', error);
+      return {};
+    }
+  },
+  readFiltersFromUrl() {
+    if (typeof window === 'undefined' || typeof window.location === 'undefined') {
+      return {};
+    }
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      const raw = params.get(FILTERS_STORAGE_KEY);
+      if (!raw) {
+        return {};
+      }
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') {
+        return {};
+      }
+      const result = {};
+      if (Array.isArray(parsed.roles)) {
+        const roles = parsed.roles
+          .map(role => (typeof role === 'string' ? role.trim() : role))
+          .filter(role => typeof role === 'string' && role);
+        if (roles.length) {
+          result.roles = roles;
+        }
+      }
+      if (typeof parsed.status === 'string' && parsed.status) {
+        result.status = parsed.status;
+      }
+      if (typeof parsed.compliance === 'string' && parsed.compliance) {
+        result.compliance = parsed.compliance;
+      }
+      if (typeof parsed.search === 'string') {
+        result.search = parsed.search;
+      }
+      if (typeof parsed.expiringSoon !== 'undefined') {
+        result.expiringSoon = !!parsed.expiringSoon;
+      }
+      if (parsed.analytics && typeof parsed.analytics === 'object') {
+        const analyticsPayload = {};
+        if (typeof parsed.analytics.type === 'string' && parsed.analytics.type) {
+          analyticsPayload.type = parsed.analytics.type;
+          if ('requirementId' in parsed.analytics) {
+            const value = parsed.analytics.requirementId;
+            if (value === null || typeof value === 'string') {
+              analyticsPayload.requirementId = value;
+            }
+          }
+          if (Number.isFinite(parsed.analytics.windowDays)) {
+            analyticsPayload.windowDays = parsed.analytics.windowDays;
+          }
+        }
+        if (Object.keys(analyticsPayload).length) {
+          result.analytics = analyticsPayload;
+        }
+      }
+      return result;
+    } catch (error) {
+      console.warn('Failed to parse filters from URL', error);
+      return {};
+    }
+  },
+  persistFilters(filters) {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+    try {
+      const payload = this.normalizeFilters(filters);
+      window.localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(payload));
+    } catch (error) {
+      console.warn('Failed to persist filters', error);
+    }
+  },
+  buildShareableFilters(filters) {
+    const defaults = this.defaultFilters();
+    const safe = this.normalizeFilters(filters);
+    const payload = {};
+    if (safe.roles.length) {
+      payload.roles = safe.roles;
+    }
+    if (safe.status !== defaults.status) {
+      payload.status = safe.status;
+    }
+    if (safe.compliance !== defaults.compliance) {
+      payload.compliance = safe.compliance;
+    }
+    if (safe.expiringSoon) {
+      payload.expiringSoon = true;
+    }
+    if (safe.search) {
+      payload.search = safe.search;
+    }
+    if (safe.analytics && typeof safe.analytics === 'object' && safe.analytics.type) {
+      const analyticsPayload = { type: safe.analytics.type };
+      if ('requirementId' in safe.analytics) {
+        const value = safe.analytics.requirementId;
+        if (value === null || typeof value === 'string') {
+          analyticsPayload.requirementId = value;
+        }
+      }
+      if (Number.isFinite(safe.analytics.windowDays)) {
+        analyticsPayload.windowDays = safe.analytics.windowDays;
+      }
+      if (Object.keys(analyticsPayload).length > 0) {
+        payload.analytics = analyticsPayload;
+      }
+    }
+    return payload;
+  },
+  updateUrlFilters(filters) {
+    if (typeof window === 'undefined' || !window.history?.replaceState || !window.location) {
+      return;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      const payload = this.buildShareableFilters(filters);
+      const hasPayload = Object.keys(payload).length > 0;
+      if (!hasPayload) {
+        if (!params.has(FILTERS_STORAGE_KEY)) {
+          this._lastSerializedFilters = '';
+          return;
+        }
+        params.delete(FILTERS_STORAGE_KEY);
+        this._lastSerializedFilters = '';
+      } else {
+        const serialized = JSON.stringify(payload);
+        if (params.get(FILTERS_STORAGE_KEY) === serialized && this._lastSerializedFilters === serialized) {
+          return;
+        }
+        params.set(FILTERS_STORAGE_KEY, serialized);
+        this._lastSerializedFilters = serialized;
+      }
+      const query = params.toString();
+      const hash = window.location.hash || '';
+      const newUrl = `${window.location.pathname}${query ? `?${query}` : ''}${hash}`;
+      window.history.replaceState(null, '', newUrl);
+    } catch (error) {
+      console.warn('Failed to update filters in URL', error);
+    }
+  },
+  buildFiltersShareUrl(filters = this.filters) {
+    if (typeof window === 'undefined' || !window.location) {
+      return '';
+    }
+    this.updateUrlFilters(filters);
+    return window.location.href;
+  },
+  async copyFiltersLink() {
+    const url = this.buildFiltersShareUrl();
+    if (!url) {
+      this.toast('Unable to copy link.', 'error');
+      return;
+    }
+    let copied = false;
+    try {
+      if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        copied = true;
+      }
+    } catch (error) {
+      console.warn('Clipboard write failed', error);
+    }
+    if (!copied && typeof window?.prompt === 'function') {
+      window.prompt('Copy this link to share your current filters:', url);
+      copied = true;
+    }
+    if (copied) {
+      this.toast('Link copied to clipboard.', 'success');
+    } else {
+      this.toast('Unable to copy link.', 'error');
     }
   },
   applyFilters() {

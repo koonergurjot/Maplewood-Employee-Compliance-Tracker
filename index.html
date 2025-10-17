@@ -257,7 +257,10 @@
               </label>
               </div>
               <div class="filters-footer">
-                <button type="button" class="btn ghost" @click="resetFilters">Reset filters</button>
+                <div class="filters-actions" style="display:flex;align-items:center;gap:0.75rem;">
+                  <button type="button" class="btn ghost" @click="resetFilters">Reset filters</button>
+                  <button type="button" class="btn ghost" @click="copyFiltersLink">Copy link</button>
+                </div>
                 <div class="filters-meta" x-show="filters.roles.length || filters.status !== 'all' || filters.compliance !== 'all' || filters.expiringSoon || filters.search || filters.analytics">
                   <span class="text-muted">Filters active</span>
                 </div>
