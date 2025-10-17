@@ -644,7 +644,7 @@ const v2DashboardAppDefinition = () => ({
           .map(requirement => requirement.id)
       : [];
     return {
-      info: ['name', 'seniorityHours', 'jobClass', 'jobTitle', 'ranking', 'positionStatus'],
+      info: ['name'],
       requirements: requirementIds
     };
   },
