@@ -77,6 +77,45 @@ export const determineStatusForTemplate = (template, requirementId, fallback = '
   return templateExcludesRequirement(template, requirementId) ? 'NotRequired' : fallback;
 };
 
+export async function deleteEmployee({ db, employeeId, activityLog }) {
+  if (!db || !employeeId) {
+    return;
+  }
+
+  const employeesTable = db.employees;
+  if (!employeesTable?.get) {
+    return;
+  }
+
+  const employee = await employeesTable.get(employeeId);
+  if (!employee) {
+    return;
+  }
+
+  const employeeRequirementsTable = db.employeeRequirements;
+
+  await db.transaction('rw', db.employees, db.employeeRequirements, async () => {
+    if (employeeRequirementsTable?.where) {
+      await employeeRequirementsTable.where({ employeeId }).delete();
+    }
+    await db.employees.delete(employeeId);
+  });
+
+  const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.name || 'Employee';
+  const summary = `Deleted employee ${fullName} (${employee.role || 'Unknown Role'})`;
+  const entry = {
+    type: 'employee:delete',
+    summary,
+    createdAt: new Date().toISOString()
+  };
+
+  if (db.activities?.add) {
+    await db.activities.add(entry);
+  }
+
+  activityLog?.unshift?.({ ...entry });
+}
+
 export class AddEmployee {
   constructor(db, { employee } = {}) {
     this.db = db;
