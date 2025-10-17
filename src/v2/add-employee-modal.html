@@ -1,19 +1,19 @@
 <div
   id="add-employee-modal-root"
   x-cloak
-  class="pointer-events-none fixed inset-0 flex items-center justify-center px-4"
+  class="fixed inset-0 flex items-center justify-center px-4 pointer-events-none"
 >
   <div
     x-cloak
     x-show="addEmployeeModal.open"
     x-transition.opacity.duration.150ms
-    class="pointer-events-none absolute inset-0 z-40 bg-slate-900/50 backdrop-blur-sm"
+    class="fixed inset-0 z-40 bg-black/40 pointer-events-none"
   ></div>
   <button
     type="button"
     x-cloak
     x-show="addEmployeeModal.open"
-    class="pointer-events-auto absolute inset-0 z-40 h-full w-full cursor-default"
+    class="fixed inset-0 z-40 h-full w-full cursor-default pointer-events-auto"
     @click="closeAddEmployeeModal()"
     aria-hidden="true"
     tabindex="-1"
@@ -21,7 +21,7 @@
   <section
     x-cloak
     x-show="addEmployeeModal.open"
-    class="pointer-events-auto relative z-50 w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"
+    class="relative z-50 w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl pointer-events-auto dark:bg-slate-900"
     role="dialog"
     aria-modal="true"
     aria-labelledby="add-employee-title"
