@@ -92,30 +92,46 @@ export async function deleteEmployee({ db, employeeId, activityLog }) {
     return;
   }
 
-  await db.transaction('rw', db.employees, db.employeeRequirements, async (transaction) => {
-    const employeesTable = transaction.table('employees');
-    const employeeRequirementsTable = transaction.table('employeeRequirements');
+  const employeeRequirementsTable = db.employeeRequirements;
 
-    let requirementsDeleted = false;
+  let requirementIds = [];
 
-    if (employeeRequirementsTable?.where) {
-      try {
-        await employeeRequirementsTable
-          .where('[employeeId+requirementId]')
-          .startsWith([employeeId])
-          .delete();
-        requirementsDeleted = true;
-      } catch (error) {
-        if (error?.name !== 'InvalidStateError' && error?.name !== 'DataError') {
-          throw error;
-        }
+  if (employeeRequirementsTable?.where) {
+    try {
+      requirementIds = await employeeRequirementsTable
+        .where('[employeeId+requirementId]')
+        .startsWith([employeeId])
+        .primaryKeys();
+    } catch (error) {
+      if (error?.name !== 'InvalidStateError' && error?.name !== 'DataError') {
+        throw error;
       }
     }
+  }
 
-    if (!requirementsDeleted && employeeRequirementsTable?.filter) {
-      await employeeRequirementsTable
+  if (requirementIds.length === 0 && employeeRequirementsTable?.filter) {
+    try {
+      const records = await employeeRequirementsTable
         .filter(record => record?.employeeId === employeeId)
-        .delete();
+        .toArray();
+      requirementIds = records
+        .map(record => record?.id)
+        .filter(id => id != null);
+    } catch (error) {
+      if (error?.name !== 'InvalidStateError') {
+        throw error;
+      }
+    }
+  }
+
+  await db.transaction('rw', db.employees, db.employeeRequirements, async (transaction) => {
+    const employeesTable = transaction.table('employees');
+    const transactionEmployeeRequirementsTable = transaction.table('employeeRequirements');
+
+    if (requirementIds.length > 0 && transactionEmployeeRequirementsTable?.bulkDelete) {
+      await transactionEmployeeRequirementsTable.bulkDelete(requirementIds);
+    } else if (requirementIds.length > 0 && typeof transactionEmployeeRequirementsTable?.delete === 'function') {
+      await Promise.all(requirementIds.map(id => transactionEmployeeRequirementsTable.delete(id)));
     }
 
     await employeesTable.delete(employeeId);
