@@ -9,7 +9,7 @@ import addEmployeeModalTemplate from './v2/add-employee-modal.html?raw';
 import addRequirementModalTemplate from './v2/add-requirement-modal.html?raw';
 import bulkActionsTemplate from './v2/bulk-actions.html?raw';
 import activityTimelineTemplate from './v2/activity-timeline.html?raw';
-import employeeProfileTemplate from './v2/employee-profile.html?raw';
+import profileDrawerTemplate from './v2/profile-drawer.html?raw';
 const inlineEditTemplate = `
 <template>
   <div class="inline-overlay" x-show="activeEditor.open" x-transition.opacity @click="closeEditor" aria-hidden="true"></div>
@@ -474,6 +474,35 @@ function normalizeWindowDays(value, fallback = ANALYTICS_EXPIRING_WINDOW_DAYS) {
   return normalizeNonNegativeNumber(value, fallback);
 }
 
+function splitFullName(fullName, defaults = {}) {
+  const baseline = typeof defaults === 'object' && defaults !== null ? defaults : {};
+  const value = normalizeString(fullName);
+  if (!value) {
+    return {
+      firstName: normalizeString(baseline.firstName),
+      lastName: normalizeString(baseline.lastName)
+    };
+  }
+  const parts = value.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return {
+      firstName: '',
+      lastName: ''
+    };
+  }
+  if (parts.length === 1) {
+    return {
+      firstName: parts[0],
+      lastName: ''
+    };
+  }
+  const lastName = parts.pop();
+  return {
+    firstName: parts.join(' '),
+    lastName: lastName || ''
+  };
+}
+
 const v2DashboardAppDefinition = () => ({
   db: null,
   activityLog: [],
@@ -588,7 +617,18 @@ const v2DashboardAppDefinition = () => ({
   },
   profilePanel: {
     open: false,
-    employeeId: null
+    employeeId: null,
+    editing: false,
+    saving: false,
+    error: '',
+    form: {
+      name: '',
+      seniorityHours: '',
+      jobClass: '',
+      jobTitle: '',
+      ranking: '',
+      positionStatus: ''
+    }
   },
   activeEditor: {
     open: false,
@@ -883,7 +923,7 @@ const v2DashboardAppDefinition = () => ({
     }
 
     try {
-      this.partials.employeeProfile = employeeProfileTemplate;
+      this.partials.employeeProfile = profileDrawerTemplate;
       this.hydrateEmployeeProfile();
     } catch (error) {
       console.error(error);
@@ -1562,6 +1602,10 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       return;
     }
     this.profilePanel.employeeId = employee.id;
+    this.profilePanel.editing = false;
+    this.profilePanel.saving = false;
+    this.profilePanel.error = '';
+    this.profilePanel.form = this.buildProfileForm(employee);
     const wasOpen = !!this.profilePanel.open;
     this.profilePanel.open = true;
     this.hydrateEmployeeProfile();
@@ -1580,6 +1624,7 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     this.profilePanel.open = false;
     this.profilePanel.employeeId = null;
+    this.resetProfileForm();
   },
   setImportDrawerError(message, options = {}) {
     const { toast = true } = options;
@@ -2808,6 +2853,40 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     if (!employee) return '—';
     return this.gridInfoCellText(employee, 'seniorityHours');
   },
+  profileInfoRows() {
+    const employee = this.profileEmployee();
+    if (!employee) {
+      return [];
+    }
+    return [
+      { key: 'name', label: 'Name', value: this.profileEmployeeName() },
+      {
+        key: 'seniorityHours',
+        label: 'Seniority Hours',
+        value: this.gridInfoCellText(employee, 'seniorityHours')
+      },
+      {
+        key: 'jobClass',
+        label: 'Job Class',
+        value: employee.jobClass ? String(employee.jobClass).trim() : '—'
+      },
+      {
+        key: 'jobTitle',
+        label: 'Job Title',
+        value: employee.jobTitle || employee.role || '—'
+      },
+      {
+        key: 'ranking',
+        label: 'Ranking',
+        value: employee.ranking ? String(employee.ranking).trim() : '—'
+      },
+      {
+        key: 'positionStatus',
+        label: 'Position Status',
+        value: employee.positionStatus || employee.status || '—'
+      }
+    ];
+  },
   profileCompliancePercent() {
     if (!this.profilePanel.employeeId) return 0;
     return this.employeeCompliancePercent(this.profilePanel.employeeId);
@@ -2850,6 +2929,22 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     return 'All assignments are on track.';
   },
+  profileRequirementStatusLabel(cell) {
+    const status = normalizeStatus(cell?.status || 'Pending');
+    if (status === 'Exempt') {
+      return 'Exempt';
+    }
+    if (this.cellExpired(cell)) {
+      return 'Expired';
+    }
+    if (status === 'Completed' && this.cellWarn(cell)) {
+      return 'Due soon';
+    }
+    if (status === 'Completed') {
+      return 'Completed';
+    }
+    return 'Pending';
+  },
   profileAssignments() {
     if (!this.profilePanel.employeeId) {
       return [];
@@ -2861,15 +2956,249 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       if (!requirement) return;
       const cell = this.getRequirementCell(employeeId, requirement.id);
       const keyBase = requirement.id ?? requirement.key ?? requirement.name ?? index;
+      const completedOn = cell.completedAt ? this.formatDate(cell.completedAt) : '';
+      const expiresOn = cell.expiresAt ? this.formatDate(cell.expiresAt) : '';
       assignments.push({
         key: `req-${String(keyBase)}-${index}`,
         name: requirement.name || 'Requirement',
         badgeClass: this.requirementBadgeClass(cell),
         badgeLabel: this.chipText(cell),
-        subtext: this.cellSubtext(cell)
+        subtext: this.cellSubtext(cell),
+        statusLabel: this.profileRequirementStatusLabel(cell),
+        completedOn: completedOn || '—',
+        expiresOn: expiresOn || '—'
       });
     });
     return assignments;
+  },
+  profileFormDefaults() {
+    return {
+      name: '',
+      seniorityHours: '',
+      jobClass: '',
+      jobTitle: '',
+      ranking: '',
+      positionStatus: ''
+    };
+  },
+  buildProfileForm(employee) {
+    if (!employee) {
+      return this.profileFormDefaults();
+    }
+    const first = normalizeString(employee.firstName);
+    const last = normalizeString(employee.lastName);
+    const fullName = `${first} ${last}`.trim() || normalizeString(employee.fullName);
+    let seniority = '';
+    if (typeof employee.seniorityHours === 'number') {
+      seniority = Number.isFinite(employee.seniorityHours)
+        ? String(employee.seniorityHours)
+        : '';
+    } else if (typeof employee.seniorityHours === 'string') {
+      seniority = employee.seniorityHours.trim();
+    }
+    return {
+      name: fullName,
+      seniorityHours: seniority,
+      jobClass: employee.jobClass ? String(employee.jobClass).trim() : '',
+      jobTitle: employee.jobTitle ? String(employee.jobTitle).trim() : employee.role || '',
+      ranking: employee.ranking ? String(employee.ranking).trim() : '',
+      positionStatus: employee.positionStatus
+        ? String(employee.positionStatus).trim()
+        : employee.status
+          ? String(employee.status).trim()
+          : ''
+    };
+  },
+  resetProfileForm(employee = null) {
+    const source = employee || this.profileEmployee();
+    this.profilePanel.form = this.buildProfileForm(source);
+    this.profilePanel.editing = false;
+    this.profilePanel.saving = false;
+    this.profilePanel.error = '';
+  },
+  startProfileEdit() {
+    const employee = this.profileEmployee();
+    if (!employee) {
+      this.profilePanel.error = 'Employee not found.';
+      return;
+    }
+    this.profilePanel.form = this.buildProfileForm(employee);
+    this.profilePanel.editing = true;
+    this.profilePanel.error = '';
+    this.$nextTick(() => {
+      const node = document.querySelector('#employee-profile-root [data-profile-autofocus]');
+      if (node && typeof node.focus === 'function') {
+        node.focus();
+      }
+    });
+  },
+  cancelProfileEdit() {
+    const employee = this.profileEmployee();
+    this.profilePanel.form = this.buildProfileForm(employee);
+    this.profilePanel.editing = false;
+    this.profilePanel.saving = false;
+    this.profilePanel.error = '';
+  },
+  normalizeProfileSeniorityInput(value) {
+    if (value === null || typeof value === 'undefined') {
+      return '';
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : '';
+    }
+    const stringValue = String(value).trim();
+    if (!stringValue) {
+      return '';
+    }
+    const numeric = Number(stringValue.replace(/,/g, ''));
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+    return stringValue;
+  },
+  profileFormIsUnchanged(form, employee) {
+    if (!employee) {
+      return false;
+    }
+    const baseline = this.buildProfileForm(employee);
+    const keys = ['name', 'seniorityHours', 'jobClass', 'jobTitle', 'ranking', 'positionStatus'];
+    return keys.every(key => normalizeString(form?.[key]) === normalizeString(baseline[key]));
+  },
+  async saveProfileChanges() {
+    if (!this.profilePanel.editing || this.profilePanel.saving) {
+      return;
+    }
+    const employee = this.profileEmployee();
+    if (!employee) {
+      this.profilePanel.error = 'Employee not found.';
+      return;
+    }
+    const form = this.profilePanel.form || {};
+    if (this.profileFormIsUnchanged(form, employee)) {
+      this.profilePanel.editing = false;
+      this.profilePanel.error = '';
+      return;
+    }
+    const fullName = normalizeString(form.name);
+    if (!fullName) {
+      this.profilePanel.error = 'Name is required.';
+      return;
+    }
+    const { firstName, lastName } = splitFullName(form.name, employee);
+    const seniorityHours = this.normalizeProfileSeniorityInput(form.seniorityHours);
+    const jobClass = typeof form.jobClass === 'string' ? form.jobClass.trim() : '';
+    const jobTitle = typeof form.jobTitle === 'string' ? form.jobTitle.trim() : '';
+    const ranking = typeof form.ranking === 'string' ? form.ranking.trim() : '';
+    const positionInput = typeof form.positionStatus === 'string' ? form.positionStatus.trim() : '';
+    const normalizedPositionStatus = mapPositionStatus(positionInput) || positionInput;
+    const updates = {
+      firstName,
+      lastName,
+      fullName,
+      seniorityHours,
+      jobClass,
+      jobTitle,
+      ranking,
+      positionStatus: normalizedPositionStatus,
+      updatedAt: new Date().toISOString()
+    };
+    const syncPayload = {
+      id: employee.id,
+      firstName,
+      lastName,
+      fullName,
+      seniorityHours,
+      jobClass,
+      jobTitle,
+      ranking,
+      positionStatus: normalizedPositionStatus
+    };
+    const compareKeys = ['firstName', 'lastName', 'seniorityHours', 'jobClass', 'jobTitle', 'ranking', 'positionStatus'];
+    const diff = {};
+    const comparableValue = value => {
+      if (value === null || typeof value === 'undefined') return '';
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : '';
+      }
+      return String(value);
+    };
+    compareKeys.forEach(key => {
+      if (comparableValue(employee[key]) !== comparableValue(updates[key])) {
+        diff[key] = {
+          before: employee[key] ?? '',
+          after: updates[key]
+        };
+      }
+    });
+    this.profilePanel.saving = true;
+    try {
+      const employeesTable = this.db?.table ? this.db.table('employees') : null;
+      if (employeesTable) {
+        await employeesTable.update(employee.id, updates);
+      }
+      const index = this.employees.findIndex(emp => emp && emp.id === employee.id);
+      const updatedEmployee = { ...employee, ...updates };
+      if (index !== -1) {
+        this.employees.splice(index, 1, updatedEmployee);
+      }
+      this.employees.sort((a, b) => {
+        const lastCompare = normalizeLower(a?.lastName).localeCompare(normalizeLower(b?.lastName));
+        if (lastCompare !== 0) return lastCompare;
+        return normalizeLower(a?.firstName).localeCompare(normalizeLower(b?.firstName));
+      });
+      this.updateStoreEmployees();
+      this.refreshEmployeeLookups();
+      this.applyFilters();
+      this.profilePanel.form = this.buildProfileForm(updatedEmployee);
+      this.profilePanel.editing = false;
+      this.profilePanel.error = '';
+      await this.syncEmployeeProfileUpdate(employee.id, syncPayload);
+      if (Object.keys(diff).length) {
+        const summaryName = `${normalizeString(updates.firstName)} ${normalizeString(updates.lastName)}`.trim()
+          || updates.fullName
+          || employee.fullName
+          || 'Employee';
+        await this.recordActivity({
+          type: 'employee:update',
+          summary: `Updated profile for ${summaryName}`,
+          details: { employeeId: employee.id, changes: diff }
+        });
+      }
+      this.toast('Employee profile updated', 'success');
+    } catch (error) {
+      console.error('Failed to update employee profile', error);
+      this.profilePanel.error = 'Unable to save changes. Please try again.';
+    } finally {
+      this.profilePanel.saving = false;
+    }
+  },
+  async syncEmployeeProfileUpdate(employeeId, payload) {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const flags = window.APP_FLAGS || {};
+    const flagValue =
+      typeof flags.SUPABASE_SYNC !== 'undefined'
+        ? flags.SUPABASE_SYNC
+        : flags.SUPABASE_SYNC_ENABLED;
+    const syncClient = window.SupabaseSync || window.supabaseSync || window.SUPABASE_SYNC;
+    if (!syncClient) {
+      return;
+    }
+    if (flagValue === false) {
+      return;
+    }
+    try {
+      if (typeof syncClient.updateEmployee === 'function') {
+        await syncClient.updateEmployee(employeeId, payload);
+        return;
+      }
+      if (typeof syncClient.upsertEmployee === 'function') {
+        await syncClient.upsertEmployee(payload);
+      }
+    } catch (error) {
+      console.error('Supabase sync failed', error);
+    }
   },
   async toggleRequirement(empId, reqId, checked) {
     if (!this.db) return;
