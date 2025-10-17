@@ -133,10 +133,17 @@
                       type="checkbox"
                       class="checkbox-input"
                       :checked="cell.status==='Complete' || cell.status==='Completed'"
-                      @change.stop="toggleRequirement(employee.id, req.id, $event.target.checked)"
+                      @change="toggleRequirement(employee.id, req.id, $event.target.checked)"
                     />
                     <span
-                      x-text="cell.status==='Exempt' ? 'Exempt' : (cell.status==='Complete' || cell.status==='Completed' ? 'Done' : 'Not done')"
+                      class="badge"
+                      :class="{
+                        'badge-green': (cell.status==='Complete' || cell.status==='Completed') && !cellWarn(cell) && !cellExpired(cell),
+                        'badge-amber': (cell.status==='Complete' || cell.status==='Completed') && cellWarn(cell),
+                        'badge-rose':  cellExpired(cell),
+                        'badge-slate': cell.status!=='Complete' && cell.status!=='Completed' && !cellExpired(cell)
+                      }"
+                      x-text="chipText(cell)"
                     ></span>
                   </label>
                   <button

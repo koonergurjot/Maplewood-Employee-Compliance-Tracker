@@ -2377,32 +2377,28 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     const row = await table.where({ employeeId: empId, requirementId: reqId }).first();
     if (!row) return;
     const timestamp = new Date().toISOString();
-    row.status = checked ? 'Completed' : 'Pending';
+    row.status = checked ? 'Complete' : 'Pending';
     if (checked) {
-      if (!row.completedOn) {
-        row.completedOn = timestamp;
-      }
       if (!row.completedAt) {
         row.completedAt = timestamp;
       }
+      if (!row.completedOn) {
+        row.completedOn = timestamp;
+      }
     } else {
-      row.completedOn = null;
       row.completedAt = null;
+      row.completedOn = null;
     }
     row.updatedAt = timestamp;
     await table.put(row);
     this.setEmployeeRequirement(row);
     this.refreshAnalytics();
     this.applyFilters();
-    const requirementName = this.requirementById(reqId)?.name || 'requirement';
-    const employeeRecord = this.employeeById(empId);
-    const employeeName = (
-      employeeRecord?.fullName ||
-      `${normalizeString(employeeRecord?.firstName)} ${normalizeString(employeeRecord?.lastName)}`.trim()
-    ) || 'employee';
+    await this.loadData();
+    this.applyFilters();
     this.activityLog?.record?.({
       type: 'EditRequirement',
-      summary: `${checked ? 'Completed' : 'Cleared'} ${requirementName} for ${employeeName}`
+      summary: `${checked ? 'Completed' : 'Cleared'} ${this.requirementById(reqId)?.name}`
     });
   },
   getEmployeeRequirement(employeeId, requirementId) {
@@ -2421,21 +2417,27 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     };
   },
   cellExpired(cell) {
-    const expiresValue = cell?.expiresAt ?? cell?.expiresOn ?? cell?.raw?.expiresOn;
-    if (!expiresValue) return false;
-    const expiresOn = new Date(expiresValue);
+    const expiresAt = cell?.expiresAt ?? cell?.expiresOn ?? cell?.raw?.expiresOn;
+    if (!expiresAt) return false;
+    const expiresOn = new Date(expiresAt);
     if (Number.isNaN(expiresOn.getTime())) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return expiresOn < today;
+    return expiresOn < new Date();
   },
   cellWarn(cell) {
-    const expiresValue = cell?.expiresAt ?? cell?.expiresOn ?? cell?.raw?.expiresOn;
-    if (!expiresValue) return false;
-    const expiresOn = new Date(expiresValue);
+    const expiresAt = cell?.expiresAt ?? cell?.expiresOn ?? cell?.raw?.expiresOn;
+    if (!expiresAt) return false;
+    const expiresOn = new Date(expiresAt);
     if (Number.isNaN(expiresOn.getTime())) return false;
-    const diff = (expiresOn.getTime() - Date.now()) / 86400000;
-    return diff >= 0 && diff <= 30;
+    const d = (expiresOn.getTime() - Date.now()) / 86400000;
+    return d >= 0 && d <= 30;
+  },
+  chipText(cell) {
+    const status = normalizeStatus(cell?.status);
+    if (status === 'Exempt') return '◎ Exempt';
+    if (this.cellExpired(cell)) return '✖ Expired';
+    if (status === 'Completed' && this.cellWarn(cell)) return '⚠ Due soon';
+    if (status === 'Completed') return '✔ Complete';
+    return '○ Pending';
   },
   requirementExpired(record) {
     if (!record) return false;
