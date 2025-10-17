@@ -25,7 +25,7 @@
     role="dialog"
     aria-modal="true"
     aria-labelledby="add-employee-title"
-    @keydown.escape.window="closeAddEmployeeModal()"
+    @keydown.escape.window.stop="closeAddEmployeeModal()"
     @click.stop
   >
     <header class="mb-6 flex items-start justify-between gap-4">
@@ -54,25 +54,34 @@
     </header>
     <form class="space-y-5" @submit.prevent="submitAddEmployeeForm" novalidate>
       <div class="grid gap-4 sm:grid-cols-2">
-        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-          First name
+        <label
+          class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200"
+          for="add-employee-first-name"
+        >
+          <span>First name</span>
           <input
             type="text"
             class="input"
             name="firstName"
+            id="add-employee-first-name"
             x-model="addEmployeeModal.form.firstName"
             x-ref="addEmployeeFirstName"
             :aria-invalid="Boolean(addEmployeeModal.errors.firstName)"
+            data-autofocus
             required
           />
           <p class="text-xs text-red-600" x-show="addEmployeeModal.errors.firstName" x-text="addEmployeeModal.errors.firstName"></p>
         </label>
-        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-          Last name
+        <label
+          class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200"
+          for="add-employee-last-name"
+        >
+          <span>Last name</span>
           <input
             type="text"
             class="input"
             name="lastName"
+            id="add-employee-last-name"
             x-model="addEmployeeModal.form.lastName"
             x-ref="addEmployeeLastName"
             :aria-invalid="Boolean(addEmployeeModal.errors.lastName)"
@@ -82,11 +91,15 @@
         </label>
       </div>
       <div class="grid gap-4 sm:grid-cols-2">
-        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-          Role
+        <label
+          class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200"
+          for="add-employee-role"
+        >
+          <span>Role</span>
           <select
             class="input"
             name="role"
+            id="add-employee-role"
             x-model="addEmployeeModal.form.role"
             x-ref="addEmployeeRole"
             :aria-invalid="Boolean(addEmployeeModal.errors.role)"
@@ -98,11 +111,15 @@
           </select>
           <p class="text-xs text-red-600" x-show="addEmployeeModal.errors.role" x-text="addEmployeeModal.errors.role"></p>
         </label>
-        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-          Status
+        <label
+          class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200"
+          for="add-employee-status"
+        >
+          <span>Status</span>
           <select
             class="input"
             name="status"
+            id="add-employee-status"
             x-model="addEmployeeModal.form.status"
             x-ref="addEmployeeStatus"
             :aria-invalid="Boolean(addEmployeeModal.errors.status)"
@@ -116,11 +133,15 @@
         </label>
       </div>
       <div class="grid gap-4 sm:grid-cols-2">
-        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-          Employment type
+        <label
+          class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200"
+          for="add-employee-employment-type"
+        >
+          <span>Employment type</span>
           <select
             class="input"
             name="employmentType"
+            id="add-employee-employment-type"
             x-model="addEmployeeModal.form.employmentType"
             x-ref="addEmployeeEmploymentType"
             :aria-invalid="Boolean(addEmployeeModal.errors.employmentType)"
@@ -136,14 +157,18 @@
             x-text="addEmployeeModal.errors.employmentType"
           ></p>
         </label>
-        <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-          Seniority hours
+        <label
+          class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200"
+          for="add-employee-seniority-hours"
+        >
+          <span>Seniority hours</span>
           <input
             type="number"
             min="0"
             step="0.01"
             class="input"
             name="seniorityHours"
+            id="add-employee-seniority-hours"
             x-model="addEmployeeModal.form.seniorityHours"
             x-ref="addEmployeeSeniorityHours"
             :aria-invalid="Boolean(addEmployeeModal.errors.seniorityHours)"
