@@ -633,7 +633,7 @@ export async function runSeniorityDryRun(file) {
     mappingRows,
     skipped,
     headerRow: headerInfo.row,
-    records
+    records,
     headerRowNumber,
     fileName,
     preview
