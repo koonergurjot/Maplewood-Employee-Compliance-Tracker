@@ -87,7 +87,7 @@ const parseFloatValue = value => {
     return 0;
   }
 
-  const sanitized = normalized.replace(/,/g, '');
+  const sanitized = normalized.replace(/[\s,]+/g, '');
   const numeric = Number.parseFloat(sanitized);
   return Number.isFinite(numeric) ? numeric : 0;
 };
