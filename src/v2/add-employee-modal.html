@@ -1,202 +1,262 @@
-<div
-  id="add-employee-modal-root"
-  x-cloak
-  class="fixed inset-0 flex items-center justify-center px-4 pointer-events-none"
->
+<div id="add-employee-modal-root" x-cloak>
   <div
     x-cloak
-    x-show="addEmployeeModal.open"
-    x-transition.opacity.duration.150ms
+    x-show="showAddEmployeeModal"
     class="fixed inset-0 z-40 bg-black/40 pointer-events-none"
   ></div>
-  <button
-    type="button"
-    x-cloak
-    x-show="addEmployeeModal.open"
-    class="fixed inset-0 z-40 h-full w-full cursor-default pointer-events-auto"
-    @click="closeAddEmployeeModal()"
-    aria-hidden="true"
-    tabindex="-1"
-  ></button>
   <section
     x-cloak
-    x-show="addEmployeeModal.open"
-    class="relative z-50 w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl pointer-events-auto dark:bg-slate-900"
+    x-show="showAddEmployeeModal"
+    class="fixed z-50 right-0 top-0 h-full w-full max-w-[34rem] overflow-y-auto bg-white shadow-2xl pointer-events-auto dark:bg-slate-900"
     role="dialog"
     aria-modal="true"
     aria-labelledby="add-employee-title"
-    @keydown.escape.window.stop="closeAddEmployeeModal()"
-    @click.stop
+    @click.outside="showAddEmployeeModal=false; closeAddEmployeeModal({ force: true })"
+    @keydown.escape.window="showAddEmployeeModal=false; closeAddEmployeeModal({ force: true })"
   >
-    <header class="mb-6 flex items-start justify-between gap-4">
-      <div>
-        <h2 id="add-employee-title" class="text-lg font-semibold text-slate-900 dark:text-slate-50">
-          Add employee
-        </h2>
-        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Provide the team member's details to seed requirements from their role template.
-        </p>
-      </div>
-      <button
-        type="button"
-        class="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-        @click="closeAddEmployeeModal()"
-        aria-label="Close add employee modal"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path
-            fill-rule="evenodd"
-            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-            clip-rule="evenodd"
-          />
-        </svg>
-      </button>
-    </header>
-    <form class="space-y-5" @submit.prevent="submitAddEmployeeForm" novalidate>
-      <div class="grid gap-4 sm:grid-cols-2">
-        <label
-          class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200"
-          for="add-employee-first-name"
-        >
-          <span>First name</span>
-          <input
-            type="text"
-            class="input"
-            name="firstName"
-            id="add-employee-first-name"
-            x-model="addEmployeeModal.form.firstName"
-            x-ref="addEmployeeFirstName"
-            :aria-invalid="Boolean(addEmployeeModal.errors.firstName)"
-            data-autofocus
-            required
-          />
-          <p class="text-xs text-red-600" x-show="addEmployeeModal.errors.firstName" x-text="addEmployeeModal.errors.firstName"></p>
-        </label>
-        <label
-          class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200"
-          for="add-employee-last-name"
-        >
-          <span>Last name</span>
-          <input
-            type="text"
-            class="input"
-            name="lastName"
-            id="add-employee-last-name"
-            x-model="addEmployeeModal.form.lastName"
-            x-ref="addEmployeeLastName"
-            :aria-invalid="Boolean(addEmployeeModal.errors.lastName)"
-            required
-          />
-          <p class="text-xs text-red-600" x-show="addEmployeeModal.errors.lastName" x-text="addEmployeeModal.errors.lastName"></p>
-        </label>
-      </div>
-      <div class="grid gap-4 sm:grid-cols-2">
-        <label
-          class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200"
-          for="add-employee-role"
-        >
-          <span>Role</span>
-          <select
-            class="input"
-            name="role"
-            id="add-employee-role"
-            x-model="addEmployeeModal.form.role"
-            x-ref="addEmployeeRole"
-            :aria-invalid="Boolean(addEmployeeModal.errors.role)"
-            required
+    <div class="flex h-full flex-col">
+      <header class="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-6 py-5 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 id="add-employee-title" class="text-lg font-semibold text-slate-900 dark:text-slate-50">
+              Add employee
+            </h2>
+            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Provide the team member's details to seed requirements from their role template.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            @click="closeAddEmployeeModal()"
+            aria-label="Close add employee modal"
           >
-            <template x-for="role in employeeLookups.roles" :key="role">
-              <option :value="role" x-text="role"></option>
-            </template>
-          </select>
-          <p class="text-xs text-red-600" x-show="addEmployeeModal.errors.role" x-text="addEmployeeModal.errors.role"></p>
-        </label>
-        <label
-          class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200"
-          for="add-employee-status"
-        >
-          <span>Status</span>
-          <select
-            class="input"
-            name="status"
-            id="add-employee-status"
-            x-model="addEmployeeModal.form.status"
-            x-ref="addEmployeeStatus"
-            :aria-invalid="Boolean(addEmployeeModal.errors.status)"
-            required
-          >
-            <template x-for="status in employeeLookups.statuses" :key="status">
-              <option :value="status" x-text="status"></option>
-            </template>
-          </select>
-          <p class="text-xs text-red-600" x-show="addEmployeeModal.errors.status" x-text="addEmployeeModal.errors.status"></p>
-        </label>
-      </div>
-      <div class="grid gap-4 sm:grid-cols-2">
-        <label
-          class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200"
-          for="add-employee-employment-type"
-        >
-          <span>Employment type</span>
-          <select
-            class="input"
-            name="employmentType"
-            id="add-employee-employment-type"
-            x-model="addEmployeeModal.form.employmentType"
-            x-ref="addEmployeeEmploymentType"
-            :aria-invalid="Boolean(addEmployeeModal.errors.employmentType)"
-            required
-          >
-            <template x-for="type in employeeLookups.employmentTypes" :key="type">
-              <option :value="type" x-text="type"></option>
-            </template>
-          </select>
-          <p
-            class="text-xs text-red-600"
-            x-show="addEmployeeModal.errors.employmentType"
-            x-text="addEmployeeModal.errors.employmentType"
-          ></p>
-        </label>
-        <label
-          class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200"
-          for="add-employee-seniority-hours"
-        >
-          <span>Seniority hours</span>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            class="input"
-            name="seniorityHours"
-            id="add-employee-seniority-hours"
-            x-model="addEmployeeModal.form.seniorityHours"
-            x-ref="addEmployeeSeniorityHours"
-            :aria-invalid="Boolean(addEmployeeModal.errors.seniorityHours)"
-            required
-          />
-          <p
-            class="text-xs text-red-600"
-            x-show="addEmployeeModal.errors.seniorityHours"
-            x-text="addEmployeeModal.errors.seniorityHours"
-          ></p>
-        </label>
-      </div>
-      <template x-if="addEmployeeModal.errors.form">
-        <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200" role="alert">
-          <span x-text="addEmployeeModal.errors.form"></span>
-        </p>
-      </template>
-      <footer class="flex justify-end gap-3">
-        <button type="button" class="btn ghost" @click="closeAddEmployeeModal()">Cancel</button>
-        <button type="submit" class="btn" :disabled="addEmployeeModal.saving">
-          <template x-if="addEmployeeModal.saving">
-            <span>Adding…</span>
-          </template>
-          <template x-if="!addEmployeeModal.saving">
-            <span>Add employee</span>
-          </template>
-        </button>
-      </footer>
-    </form>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fill-rule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </button>
+        </div>
+      </header>
+      <form class="flex-1 space-y-6 px-6 py-6" @submit.prevent="addEmployeeSubmit" novalidate>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200" for="add-employee-first-name">
+            <div class="flex items-center justify-between gap-3">
+              <span>First name</span>
+              <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
+            </div>
+            <input
+              type="text"
+              class="input"
+              name="firstName"
+              id="add-employee-first-name"
+              x-model="form.firstName"
+              x-ref="addEmployeeFirstName"
+              :aria-invalid="Boolean(formErrors.firstName)"
+              data-autofocus
+              required
+              @input="formErrors.firstName && delete formErrors.firstName"
+            />
+            <p class="text-xs text-red-600" x-show="formErrors.firstName" x-text="formErrors.firstName"></p>
+          </label>
+          <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200" for="add-employee-last-name">
+            <div class="flex items-center justify-between gap-3">
+              <span>Last name</span>
+              <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
+            </div>
+            <input
+              type="text"
+              class="input"
+              name="lastName"
+              id="add-employee-last-name"
+              x-model="form.lastName"
+              x-ref="addEmployeeLastName"
+              :aria-invalid="Boolean(formErrors.lastName)"
+              required
+              @input="formErrors.lastName && delete formErrors.lastName"
+            />
+            <p class="text-xs text-red-600" x-show="formErrors.lastName" x-text="formErrors.lastName"></p>
+          </label>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200" for="add-employee-role">
+            <div class="flex items-center justify-between gap-3">
+              <span>Role</span>
+              <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
+            </div>
+            <select
+              class="input"
+              name="role"
+              id="add-employee-role"
+              x-model="form.role"
+              x-ref="addEmployeeRole"
+              :aria-invalid="Boolean(formErrors.role)"
+              required
+              @change="formErrors.role && delete formErrors.role"
+            >
+              <template x-for="role in employeeLookups.roles" :key="role">
+                <option :value="role" x-text="role"></option>
+              </template>
+            </select>
+            <p class="text-xs text-red-600" x-show="formErrors.role" x-text="formErrors.role"></p>
+          </label>
+          <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200" for="add-employee-status">
+            <div class="flex items-center justify-between gap-3">
+              <span>Status</span>
+              <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
+            </div>
+            <select
+              class="input"
+              name="status"
+              id="add-employee-status"
+              x-model="form.status"
+              x-ref="addEmployeeStatus"
+              :aria-invalid="Boolean(formErrors.status)"
+              required
+              @change="formErrors.status && delete formErrors.status"
+            >
+              <template x-for="status in employeeLookups.statuses" :key="status">
+                <option :value="status" x-text="status"></option>
+              </template>
+            </select>
+            <p class="text-xs text-red-600" x-show="formErrors.status" x-text="formErrors.status"></p>
+          </label>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200" for="add-employee-employment-type">
+            <div class="flex items-center justify-between gap-3">
+              <span>Employment type</span>
+              <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
+            </div>
+            <select
+              class="input"
+              name="employmentType"
+              id="add-employee-employment-type"
+              x-model="form.employmentType"
+              x-ref="addEmployeeEmploymentType"
+              :aria-invalid="Boolean(formErrors.employmentType)"
+              required
+              @change="formErrors.employmentType && delete formErrors.employmentType"
+            >
+              <template x-for="type in employeeLookups.employmentTypes" :key="type">
+                <option :value="type" x-text="type"></option>
+              </template>
+            </select>
+            <p class="text-xs text-red-600" x-show="formErrors.employmentType" x-text="formErrors.employmentType"></p>
+          </label>
+          <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200" for="add-employee-seniority-hours">
+            <div class="flex items-center justify-between gap-3">
+              <span>Seniority hours</span>
+              <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
+            </div>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              class="input"
+              name="seniorityHours"
+              id="add-employee-seniority-hours"
+              x-model="form.seniorityHours"
+              x-ref="addEmployeeSeniorityHours"
+              :aria-invalid="Boolean(formErrors.seniorityHours)"
+              required
+              @input="formErrors.seniorityHours && delete formErrors.seniorityHours"
+            />
+            <p class="text-xs text-red-600" x-show="formErrors.seniorityHours" x-text="formErrors.seniorityHours"></p>
+          </label>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200" for="add-employee-job-class">
+            <div class="flex items-center justify-between gap-3">
+              <span>Job class</span>
+              <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
+            </div>
+            <input
+              type="text"
+              class="input"
+              name="jobClass"
+              id="add-employee-job-class"
+              x-model="form.jobClass"
+              x-ref="addEmployeeJobClass"
+              :aria-invalid="Boolean(formErrors.jobClass)"
+              required
+              @input="formErrors.jobClass && delete formErrors.jobClass"
+            />
+            <p class="text-xs text-red-600" x-show="formErrors.jobClass" x-text="formErrors.jobClass"></p>
+          </label>
+          <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200" for="add-employee-job-title">
+            <div class="flex items-center justify-between gap-3">
+              <span>Job title</span>
+              <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
+            </div>
+            <input
+              type="text"
+              class="input"
+              name="jobTitle"
+              id="add-employee-job-title"
+              x-model="form.jobTitle"
+              x-ref="addEmployeeJobTitle"
+              :aria-invalid="Boolean(formErrors.jobTitle)"
+              required
+              @input="formErrors.jobTitle && delete formErrors.jobTitle"
+            />
+            <p class="text-xs text-red-600" x-show="formErrors.jobTitle" x-text="formErrors.jobTitle"></p>
+          </label>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200" for="add-employee-ranking">
+            <div class="flex items-center justify-between gap-3">
+              <span>Ranking</span>
+              <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
+            </div>
+            <input
+              type="number"
+              step="1"
+              class="input"
+              name="ranking"
+              id="add-employee-ranking"
+              x-model="form.ranking"
+              x-ref="addEmployeeRanking"
+              :aria-invalid="Boolean(formErrors.ranking)"
+              required
+              @input="formErrors.ranking && delete formErrors.ranking"
+            />
+            <p class="text-xs text-red-600" x-show="formErrors.ranking" x-text="formErrors.ranking"></p>
+          </label>
+          <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200" for="add-employee-position-status">
+            <div class="flex items-center justify-between gap-3">
+              <span>Position status</span>
+              <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
+            </div>
+            <input
+              type="text"
+              class="input"
+              name="positionStatus"
+              id="add-employee-position-status"
+              x-model="form.positionStatus"
+              x-ref="addEmployeePositionStatus"
+              :aria-invalid="Boolean(formErrors.positionStatus)"
+              required
+              @input="formErrors.positionStatus && delete formErrors.positionStatus"
+            />
+            <p class="text-xs text-red-600" x-show="formErrors.positionStatus" x-text="formErrors.positionStatus"></p>
+          </label>
+        </div>
+        <template x-if="formErrors.form">
+          <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200" role="alert">
+            <span x-text="formErrors.form"></span>
+          </p>
+        </template>
+        <footer class="flex justify-end gap-3 pt-2">
+          <button type="button" class="btn ghost" @click="closeAddEmployeeModal()">Cancel</button>
+          <button type="submit" class="btn" :disabled="formSaving">
+            <span x-text="formSaving ? 'Adding…' : 'Add employee'"></span>
+          </button>
+        </footer>
+      </form>
+    </div>
   </section>
 </div>
