@@ -85,6 +85,24 @@ create policy "Service role writes" on public.employees
 create policy "Service role writes" on public.employee_requirements
   for all using ((coalesce((auth.jwt() ->> 'role'), '') in ('service_role', 'admin')))
   with check ((coalesce((auth.jwt() ->> 'role'), '') in ('service_role', 'admin')));
+create policy "Client submits imports" on public.imports
+  for insert
+  with check (
+    (coalesce((auth.jwt() ->> 'role'), '') in ('anon', 'authenticated', 'service_role', 'admin'))
+    and status = 'pending'
+    and approved_at is null
+  );
+create policy "Client submits import rows" on public.import_rows
+  for insert
+  with check (
+    (coalesce((auth.jwt() ->> 'role'), '') in ('anon', 'authenticated', 'service_role', 'admin'))
+    and exists (
+      select 1
+      from public.imports i
+      where i.id = import_id
+        and i.status = 'pending'
+    )
+  );
 create policy "Service role writes" on public.imports
   for all using ((coalesce((auth.jwt() ->> 'role'), '') in ('service_role', 'admin')))
   with check ((coalesce((auth.jwt() ->> 'role'), '') in ('service_role', 'admin')));
