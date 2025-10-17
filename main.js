@@ -12,8 +12,6 @@ import { trapFocusWithin, getFocusableElements } from './a11y-utils.js';
 import { qs } from './src/utils/dom.js';
 
 import './styles.css';
-import './import-employees.js';
-import './onboarding.js';
 import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup, putEmployeeRecord, getDexie, openDatabase } from './db.js';
 import * as CompatAPI from './src/compat/index.js';
 import { warnOnce } from './src/compat/deprecations.js';
@@ -25,6 +23,21 @@ if (hasWindowObject && window.APP_FLAGS?.USE_V2_MAIN) {
 }
 
 const skipLegacyBootstrap = hasWindowObject && Boolean(window.APP_FLAGS?.USE_V2_MAIN);
+
+const onboardingModulePromise = import('./onboarding.js');
+let importerModulePromise = Promise.resolve();
+
+if (hasWindowObject) {
+  try {
+    await openDatabase();
+  } catch (error) {
+    console.error('Failed to initialize the compliance database. Some features may not work.', error);
+  }
+
+  importerModulePromise = import('./import-employees.js');
+}
+
+await Promise.all([onboardingModulePromise, importerModulePromise]);
 
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
