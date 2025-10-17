@@ -493,8 +493,10 @@ const v2DashboardAppDefinition = () => ({
   loading: true,
   loadError: null,
   darkMode: false,
+  currentView: 'home',
   showAddRequirementModal: false,
   showAddEmployeeModal: false,
+  showProfileDrawer: false,
   exporter: null,
   _exportRowsCache: null,
   employees: [],
@@ -591,6 +593,7 @@ const v2DashboardAppDefinition = () => ({
     open: false,
     employeeId: null
   },
+  overlay: { current: null },
   activeEditor: {
     open: false,
     employeeId: null,
@@ -735,6 +738,31 @@ const v2DashboardAppDefinition = () => ({
     error: '',
     commitDisabled: true,
     headerRowNumber: null
+  },
+  goBack() {
+    if (typeof window !== 'undefined' && window.history && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+
+    this.closeAllOverlays();
+    this.currentView = 'home';
+    this.toast('Returned to Home', 'info');
+  },
+  closeAllOverlays() {
+    this.closeAddRequirementModal({ force: true });
+    this.closeAddEmployeeModal({ force: true });
+    this.closeImportDrawer({ force: true });
+    this.closeProfile();
+    this.showAddRequirementModal = false;
+    this.showAddEmployeeModal = false;
+    this.showProfileDrawer = false;
+    this.addRequirementModal.open = false;
+    this.addEmployeeModal.open = false;
+    this.importDrawer.open = false;
+    this.profilePanel.open = false;
+    this.profilePanel.employeeId = null;
+    this.overlay = { current: null };
   },
   init() {
     if (!window.APP_FLAGS?.USE_V2_MAIN) {
