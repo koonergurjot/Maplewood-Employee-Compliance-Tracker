@@ -60,12 +60,17 @@ const parseFloatValue = value => {
     return value;
   }
 
-  const normalized = normalizeString(value).replace(/,/g, '');
+  const normalized = normalizeString(value);
   if (!normalized) {
     return 0;
   }
 
-  const numeric = Number.parseFloat(normalized);
+  const sanitized = normalized.replace(/[, ]+/g, '');
+  if (!sanitized) {
+    return 0;
+  }
+
+  const numeric = Number.parseFloat(sanitized);
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
@@ -133,6 +138,60 @@ const extractName = (row, mapping) => {
   return { firstName, lastName };
 };
 
+const buildFullName = (firstName, lastName) => {
+  const normalizedFirst = normalizeString(firstName);
+  const normalizedLast = normalizeString(lastName);
+  return [normalizedFirst, normalizedLast].filter(Boolean).join(' ').trim();
+};
+
+const normalizeImportedStatus = value => {
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return '';
+  }
+
+  const mapped = mapPositionStatus(normalized, normalized);
+  if (mapped) {
+    return mapped;
+  }
+
+  const collapsed = normalized.replace(/[^a-z]/gi, '').toLowerCase();
+
+  if (collapsed.includes('cas')) {
+    return 'Casual';
+  }
+
+  if (collapsed.includes('full') || collapsed.includes('ft')) {
+    return 'FT';
+  }
+
+  if (collapsed.includes('part') || collapsed.includes('pt')) {
+    return 'PT';
+  }
+
+  return '';
+};
+
+const inferRoleFromJobInfo = record => {
+  const haystack = [normalizeString(record.jobTitle), normalizeString(record.jobClass)]
+    .map(value => value.toLowerCase())
+    .filter(Boolean);
+
+  for (const value of haystack) {
+    if (value.includes('lpn') || value.includes('licensed practical nurse')) {
+      return 'LPN';
+    }
+    if (value.includes('hca') || value.includes('health care aide')) {
+      return 'HCA';
+    }
+    if (value.includes('nurse')) {
+      return 'Nurse';
+    }
+  }
+
+  return '';
+};
+
 const determineRole = (record, match) => {
   const fallback = record.jobClass || record.jobTitle || record.positionStatus || 'Other';
   if (match?.role) {
@@ -140,6 +199,10 @@ const determineRole = (record, match) => {
   }
   if (match?.jobClass) {
     return match.jobClass;
+  }
+  const inferred = inferRoleFromJobInfo(record);
+  if (inferred) {
+    return inferred;
   }
   return fallback || 'Other';
 };
@@ -329,13 +392,15 @@ const collectRawRecords = (rows, headerInfo, mapping) => {
     const jobTitle = jobTitleIndex >= 0 ? normalizeString(row[jobTitleIndex]) : '';
     const ranking = rankingIndex >= 0 ? parseIntegerValue(row[rankingIndex]) : null;
     const rawStatus = positionStatusIndex >= 0 ? normalizeString(row[positionStatusIndex]) : '';
-    const normalizedStatus = mapPositionStatus(rawStatus, rawStatus) || '';
+    const normalizedStatus = normalizeImportedStatus(rawStatus);
     const employeeId = employeeIdIndex >= 0 ? normalizeString(row[employeeIdIndex]) : '';
+    const fullName = buildFullName(firstName, lastName);
 
     records.push({
       row: rowNumber,
       firstName,
       lastName,
+      fullName,
       jobClass,
       jobTitle,
       ranking,
@@ -400,9 +465,12 @@ const mergeWithExisting = (records, existingIndexes) => {
     const role = determineRole(record, match);
     const employmentType = determineEmploymentType(record, match);
 
+    const computedFullName = record.fullName || buildFullName(record.firstName, record.lastName);
+
     const payload = {
       firstName: record.firstName,
       lastName: record.lastName,
+      fullName: computedFullName || normalizeString(match?.fullName),
       role,
       employmentType,
       status: match?.status || 'Active',
