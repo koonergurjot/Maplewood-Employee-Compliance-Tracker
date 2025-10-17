@@ -1,27 +1,21 @@
 <div
   id="add-requirement-modal-root"
   x-cloak
-  class="fixed inset-0 flex items-center justify-center px-4 pointer-events-none"
+  class="fixed inset-0 z-50 flex items-center justify-center px-4 pointer-events-none"
 >
   <div
     x-cloak
     x-show="addRequirementModal.open"
     x-transition.opacity.duration.150ms
-    class="fixed inset-0 z-40 bg-black/40 pointer-events-none"
-  ></div>
-  <button
-    type="button"
-    x-cloak
-    x-show="addRequirementModal.open"
-    class="fixed inset-0 z-40 h-full w-full cursor-default pointer-events-auto"
+    class="fixed inset-0 bg-black/40 pointer-events-auto"
+    style="z-index: 55"
     @click="closeAddRequirementModal()"
-    aria-hidden="true"
-    tabindex="-1"
-  ></button>
+  ></div>
   <section
     x-cloak
     x-show="addRequirementModal.open"
-    class="relative z-50 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl pointer-events-auto dark:bg-slate-900"
+    class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl pointer-events-auto dark:bg-slate-900"
+    style="z-index: 60"
     role="dialog"
     aria-modal="true"
     aria-labelledby="add-requirement-title"
