@@ -479,6 +479,14 @@ function normalizeLower(value) {
   return normalizeString(value).toLowerCase();
 }
 
+function normalizeNonNegativeNumber(value, fallback) {
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function normalizeWindowDays(value, fallback = ANALYTICS_EXPIRING_WINDOW_DAYS) {
+  return normalizeNonNegativeNumber(value, fallback);
+}
+
 const v2DashboardAppDefinition = () => ({
   db: null,
   activityLog: null,
@@ -516,7 +524,8 @@ const v2DashboardAppDefinition = () => ({
   },
   analyticsConfig: {
     atRiskWindowDays: ANALYTICS_AT_RISK_WINDOW_DAYS,
-    expiringSoonDays: ANALYTICS_EXPIRING_WINDOW_DAYS
+    expiringSoonDays: ANALYTICS_EXPIRING_WINDOW_DAYS,
+    expiringThisWeekDays: ANALYTICS_EXPIRING_WINDOW_DAYS
   },
   filteredEmployees: [],
   selectedEmployees: [],
@@ -1714,8 +1723,15 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       requirements: this.requirements,
       employeeRequirements: this.employeeRequirements,
       options: {
-        atRiskWindowDays: this.analyticsConfig.atRiskWindowDays,
-        expiringSoonDays: this.analyticsConfig.expiringSoonDays
+        atRiskWindowDays: normalizeNonNegativeNumber(
+          this.analyticsConfig.atRiskWindowDays,
+          ANALYTICS_AT_RISK_WINDOW_DAYS
+        ),
+        expiringSoonDays: normalizeWindowDays(this.analyticsConfig.expiringSoonDays),
+        expiringThisWeekDays: normalizeWindowDays(
+          this.analyticsConfig.expiringThisWeekDays,
+          ANALYTICS_EXPIRING_WINDOW_DAYS
+        )
       }
     });
   },
@@ -1780,7 +1796,10 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       this.filters.analytics = {
         type: 'expiring-week',
         requirementId: normalized,
-        windowDays: this.analyticsConfig.expiringSoonDays
+        windowDays: normalizeWindowDays(
+          this.analyticsConfig.expiringThisWeekDays,
+          ANALYTICS_EXPIRING_WINDOW_DAYS
+        )
       };
     }
     this.applyFilters();
@@ -1805,13 +1824,23 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     const requirements = Array.isArray(this.requirements) ? this.requirements : [];
     const referenceDate = this.analyticsReferenceDate();
+    const atRiskWindow = normalizeNonNegativeNumber(
+      this.analyticsConfig.atRiskWindowDays,
+      ANALYTICS_AT_RISK_WINDOW_DAYS
+    );
+    const expiringSoonWindow = normalizeWindowDays(this.analyticsConfig.expiringSoonDays);
+    const expiringWeekWindow = normalizeWindowDays(
+      this.analyticsConfig.expiringThisWeekDays,
+      ANALYTICS_EXPIRING_WINDOW_DAYS
+    );
     const ids = requirementId ? [requirementId] : requirements.map(req => req?.id).filter(Boolean);
     for (const id of ids) {
       const record = this.getEmployeeRequirement(employeeId, id);
       const state = evaluateRequirementState(record, {
         today: referenceDate,
-        atRiskWindowDays: this.analyticsConfig.atRiskWindowDays,
-        expiringSoonDays: this.analyticsConfig.expiringSoonDays
+        atRiskWindowDays: atRiskWindow,
+        expiringSoonDays: expiringSoonWindow,
+        expiringThisWeekDays: expiringWeekWindow
       });
       if (state.atRisk) {
         return true;
@@ -1819,19 +1848,29 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     return false;
   },
-  employeeHasExpiringWithinWindow(employeeId, requirementId = null, windowDays = this.analyticsConfig.expiringSoonDays) {
+  employeeHasExpiringWithinWindow(
+    employeeId,
+    requirementId = null,
+    windowDays = this.analyticsConfig.expiringThisWeekDays
+  ) {
     if (!employeeId) {
       return false;
     }
     const requirements = Array.isArray(this.requirements) ? this.requirements : [];
     const referenceDate = this.analyticsReferenceDate();
+    const normalizedWindow = normalizeWindowDays(windowDays, ANALYTICS_EXPIRING_WINDOW_DAYS);
+    const atRiskWindow = normalizeNonNegativeNumber(
+      this.analyticsConfig.atRiskWindowDays,
+      ANALYTICS_AT_RISK_WINDOW_DAYS
+    );
     const ids = requirementId ? [requirementId] : requirements.map(req => req?.id).filter(Boolean);
     for (const id of ids) {
       const record = this.getEmployeeRequirement(employeeId, id);
       const state = evaluateRequirementState(record, {
         today: referenceDate,
-        atRiskWindowDays: this.analyticsConfig.atRiskWindowDays,
-        expiringSoonDays: windowDays
+        atRiskWindowDays: atRiskWindow,
+        expiringSoonDays: normalizedWindow,
+        expiringThisWeekDays: normalizedWindow
       });
       if (state.expiringThisWeek) {
         return true;
@@ -2522,9 +2561,13 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
             return false;
           }
         } else if (analyticsFilter.type === 'expiring-week') {
-          const windowDays = Number.isFinite(analyticsFilter.windowDays)
-            ? analyticsFilter.windowDays
-            : this.analyticsConfig.expiringSoonDays;
+          const windowDays = normalizeWindowDays(
+            analyticsFilter.windowDays,
+            normalizeWindowDays(
+              this.analyticsConfig.expiringThisWeekDays,
+              ANALYTICS_EXPIRING_WINDOW_DAYS
+            )
+          );
           if (
             !this.employeeHasExpiringWithinWindow(
               employee.id,

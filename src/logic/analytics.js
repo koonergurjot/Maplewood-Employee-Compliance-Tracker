@@ -39,8 +39,22 @@ export function evaluateRequirementState(record, options = {}) {
   const {
     today = new Date(),
     atRiskWindowDays = ANALYTICS_AT_RISK_WINDOW_DAYS,
-    expiringSoonDays = ANALYTICS_EXPIRING_WINDOW_DAYS
+    expiringSoonDays = ANALYTICS_EXPIRING_WINDOW_DAYS,
+    expiringThisWeekDays = ANALYTICS_EXPIRING_WINDOW_DAYS
   } = options;
+
+  const normalizedAtRiskWindowDays =
+    Number.isFinite(atRiskWindowDays) && atRiskWindowDays >= 0
+      ? atRiskWindowDays
+      : ANALYTICS_AT_RISK_WINDOW_DAYS;
+  const normalizedExpiringSoonDays =
+    Number.isFinite(expiringSoonDays) && expiringSoonDays >= 0
+      ? expiringSoonDays
+      : ANALYTICS_EXPIRING_WINDOW_DAYS;
+  const normalizedExpiringThisWeekDays =
+    Number.isFinite(expiringThisWeekDays) && expiringThisWeekDays >= 0
+      ? expiringThisWeekDays
+      : ANALYTICS_EXPIRING_WINDOW_DAYS;
 
   const status = normalizeStatus(record?.status || 'Pending');
   let compliant = status === 'Completed' || status === 'Exempt';
@@ -64,17 +78,17 @@ export function evaluateRequirementState(record, options = {}) {
     !compliant &&
     daysUntilExpiry !== null &&
     daysUntilExpiry >= 0 &&
-    daysUntilExpiry <= atRiskWindowDays;
+    daysUntilExpiry <= normalizedAtRiskWindowDays;
   const expiringSoon =
     !compliant &&
     daysUntilExpiry !== null &&
     daysUntilExpiry >= 0 &&
-    daysUntilExpiry <= expiringSoonDays;
+    daysUntilExpiry <= normalizedExpiringSoonDays;
   const expiringThisWeek =
     !compliant &&
     daysUntilExpiry !== null &&
     daysUntilExpiry >= 0 &&
-    daysUntilExpiry <= expiringSoonDays;
+    daysUntilExpiry <= normalizedExpiringThisWeekDays;
 
   return {
     status,
@@ -113,6 +127,9 @@ export function computeAnalyticsSummary(context) {
     : ANALYTICS_AT_RISK_WINDOW_DAYS;
   const expiringSoonDays = Number.isFinite(options.expiringSoonDays)
     ? options.expiringSoonDays
+    : ANALYTICS_EXPIRING_WINDOW_DAYS;
+  const expiringThisWeekDays = Number.isFinite(options.expiringThisWeekDays)
+    ? options.expiringThisWeekDays
     : ANALYTICS_EXPIRING_WINDOW_DAYS;
   const today = options.today instanceof Date && !Number.isNaN(options.today.getTime())
     ? new Date(options.today)
@@ -154,7 +171,8 @@ export function computeAnalyticsSummary(context) {
       const state = evaluateRequirementState(record, {
         today,
         atRiskWindowDays,
-        expiringSoonDays
+        expiringSoonDays,
+        expiringThisWeekDays
       });
 
       if (state.compliant) {
