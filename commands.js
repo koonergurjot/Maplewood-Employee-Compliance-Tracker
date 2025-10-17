@@ -92,13 +92,33 @@ export async function deleteEmployee({ db, employeeId, activityLog }) {
     return;
   }
 
-  const employeeRequirementsTable = db.employeeRequirements;
+  await db.transaction('rw', db.employees, db.employeeRequirements, async (transaction) => {
+    const employeesTable = transaction.table('employees');
+    const employeeRequirementsTable = transaction.table('employeeRequirements');
 
-  await db.transaction('rw', db.employees, db.employeeRequirements, async () => {
+    let requirementsDeleted = false;
+
     if (employeeRequirementsTable?.where) {
-      await employeeRequirementsTable.where({ employeeId }).delete();
+      try {
+        await employeeRequirementsTable
+          .where('[employeeId+requirementId]')
+          .startsWith([employeeId])
+          .delete();
+        requirementsDeleted = true;
+      } catch (error) {
+        if (error?.name !== 'InvalidStateError' && error?.name !== 'DataError') {
+          throw error;
+        }
+      }
     }
-    await db.employees.delete(employeeId);
+
+    if (!requirementsDeleted && employeeRequirementsTable?.filter) {
+      await employeeRequirementsTable
+        .filter(record => record?.employeeId === employeeId)
+        .delete();
+    }
+
+    await employeesTable.delete(employeeId);
   });
 
   const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.name || 'Employee';
