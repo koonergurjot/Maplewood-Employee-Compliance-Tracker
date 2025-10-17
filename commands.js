@@ -133,9 +133,47 @@ export async function deleteEmployee({ db, employeeId, activityLog }) {
     } else if (requirementIds.length > 0 && typeof transactionEmployeeRequirementsTable?.delete === 'function') {
       await Promise.all(requirementIds.map(id => transactionEmployeeRequirementsTable.delete(id)));
     }
+  const deleteWithinTransaction = async (useFilterFallback = false) => {
+    await db.transaction('rw', db.employees, db.employeeRequirements, async () => {
+      const employeesTable = db.table('employees');
+      const employeeRequirementsTable = db.table('employeeRequirements');
 
-    await employeesTable.delete(employeeId);
-  });
+      const shouldUseFilter = useFilterFallback || !employeeRequirementsTable?.where;
+
+      if (shouldUseFilter) {
+        if (typeof employeeRequirementsTable?.filter === 'function') {
+          await employeeRequirementsTable
+            .filter(record => record?.employeeId === employeeId)
+            .delete();
+        } else if (typeof employeeRequirementsTable?.toArray === 'function') {
+          const records = await employeeRequirementsTable.toArray();
+          const matches = records.filter(record => record?.employeeId === employeeId);
+          if (matches.length && typeof employeeRequirementsTable?.bulkDelete === 'function') {
+            await employeeRequirementsTable.bulkDelete(matches.map(match => match.id));
+          } else if (matches.length && typeof employeeRequirementsTable?.delete === 'function') {
+            await Promise.all(matches.map(match => employeeRequirementsTable.delete(match.id)));
+          }
+        }
+      } else {
+        await employeeRequirementsTable
+          .where('[employeeId+requirementId]')
+          .startsWith([employeeId])
+          .delete();
+      }
+
+      await employeesTable.delete(employeeId);
+    });
+  };
+
+  try {
+    await deleteWithinTransaction(false);
+  } catch (error) {
+    if (error?.name === 'InvalidStateError' || error?.name === 'DataError') {
+      await deleteWithinTransaction(true);
+    } else {
+      throw error;
+    }
+  }
 
   const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.name || 'Employee';
   const summary = `Deleted employee ${fullName} (${employee.role || 'Unknown Role'})`;

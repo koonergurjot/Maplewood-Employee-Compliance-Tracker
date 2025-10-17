@@ -10,13 +10,35 @@ const POSITION_STATUS_ALIAS_MAP = new Map([
   ['FULLTIME', 'FT'],
   ['FULLTIMEEMPLOYEE', 'FT'],
   ['FULLTIMEEQUIVALENT', 'FT'],
+  ['FULLTIMESTAFF', 'FT'],
+  ['FULLTIMESTATUS', 'FT'],
   ['PARTTIME', 'PT'],
   ['PARTTIMEEMPLOYEE', 'PT'],
+  ['PARTTIMESTAFF', 'PT'],
+  ['PARTTIMESTATUS', 'PT'],
   ['PT', 'PT'],
   ['PTE', 'PT'],
   ['PARTTIMEEQUIVALENT', 'PT'],
+  ['CAS', 'Casual'],
   ['CASUAL', 'Casual'],
-  ['CASUALEMPLOYEE', 'Casual']
+  ['CASUALEMP', 'Casual'],
+  ['CASUALEMPLOYEE', 'Casual'],
+  ['CASUALSTAFF', 'Casual'],
+  ['CASUALSTATUS', 'Casual'],
+  ['TEMP', 'Casual'],
+  ['TEMPORARY', 'Casual'],
+  ['TEMPORARYEMPLOYEE', 'Casual'],
+  ['TEMPORARYSTAFF', 'Casual'],
+  ['TEMPORARYSTATUS', 'Casual'],
+  ['TEMPORARYPT', 'PT'],
+  ['TEMPORARYPARTTIME', 'PT'],
+  ['TEMPPT', 'PT'],
+  ['PARTTIMESEASONAL', 'PT'],
+  ['SEASONAL', 'Casual'],
+  ['CONTRACT', 'Casual'],
+  ['TEMPORARYFT', 'FT'],
+  ['TEMPFT', 'FT'],
+  ['TEMPORARYFULLTIME', 'FT']
 ]);
 
 function normalizeStatusKey(value) {
@@ -30,30 +52,72 @@ function normalizeStatusKey(value) {
   return stringValue.replace(/[^a-z0-9]/gi, '').toUpperCase();
 }
 
-export function normalizePositionStatus(value) {
+function resolvePositionStatus(value) {
   const key = normalizeStatusKey(value);
   if (!key) {
-    return '';
+    return { value: '', matchedAlias: false, matchedHeuristic: false };
   }
+
   const mapped = POSITION_STATUS_ALIAS_MAP.get(key);
   if (mapped) {
-    return mapped;
+    return { value: mapped, matchedAlias: true, matchedHeuristic: false };
   }
-  if (key === 'CASUAL') {
-    return 'Casual';
+
+  const lowercaseKey = key.toLowerCase();
+
+  if (lowercaseKey.includes('cas')) {
+    return { value: 'Casual', matchedAlias: false, matchedHeuristic: true };
   }
-  return '';
+
+  if (lowercaseKey.includes('temp')) {
+    if (lowercaseKey.includes('pt') || lowercaseKey.includes('part')) {
+      return { value: 'PT', matchedAlias: false, matchedHeuristic: true };
+    }
+    if (lowercaseKey.includes('ft') || lowercaseKey.includes('full')) {
+      return { value: 'FT', matchedAlias: false, matchedHeuristic: true };
+    }
+    return { value: 'Casual', matchedAlias: false, matchedHeuristic: true };
+  }
+
+  if (lowercaseKey.includes('full') || lowercaseKey.startsWith('ft')) {
+    return { value: 'FT', matchedAlias: false, matchedHeuristic: true };
+  }
+
+  if (lowercaseKey.includes('part') || lowercaseKey.startsWith('pt')) {
+    return { value: 'PT', matchedAlias: false, matchedHeuristic: true };
+  }
+
+  return { value: '', matchedAlias: false, matchedHeuristic: false };
 }
 
-export function mapPositionStatus(value, fallback = '') {
-  const normalized = normalizePositionStatus(value);
-  if (normalized) {
-    return normalized;
+export function normalizePositionStatus(value) {
+  return resolvePositionStatus(value).value;
+}
+
+export function normalizePositionStatusMeta(value) {
+  return resolvePositionStatus(value);
+}
+
+export function mapPositionStatus(value, fallback = 'Casual') {
+  const meta = resolvePositionStatus(value);
+  if (meta.value) {
+    return meta.value;
   }
-  if (fallback) {
-    return normalizePositionStatus(fallback);
+
+  if (fallback != null) {
+    const fallbackMeta = resolvePositionStatus(fallback);
+    if (fallbackMeta.value) {
+      console.warn('Unrecognized position status:', value);
+      return fallbackMeta.value;
+    }
+    if (typeof fallback === 'string' && fallback.trim()) {
+      console.warn('Unrecognized position status:', value);
+      return fallback.trim();
+    }
   }
-  return '';
+
+  console.warn('Unrecognized position status:', value);
+  return 'Casual';
 }
 
 export const BULK_OPERATION_CHUNK_SIZE = 300;
