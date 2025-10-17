@@ -95,9 +95,13 @@ export class AddEmployee {
     employee.updatedAt = timestamp;
     const { roleIndex } = await fetchTemplateIndex(this.db);
 
-    return this.db.transaction('rw', this.db.employees, this.db.requirements, this.db.employeeRequirements, async () => {
-      await this.db.employees.add(employee);
-      const requirements = await this.db.requirements.toArray();
+    return this.db.transaction('rw', this.db.employees, this.db.requirements, this.db.employeeRequirements, async tx => {
+      const employeesTable = tx.table('employees');
+      const requirementsTable = tx.table('requirements');
+      const employeeRequirementsTable = tx.table('employeeRequirements');
+
+      await employeesTable.add(employee);
+      const requirements = await requirementsTable.toArray();
       const template = resolveTemplateForRole(employee.role, roleIndex);
       const employeeRequirements = requirements.map(req => ({
         id: generateId(),
@@ -110,7 +114,7 @@ export class AddEmployee {
         updatedAt: timestamp
       }));
       if (employeeRequirements.length) {
-        await this.db.employeeRequirements.bulkAdd(employeeRequirements);
+        await employeeRequirementsTable.bulkAdd(employeeRequirements);
       }
       return {
         employee,
@@ -121,11 +125,14 @@ export class AddEmployee {
 
   async undo({ employee, employeeRequirements }) {
     if (!employee) return;
-    await this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async () => {
+    await this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async tx => {
+      const employeesTable = tx.table('employees');
+      const employeeRequirementsTable = tx.table('employeeRequirements');
+
       if (employeeRequirements?.length) {
-        await this.db.employeeRequirements.bulkDelete(employeeRequirements.map(er => er.id));
+        await employeeRequirementsTable.bulkDelete(employeeRequirements.map(er => er.id));
       }
-      await this.db.employees.delete(employee.id);
+      await employeesTable.delete(employee.id);
     });
   }
 }
@@ -163,20 +170,23 @@ export class DeleteEmployee {
       throw new Error('Missing employeeId for DeleteEmployee command');
     }
 
-    return this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async () => {
-      const employee = await this.db.employees.get(this.employeeId);
+    return this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async tx => {
+      const employeesTable = tx.table('employees');
+      const employeeRequirementsTable = tx.table('employeeRequirements');
+
+      const employee = await employeesTable.get(this.employeeId);
       if (!employee) {
         return { employee: null, employeeRequirements: [] };
       }
 
-      const employeeRequirements = await this.db.employeeRequirements
+      const employeeRequirements = await employeeRequirementsTable
         .where('employeeId')
         .equals(this.employeeId)
         .toArray();
 
-      await this.db.employees.delete(this.employeeId);
+      await employeesTable.delete(this.employeeId);
       if (employeeRequirements.length) {
-        await this.db.employeeRequirements.bulkDelete(employeeRequirements.map(er => er.id));
+        await employeeRequirementsTable.bulkDelete(employeeRequirements.map(er => er.id));
       }
 
       return {
@@ -188,10 +198,13 @@ export class DeleteEmployee {
 
   async undo({ employee, employeeRequirements }) {
     if (!employee) return;
-    await this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async () => {
-      await this.db.employees.put(employee);
+    await this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async tx => {
+      const employeesTable = tx.table('employees');
+      const employeeRequirementsTable = tx.table('employeeRequirements');
+
+      await employeesTable.put(employee);
       if (employeeRequirements?.length) {
-        await this.db.employeeRequirements.bulkPut(employeeRequirements);
+        await employeeRequirementsTable.bulkPut(employeeRequirements);
       }
     });
   }
