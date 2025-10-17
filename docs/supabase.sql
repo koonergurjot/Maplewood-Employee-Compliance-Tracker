@@ -88,19 +88,33 @@ create policy "Service role writes" on public.employee_requirements
 create policy "Client submits imports" on public.imports
   for insert
   with check (
-    (coalesce((auth.jwt() ->> 'role'), '') in ('anon', 'authenticated', 'service_role', 'admin'))
+    (coalesce((auth.jwt() ->> 'role'), '') in ('anon', 'authenticated', 'client', 'service_role', 'admin'))
     and status = 'pending'
     and approved_at is null
+    and (
+      (coalesce((auth.jwt() ->> 'role'), '') in ('service_role', 'admin'))
+      or (
+        coalesce(nullif(auth.uid()::text, ''), nullif(auth.jwt() ->> 'email', '')) is null
+        or requested_by = coalesce(nullif(auth.uid()::text, ''), nullif(auth.jwt() ->> 'email', ''))
+      )
+    )
   );
 create policy "Client submits import rows" on public.import_rows
   for insert
   with check (
-    (coalesce((auth.jwt() ->> 'role'), '') in ('anon', 'authenticated', 'service_role', 'admin'))
+    (coalesce((auth.jwt() ->> 'role'), '') in ('anon', 'authenticated', 'client', 'service_role', 'admin'))
     and exists (
       select 1
       from public.imports i
       where i.id = import_id
         and i.status = 'pending'
+        and (
+          (coalesce((auth.jwt() ->> 'role'), '') in ('service_role', 'admin'))
+          or (
+            coalesce(nullif(auth.uid()::text, ''), nullif(auth.jwt() ->> 'email', '')) is null
+            or i.requested_by = coalesce(nullif(auth.uid()::text, ''), nullif(auth.jwt() ->> 'email', ''))
+          )
+        )
     )
   );
 create policy "Service role writes" on public.imports
