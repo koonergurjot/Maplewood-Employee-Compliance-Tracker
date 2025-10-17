@@ -1,4 +1,4 @@
-<div id="add-employee-modal-root" x-cloak>
+<div id="add-employee-modal-root" x-cloak class="fixed inset-0 pointer-events-none">
   <div
     x-cloak
     x-show="showAddEmployeeModal"
@@ -12,7 +12,7 @@
     aria-modal="true"
     aria-labelledby="add-employee-title"
     @click.outside="showAddEmployeeModal=false; closeAddEmployeeModal({ force: true })"
-    @keydown.escape.window="showAddEmployeeModal=false; closeAddEmployeeModal({ force: true })"
+    @keydown.escape.window.stop="showAddEmployeeModal=false; closeAddEmployeeModal({ force: true })"
   >
     <div class="flex h-full flex-col">
       <header class="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-6 py-5 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
