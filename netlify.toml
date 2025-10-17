@@ -9,7 +9,10 @@
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), speaker=(), vibrate=(), fullscreen=(self), sync-xhr=()"
+    # Keep the permissions policy limited to widely supported directives to avoid
+    # console warnings about experimental features. Browsers that do not recognize
+    # a directive treat it as an error, so we omit the ad-tech related fields.
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), speaker-selection=(), vibrate=(), fullscreen=(self), sync-xhr=()"
 
 [[redirects]]
   from = "/calendar.html"
