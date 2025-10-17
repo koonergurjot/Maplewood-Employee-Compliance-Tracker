@@ -76,7 +76,7 @@ const inlineEditTemplate = `
 `;
 import './styles/tailwind.css';
 import { openDatabase, generateId, mapPositionStatus } from '../db.js';
-import { AddRequirement } from '../commands.js';
+import { AddRequirement, deleteEmployee as deleteEmployeeHelper } from '../commands.js';
 import { addEmployee as addEmployeeApi } from './v2/api.js';
 import { exportFilteredCSV, exportFilteredJSON } from './v2/exporter.js';
 import {
@@ -561,7 +561,8 @@ const v2DashboardAppDefinition = () => ({
   formErrors: {},
   formSaving: false,
   api: {
-    addEmployee: addEmployeeApi
+    addEmployee: addEmployeeApi,
+    deleteEmployee: deleteEmployeeHelper
   },
   addRequirementModal: {
     open: false,
@@ -1546,6 +1547,50 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     if (typeof window !== 'undefined' && typeof window.alert === 'function') {
       window.alert(payload.message);
     }
+  },
+  async confirmAndDeleteEmployee(employeeId) {
+    if (!this.db || !employeeId) {
+      return;
+    }
+    const employee = await this.db.employees.get(employeeId);
+    if (!employee) {
+      return;
+    }
+    const displayName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.name || 'this employee';
+    const ok = confirm(`Are you sure you want to permanently delete ${displayName}? This cannot be undone.`);
+    if (!ok) {
+      return;
+    }
+
+    if (typeof this.api?.deleteEmployee !== 'function') {
+      console.warn('Delete employee API is unavailable.');
+      this.toast('Delete action is unavailable right now.', 'error');
+      return;
+    }
+
+    try {
+      await this.api.deleteEmployee({
+        db: this.db,
+        employeeId,
+        activityLog: this.activityLog
+      });
+    } catch (error) {
+      console.error('Failed to delete employee', error);
+      this.toast('Failed to delete employee', 'error');
+      return;
+    }
+
+    this.employees = this.employees.filter(emp => emp?.id !== employeeId);
+    this.filteredEmployees = this.filteredEmployees.filter(emp => emp?.id !== employeeId);
+    this.selectedEmployees = this.selectedEmployees.filter(id => id !== employeeId);
+
+    if (this.profilePanel.employeeId === employeeId) {
+      this.closeProfile();
+    }
+
+    this.toast(`Deleted ${displayName}`, 'success');
+    await this.loadData();
+    this.applyFilters();
   },
   downloadSampleCsv() {
     try {
