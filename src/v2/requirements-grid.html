@@ -35,11 +35,20 @@
             />
           </th>
           <template x-for="column in gridInfoColumns()" :key="`header-${column.key}`">
-            <th scope="col" rowspan="2" :class="column.headerClass">
+            <th
+              scope="col"
+              rowspan="2"
+              :class="[column.headerClass, column.key === 'name' ? 'sticky left-0 z-20 bg-white' : '']"
+            >
               <span x-text="column.label"></span>
             </th>
           </template>
-          <th class="sticky-header requirements-divider sticky-divider" role="presentation" aria-hidden="true" rowspan="2"></th>
+          <th
+            class="sticky-header requirements-divider sticky-divider w-2 bg-slate-100/70 border-l"
+            role="presentation"
+            aria-hidden="true"
+            rowspan="2"
+          ></th>
           <template x-if="gridOrderedRequirements().length">
             <th
               scope="col"
@@ -77,7 +86,7 @@
             </td>
             <template x-for="column in gridInfoColumns()" :key="`${employee.id}-${column.key}`">
               <template x-if="column.key === 'name'">
-                <th scope="row" :class="column.cellClass">
+                <th scope="row" :class="[column.cellClass, 'sticky left-0 z-10 bg-white']">
                   <div class="flex items-center gap-3">
                     <div class="relative">
                       <div
@@ -111,7 +120,11 @@
                 </td>
               </template>
             </template>
-            <td class="requirements-divider sticky-divider" role="presentation" aria-hidden="true"></td>
+            <td
+              class="requirements-divider sticky-divider w-2 bg-slate-100/70 border-l"
+              role="presentation"
+              aria-hidden="true"
+            ></td>
             <template x-for="req in gridOrderedRequirements()" :key="req.id">
               <td x-data="{ cell: getRequirementCell(employee.id, req.id) }">
                 <div class="cell">
