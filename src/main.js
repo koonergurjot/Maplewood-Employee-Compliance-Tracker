@@ -81,9 +81,19 @@ const inlineEditTemplate = `
 </template>
 `;
 import './styles/tailwind.css';
-import { openDatabase, generateId, mapPositionStatus } from '../db.js';
+import {
+  openDatabase,
+  generateId,
+  mapPositionStatus,
+  getDb,
+  listEmployees,
+  listRequirements,
+  getEmployeeRequirement,
+  upsertEmployeeRequirement
+} from '../db.js';
 import { AddRequirement, deleteEmployee as deleteEmployeeHelper } from '../commands.js';
 import { addEmployee as addEmployeeApi } from './v2/api.js';
+import requirementCell from './v2/requirement-cell.js';
 import { exportFilteredCSV, exportFilteredJSON } from './v2/exporter.js';
 import {
   ANALYTICS_AT_RISK_WINDOW_DAYS,
@@ -112,6 +122,120 @@ const DEFAULT_FILTER_STATE = {
 };
 
 let seniorityImporterModulePromise = null;
+
+const requirementsStore = {
+  all: [],
+  async load() {
+    const records = await listRequirements();
+    this.all = Array.isArray(records) ? records : [];
+    return this.all;
+  },
+  byId(id) {
+    if (id == null) {
+      return null;
+    }
+    return this.all.find(requirement => requirement && requirement.id === id) || null;
+  }
+};
+
+const employeesStore = {
+  list: [],
+  requirementLinkCache: new Map(),
+  async load() {
+    const records = await listEmployees();
+    this.list = Array.isArray(records) ? records : [];
+    this.requirementLinkCache.clear();
+    return this.list;
+  },
+  linkKey(employeeId, requirementId) {
+    return `${employeeId ?? ''}::${requirementId ?? ''}`;
+  },
+  cacheRequirementLink(record) {
+    if (!record || record.employeeId == null || record.requirementId == null) {
+      return;
+    }
+    const key = this.linkKey(record.employeeId, record.requirementId);
+    this.requirementLinkCache.set(key, { ...record });
+  },
+  async requirementLink(employeeId, requirementId) {
+    const key = this.linkKey(employeeId, requirementId);
+    if (this.requirementLinkCache.has(key)) {
+      return this.requirementLinkCache.get(key);
+    }
+    const record = await getEmployeeRequirement(employeeId, requirementId);
+    if (record) {
+      this.cacheRequirementLink(record);
+    }
+    return record || null;
+  },
+  statusLabel(link) {
+    if (!link) {
+      return 'Pending';
+    }
+    const now = new Date();
+    const expiresOn = link.expiresOn ? new Date(link.expiresOn) : null;
+    if (expiresOn && !Number.isNaN(expiresOn.getTime()) && expiresOn < now) {
+      return 'Expired';
+    }
+    if (link.completedOn) {
+      return 'Complete';
+    }
+    return 'Pending';
+  },
+  async recordActivity(employeeId, requirementId, completedOn) {
+    try {
+      const db = getDb();
+      const table = db?.table?.('activities');
+      if (!table || typeof table.add !== 'function') {
+        return;
+      }
+      await table.add({
+        type: 'requirement.update',
+        employeeId,
+        requirementId,
+        completedOn: completedOn || null,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.warn('Failed to record requirement update activity', error);
+    }
+  },
+  async toggle(employeeId, requirementId, checked) {
+    const nowIso = new Date().toISOString();
+    const existing = await this.requirementLink(employeeId, requirementId);
+    const payload = {
+      ...existing,
+      employeeId,
+      requirementId,
+      issuedOn: existing?.issuedOn || nowIso,
+      completedOn: checked ? nowIso : null,
+      expiresOn: existing?.expiresOn || null,
+      fileUrl: existing?.fileUrl || null,
+      notes: typeof existing?.notes === 'string' ? existing.notes : ''
+    };
+
+    const record = await upsertEmployeeRequirement(payload);
+    this.cacheRequirementLink(record);
+
+    const appStore = Alpine.store('app');
+    if (appStore && typeof appStore.setEmployeeRequirement === 'function') {
+      appStore.setEmployeeRequirement(record);
+      if (typeof appStore.refreshAnalytics === 'function') {
+        appStore.refreshAnalytics();
+      }
+      if (typeof appStore.applyFilters === 'function') {
+        appStore.applyFilters();
+      }
+    }
+
+    await this.recordActivity(employeeId, requirementId, record?.completedOn ?? null);
+
+    return record;
+  }
+};
+
+Alpine.store('requirements', requirementsStore);
+Alpine.store('employees', employeesStore);
 
 function loadSeniorityImporterModule() {
   if (!seniorityImporterModulePromise) {
@@ -2472,6 +2596,10 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
         return normalizeLower(a?.name).localeCompare(normalizeLower(b?.name));
       });
       this.requirements = requirements;
+      const requirementsStoreInstance = Alpine.store('requirements');
+      if (requirementsStoreInstance) {
+        requirementsStoreInstance.all = [...requirements];
+      }
       this.ensureBulkRequirement();
       this.employeeRequirements = employeeRequirements;
       this.refreshRequirementMap();
@@ -3003,6 +3131,11 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       return;
     }
     appStore.employees = Array.isArray(this.employees) ? this.employees : [];
+    const employeesStoreInstance = Alpine.store('employees');
+    if (employeesStoreInstance) {
+      employeesStoreInstance.list = Array.isArray(this.employees) ? [...this.employees] : [];
+      employeesStoreInstance.requirementLinkCache?.clear?.();
+    }
   },
   updateStoreFilteredEmployees() {
     const appStore = this.$store?.app;
@@ -4065,6 +4198,33 @@ async function bootApp() {
     appStore.db = initialDatabase;
   }
 
+  try {
+    const dbInstance = getDb();
+    if (dbInstance && typeof dbInstance.isOpen === 'function' && !dbInstance.isOpen()) {
+      await dbInstance.open();
+    }
+  } catch (error) {
+    console.warn('Failed to ensure database open before loading stores', error);
+  }
+
+  const storeLoaders = [];
+  const requirementsStoreInstance = Alpine.store('requirements');
+  if (requirementsStoreInstance && typeof requirementsStoreInstance.load === 'function') {
+    storeLoaders.push(requirementsStoreInstance.load());
+  }
+  const employeesStoreInstance = Alpine.store('employees');
+  if (employeesStoreInstance && typeof employeesStoreInstance.load === 'function') {
+    storeLoaders.push(employeesStoreInstance.load());
+  }
+
+  if (storeLoaders.length) {
+    try {
+      await Promise.all(storeLoaders);
+    } catch (error) {
+      console.warn('Failed to preload Alpine stores', error);
+    }
+  }
+
   Alpine.store('app', appStore);
   window.AppStore = function AppStore() {
     return appStore;
@@ -4075,6 +4235,7 @@ async function bootApp() {
   }
 
   window.Alpine = Alpine;
+  window.requirementCell = requirementCell;
 
   registerV2Component('v2DashboardApp', v2DashboardAppDefinition);
 
