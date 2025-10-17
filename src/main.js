@@ -121,6 +121,19 @@ const DEFAULT_FILTER_STATE = {
   analytics: null
 };
 
+const UI_COMPACT_KEY = 'maplewood:ui:compact';
+const hasLocalStorage = typeof localStorage !== 'undefined';
+
+Alpine.store('ui', {
+  compact: hasLocalStorage && localStorage.getItem(UI_COMPACT_KEY) === '1',
+  persist() {
+    if (!hasLocalStorage) {
+      return;
+    }
+    localStorage.setItem(UI_COMPACT_KEY, this.compact ? '1' : '0');
+  }
+});
+
 let seniorityImporterModulePromise = null;
 
 const requirementsStore = {
