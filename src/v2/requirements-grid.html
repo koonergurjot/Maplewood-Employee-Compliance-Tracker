@@ -22,16 +22,16 @@
     <table class="min-w-full text-sm text-slate-700 requirements-table">
       <thead class="text-xs uppercase tracking-wide text-slate-500">
         <tr>
-          <th scope="col" class="sticky left-0 z-10 bg-white px-4 py-3 text-left">Employee</th>
+          <th scope="col" class="sticky-header sticky left-0 px-4 py-3 text-left">Employee</th>
           <template x-for="req in gridOrderedRequirements()" :key="req.id">
-            <th class="px-4 py-3 text-left whitespace-nowrap" x-text="req.name"></th>
+            <th class="sticky-header px-4 py-3 text-left whitespace-nowrap" x-text="req.name"></th>
           </template>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-200">
         <template x-for="employee in filteredEmployees" :key="employee.id">
           <tr class="bg-white">
-            <th scope="row" class="sticky left-0 z-10 bg-white px-4 py-3 align-top">
+            <th scope="row" class="sticky left-0 bg-white px-4 py-3 align-top">
               <div class="flex items-start gap-3">
                 <div class="relative h-8 w-8 shrink-0 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-semibold">
                   <span x-text="(employee.firstName?.[0]||'') + (employee.lastName?.[0]||'')"></span>

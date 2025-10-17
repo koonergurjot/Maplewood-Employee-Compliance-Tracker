@@ -124,16 +124,30 @@ body.dark .input { border-color: var(--border-soft-dark); background: rgba(15, 2
 .toggle-label { font-size: 0.875rem; color: inherit; }
 .grid-container { border: 1px solid var(--border-soft); border-radius: 1rem; overflow: hidden; }
 body.dark .grid-container { border-color: var(--border-soft-dark); }
-.grid-scroll { overflow: auto; max-height: 70vh; }
+.grid-scroll {
+  overflow: auto;
+  width: 100%;
+  height: calc(100vh - 220px);
+}
 .requirements-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 640px; }
 .requirements-table th, .requirements-table td { padding: 0.75rem; border-bottom: 1px solid var(--border-soft); background: var(--bg-card); }
 body.dark .requirements-table th, body.dark .requirements-table td { border-color: var(--border-soft-dark); background: var(--bg-card-dark); }
 .sticky-header { position: sticky; top: 0; z-index: 12; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); }
 body.dark .sticky-header { background: rgba(15, 23, 42, 0.9); }
-.requirements-table thead .sticky-header { z-index: 20; }
-.requirements-table thead .sticky-col.sticky-header { z-index: 25; }
-.requirements-table thead .sticky-select.sticky-header { z-index: 30; }
-.requirements-table thead .sticky-divider.sticky-header { z-index: 22; }
+.requirements-table thead th.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.sticky.left-0 {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.95);
+}
+body.dark .sticky.left-0 {
+  background: rgba(15, 23, 42, 0.95);
+}
 .sticky-col {
   position: sticky;
   left: var(--selection-col-width, 0);
