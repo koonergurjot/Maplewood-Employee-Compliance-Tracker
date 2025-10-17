@@ -673,7 +673,7 @@ export async function loadXlsx(){
 window.Alpine = Alpine;
 
 // Global store for shared UI state
-Alpine.store('app', {
+const legacyAppStore = Alpine.store('app', {
   showImportModal: false,
   showLookupModal: null,
   toast: null,
@@ -938,6 +938,10 @@ Alpine.store('app', {
     }
   }
 });
+
+window.AppStore = function AppStore(){
+  return legacyAppStore;
+};
 
 const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev';
     const TIMELINE_READY_MAX_RETRIES = 3;
