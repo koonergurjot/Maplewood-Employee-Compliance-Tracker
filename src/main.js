@@ -740,12 +740,17 @@ const v2DashboardAppDefinition = () => ({
     headerRowNumber: null
   },
   goBack() {
-    if (typeof window !== 'undefined' && window.history && window.history.length > 1) {
-      window.history.back();
-      return;
+    const hasOpenOverlay =
+      this.showAddRequirementModal ||
+      this.showAddEmployeeModal ||
+      this.importDrawer?.open ||
+      this.showProfileDrawer ||
+      Boolean(this.overlay?.current);
+
+    if (hasOpenOverlay) {
+      this.closeAllOverlays();
     }
 
-    this.closeAllOverlays();
     this.currentView = 'home';
     this.toast('Returned to Home', 'info');
   },
