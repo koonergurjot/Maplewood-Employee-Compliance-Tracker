@@ -14,6 +14,7 @@ import { qs } from './src/utils/dom.js';
 import './styles.css';
 import './import-employees.js';
 import './onboarding.js';
+import './src/debug-hitboxes.js';
 import { createDatabase, ensureDexieLoaded, generateId, listLookups, addLookup, putEmployeeRecord, getDexie, openDatabase } from './db.js';
 import * as CompatAPI from './src/compat/index.js';
 import { warnOnce } from './src/compat/deprecations.js';
