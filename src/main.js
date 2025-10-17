@@ -9,6 +9,7 @@ import addEmployeeModalTemplate from './v2/add-employee-modal.html?raw';
 import addRequirementModalTemplate from './v2/add-requirement-modal.html?raw';
 import bulkActionsTemplate from './v2/bulk-actions.html?raw';
 import activityTimelineTemplate from './v2/activity-timeline.html?raw';
+import employeeProfileTemplate from './v2/employee-profile.html?raw';
 const inlineEditTemplate = `
 <template>
   <div class="inline-overlay" x-show="activeEditor.open" x-transition.opacity @click="closeEditor" aria-hidden="true"></div>
@@ -489,7 +490,8 @@ const v2DashboardAppDefinition = () => ({
     addRequirementModal: '',
     addEmployeeModal: '',
     bulkActions: '',
-    activityTimeline: ''
+    activityTimeline: '',
+    employeeProfile: ''
   },
   inlineTemplateMounted: false,
   loading: true,
@@ -569,6 +571,10 @@ const v2DashboardAppDefinition = () => ({
       seniorityHours: ''
     },
     errors: {}
+  },
+  profilePanel: {
+    open: false,
+    employeeId: null
   },
   activeEditor: {
     open: false,
@@ -861,6 +867,14 @@ const v2DashboardAppDefinition = () => ({
       console.error(error);
       this.partials.activityTimeline = '';
     }
+
+    try {
+      this.partials.employeeProfile = employeeProfileTemplate;
+      this.hydrateEmployeeProfile();
+    } catch (error) {
+      console.error(error);
+      this.partials.employeeProfile = '';
+    }
   },
   hydrateMiniAnalytics() {
     this.$nextTick(() => {
@@ -920,6 +934,15 @@ const v2DashboardAppDefinition = () => ({
   hydrateAddEmployeeModal() {
     this.$nextTick(() => {
       const container = document.getElementById('add-employee-modal');
+      if (container && container.dataset.alpineInitialized !== 'true') {
+        Alpine.initTree(container);
+        container.dataset.alpineInitialized = 'true';
+      }
+    });
+  },
+  hydrateEmployeeProfile() {
+    this.$nextTick(() => {
+      const container = document.getElementById('employee-profile');
       if (container && container.dataset.alpineInitialized !== 'true') {
         Alpine.initTree(container);
         container.dataset.alpineInitialized = 'true';
@@ -1406,6 +1429,32 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       console.error('Failed to open sample CSV', error);
       this.setImportDrawerError('Unable to open the sample CSV.', { toast: false });
     }
+  },
+  openProfile(employeeId) {
+    const employee = this.employeeById(employeeId);
+    if (!employee) {
+      this.toast('Employee not found.', 'error');
+      return;
+    }
+    this.profilePanel.employeeId = employee.id;
+    const wasOpen = !!this.profilePanel.open;
+    this.profilePanel.open = true;
+    this.hydrateEmployeeProfile();
+    if (!wasOpen) {
+      this.$nextTick(() => {
+        const node = document.querySelector('#employee-profile-root [data-autofocus]');
+        if (node && typeof node.focus === 'function') {
+          node.focus();
+        }
+      });
+    }
+  },
+  closeProfile() {
+    if (!this.profilePanel.open) {
+      return;
+    }
+    this.profilePanel.open = false;
+    this.profilePanel.employeeId = null;
   },
   setImportDrawerError(message, options = {}) {
     const { toast = true } = options;
@@ -2557,6 +2606,134 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
   requirementById(id) {
     if (!id) return null;
     return this.requirements.find(req => req && req.id === id) || null;
+  },
+  requirementBadgeClass(cell) {
+    const status = normalizeStatus(cell?.status || '');
+    if (this.cellExpired(cell)) {
+      return 'badge badge-rose';
+    }
+    if (status === 'Completed' && this.cellWarn(cell)) {
+      return 'badge badge-amber';
+    }
+    if (status === 'Completed') {
+      return 'badge badge-green';
+    }
+    return 'badge badge-slate';
+  },
+  profileEmployee() {
+    return this.employeeById(this.profilePanel.employeeId);
+  },
+  profileEmployeeName() {
+    const employee = this.profileEmployee();
+    if (!employee) return 'Employee details';
+    const first = normalizeString(employee.firstName);
+    const last = normalizeString(employee.lastName);
+    const fullName = `${first} ${last}`.trim();
+    return fullName || employee.fullName || 'Employee details';
+  },
+  profileEmployeeInitials() {
+    const employee = this.profileEmployee();
+    if (!employee) return '';
+    const first = normalizeString(employee.firstName);
+    const last = normalizeString(employee.lastName);
+    const initials = `${first.charAt(0)}${last.charAt(0)}`.trim();
+    if (initials) {
+      return initials.toUpperCase();
+    }
+    if (employee.fullName) {
+      return employee.fullName.slice(0, 2).toUpperCase();
+    }
+    return '';
+  },
+  profileEmployeeMeta() {
+    const employee = this.profileEmployee();
+    if (!employee) return '';
+    const role = employee.jobTitle || employee.role || '—';
+    const status = employee.status || employee.positionStatus || '—';
+    return `${role} • ${status}`;
+  },
+  profileEmployeeRole() {
+    const employee = this.profileEmployee();
+    if (!employee) return '—';
+    return employee.jobTitle || employee.role || '—';
+  },
+  profileEmployeeStatus() {
+    const employee = this.profileEmployee();
+    if (!employee) return '—';
+    return employee.status || employee.positionStatus || '—';
+  },
+  profileEmployeeEmploymentType() {
+    const employee = this.profileEmployee();
+    if (!employee) return '—';
+    return employee.employmentType || '—';
+  },
+  profileEmployeeSeniority() {
+    const employee = this.profileEmployee();
+    if (!employee) return '—';
+    return this.gridInfoCellText(employee, 'seniorityHours');
+  },
+  profileCompliancePercent() {
+    if (!this.profilePanel.employeeId) return 0;
+    return this.employeeCompliancePercent(this.profilePanel.employeeId);
+  },
+  profileComplianceDash() {
+    const percent = this.profileCompliancePercent();
+    const safe = Math.max(0, Math.min(100, Number(percent) || 0));
+    const dash = (safe / 100) * 62.83;
+    return `${dash.toFixed(2)} 62.83`;
+  },
+  profileComplianceStrokeClass() {
+    const percent = this.profileCompliancePercent();
+    const safe = Math.max(0, Math.min(100, Number(percent) || 0));
+    if (safe >= 90) return 'stroke-emerald-500';
+    if (safe >= 70) return 'stroke-amber-500';
+    return 'stroke-rose-500';
+  },
+  profileEmployeeHasRisk() {
+    if (!this.profilePanel.employeeId) return false;
+    return this.employeeHasRequirementRisk(this.profilePanel.employeeId);
+  },
+  profileEmployeeHasExpiring() {
+    if (!this.profilePanel.employeeId) return false;
+    return this.employeeHasExpiringWithinWindow(this.profilePanel.employeeId);
+  },
+  profileAttentionSummary() {
+    if (!this.profilePanel.employeeId) {
+      return 'No alerts.';
+    }
+    const hasRisk = this.profileEmployeeHasRisk();
+    const hasExpiring = this.profileEmployeeHasExpiring();
+    if (hasRisk && hasExpiring) {
+      return 'Requirements are overdue and expiring soon.';
+    }
+    if (hasRisk) {
+      return 'One or more requirements are overdue.';
+    }
+    if (hasExpiring) {
+      return 'Upcoming deadlines within 30 days.';
+    }
+    return 'All assignments are on track.';
+  },
+  profileAssignments() {
+    if (!this.profilePanel.employeeId) {
+      return [];
+    }
+    const employeeId = this.profilePanel.employeeId;
+    const assignments = [];
+    const requirements = this.gridOrderedRequirements();
+    requirements.forEach((requirement, index) => {
+      if (!requirement) return;
+      const cell = this.getRequirementCell(employeeId, requirement.id);
+      const keyBase = requirement.id ?? requirement.key ?? requirement.name ?? index;
+      assignments.push({
+        key: `req-${String(keyBase)}-${index}`,
+        name: requirement.name || 'Requirement',
+        badgeClass: this.requirementBadgeClass(cell),
+        badgeLabel: this.chipText(cell),
+        subtext: this.cellSubtext(cell)
+      });
+    });
+    return assignments;
   },
   async toggleRequirement(empId, reqId, checked) {
     if (!this.db) return;
