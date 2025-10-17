@@ -316,6 +316,11 @@
     <span x-text="active ? 'Hide hitboxes' : 'Show hitboxes'"></span>
   </button>
 
+  <!--
+    Keep the source pointed at the development entry file. Vite rewrites this
+    path to the hashed production bundle during `npm run build`, so always
+    deploy the generated `dist/index.html` with its accompanying assets.
+  -->
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

@@ -14,6 +14,8 @@ The application is a static site and can be hosted on any web server.
 2. Generate a production build with `npm run build`.
 3. Deploy the contents of the `dist` directory to your static host or CDN.
 
+   > **Important:** Deploy the entire directory (including `index.html`). The build step rewrites `<script type="module" src="/src/main.js"></script>` to the hashed bundle filename; copying only the generated JavaScript file will leave `index.html` pointing at the wrong entry and break the app.
+
 For local development, run:
 
 ```bash
