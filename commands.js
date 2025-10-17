@@ -198,9 +198,13 @@ export class DeleteEmployee {
 }
 
 export class AddRequirement {
-  constructor(db, { requirement } = {}) {
+  constructor(db, { requirement, initialStatus = 'NotCompleted', respectTemplates = true } = {}) {
     this.db = db;
     this.requirement = requirement;
+    this.initialStatus = typeof initialStatus === 'string' && initialStatus.trim()
+      ? initialStatus.trim()
+      : 'NotCompleted';
+    this.respectTemplates = respectTemplates !== false;
   }
 
   async execute() {
@@ -209,24 +213,32 @@ export class AddRequirement {
     }
 
     const requirement = clone(this.requirement);
+    requirement.id = requirement.id || generateId();
     const timestamp = nowISO();
     requirement.createdAt = requirement.createdAt || timestamp;
     requirement.updatedAt = timestamp;
-    const { roleIndex } = await fetchTemplateIndex(this.db);
+
+    const { roleIndex } = this.respectTemplates ? await fetchTemplateIndex(this.db) : { roleIndex: new Map() };
 
     return this.db.transaction('rw', this.db.requirements, this.db.employees, this.db.employeeRequirements, async () => {
       await this.db.requirements.add(requirement);
       const employees = await this.db.employees.toArray();
-      const employeeRequirements = employees.map(emp => ({
-        id: generateId(),
-        employeeId: emp.id,
-        requirementId: requirement.id,
-        status: determineStatusForTemplate(resolveTemplateForRole(emp.role, roleIndex), requirement.id),
-        completedOn: null,
-        expiresOn: null,
-        notes: null,
-        updatedAt: timestamp
-      }));
+      const employeeRequirements = employees.map(emp => {
+        const template = this.respectTemplates ? resolveTemplateForRole(emp.role, roleIndex) : null;
+        const status = this.respectTemplates
+          ? determineStatusForTemplate(template, requirement.id, this.initialStatus)
+          : this.initialStatus;
+        return {
+          id: generateId(),
+          employeeId: emp.id,
+          requirementId: requirement.id,
+          status,
+          completedOn: null,
+          expiresOn: null,
+          notes: null,
+          updatedAt: timestamp
+        };
+      });
       if (employeeRequirements.length) {
         await this.db.employeeRequirements.bulkAdd(employeeRequirements);
       }

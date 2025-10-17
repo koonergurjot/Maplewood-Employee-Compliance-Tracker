@@ -177,6 +177,7 @@
           <div class="flex flex-wrap items-center justify-end gap-2">
             <button type="button" class="btn btn-primary" @click="openImportDrawer()">Import</button>
             <button type="button" class="btn" @click="openAddEmployee()">Add Employee</button>
+            <button type="button" class="btn" @click="openAddRequirement()">+ Requirement</button>
             <div class="relative" x-data="{open:false}">
               <button type="button" class="btn" @click="open=!open">Export</button>
               <div
@@ -282,6 +283,7 @@
     </main>
 
     <div id="import-drawer" x-html="partials.importDrawer"></div>
+    <div id="add-requirement-modal" x-html="partials.addRequirementModal"></div>
     <div id="add-employee-modal" x-html="partials.addEmployeeModal"></div>
 
     <template id="inline-edit-template"></template>

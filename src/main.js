@@ -6,6 +6,7 @@ import miniAnalyticsTemplate from './v2/mini-analytics.html?raw';
 import requirementsGridTemplate from './v2/requirements-grid.html?raw';
 import importDrawerTemplate from './v2/import-drawer.html?raw';
 import addEmployeeModalTemplate from './v2/add-employee-modal.html?raw';
+import addRequirementModalTemplate from './v2/add-requirement-modal.html?raw';
 import bulkActionsTemplate from './v2/bulk-actions.html?raw';
 import activityTimelineTemplate from './v2/activity-timeline.html?raw';
 const inlineEditTemplate = `
@@ -61,6 +62,7 @@ const inlineEditTemplate = `
 `;
 import './styles/tailwind.css';
 import { openDatabase, generateId, mapPositionStatus } from '../db.js';
+import { AddRequirement } from '../commands.js';
 import { addEmployee as addEmployeeApi } from './v2/api.js';
 import { exportFilteredCSV, exportFilteredJSON } from './v2/exporter.js';
 import {
@@ -297,6 +299,7 @@ function createAppStore() {
     APP_FLAGS: { ...window.APP_FLAGS },
     showImportModal: false,
     showAddEmployeeModal: false,
+    showAddRequirementModal: false,
     employees: [],
     filteredEmployees: [],
     showLookupModal: null,
@@ -498,6 +501,7 @@ registerV2Component('v2DashboardApp', () => ({
     miniAnalytics: '',
     requirementsGrid: '',
     importDrawer: '',
+    addRequirementModal: '',
     addEmployeeModal: '',
     bulkActions: '',
     activityTimeline: ''
@@ -507,6 +511,7 @@ registerV2Component('v2DashboardApp', () => ({
   loadError: null,
   darkMode: false,
   showExportMenu: false,
+  showAddRequirementModal: false,
   showAddEmployeeModal: false,
   exporter: null,
   _exportRowsCache: null,
@@ -563,6 +568,16 @@ registerV2Component('v2DashboardApp', () => ({
     roles: [...DEFAULT_ROLE_LOOKUPS],
     statuses: [...DEFAULT_STATUS_LOOKUPS],
     employmentTypes: [...DEFAULT_EMPLOYMENT_TYPE_LOOKUPS]
+  },
+  addRequirementModal: {
+    open: false,
+    saving: false,
+    form: {
+      name: '',
+      color: '#e2e8f0',
+      defaultExpiryDays: ''
+    },
+    errors: {}
   },
   addEmployeeModal: {
     open: false,
@@ -690,6 +705,17 @@ registerV2Component('v2DashboardApp', () => ({
         }
       }
     );
+    this.$watch(
+      () => this.$store?.app?.showAddRequirementModal,
+      value => {
+        if (value) {
+          this.openAddRequirementModal();
+        } else if (value === false && this.addRequirementModal.open) {
+          this.closeAddRequirementModal({ silent: true });
+        }
+      }
+    );
+    this.resetAddRequirementForm();
     this.resetAddEmployeeForm();
     this.bootstrap();
   },
@@ -732,6 +758,14 @@ registerV2Component('v2DashboardApp', () => ({
     } catch (error) {
       console.error(error);
       this.partials.importDrawer = '';
+    }
+
+    try {
+      this.partials.addRequirementModal = addRequirementModalTemplate;
+      this.hydrateAddRequirementModal();
+    } catch (error) {
+      console.error(error);
+      this.partials.addRequirementModal = '';
     }
 
     try {
@@ -798,6 +832,15 @@ registerV2Component('v2DashboardApp', () => ({
   hydrateActivityTimeline() {
     this.$nextTick(() => {
       const container = document.getElementById('activity-timeline');
+      if (container && container.dataset.alpineInitialized !== 'true') {
+        Alpine.initTree(container);
+        container.dataset.alpineInitialized = 'true';
+      }
+    });
+  },
+  hydrateAddRequirementModal() {
+    this.$nextTick(() => {
+      const container = document.getElementById('add-requirement-modal');
       if (container && container.dataset.alpineInitialized !== 'true') {
         Alpine.initTree(container);
         container.dataset.alpineInitialized = 'true';
@@ -886,6 +929,168 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       this.activityLog = await ActivityLog.init(this.db);
     } catch (error) {
       console.error('Failed to initialize activity log', error);
+    }
+  },
+  openAddRequirement() {
+    this.showAddRequirementModal = true;
+    const store = this.$store?.app;
+    if (store && store.showAddRequirementModal !== true) {
+      store.showAddRequirementModal = true;
+    }
+    this.openAddRequirementModal();
+  },
+  openAddRequirementModal() {
+    if (!this.addRequirementModal.open) {
+      if (!this.addRequirementModal.form.name) {
+        this.resetAddRequirementForm();
+      }
+      this.addRequirementModal.open = true;
+      this.showAddRequirementModal = true;
+      const store = this.$store?.app;
+      if (store && store.showAddRequirementModal !== true) {
+        store.showAddRequirementModal = true;
+      }
+      this.hydrateAddRequirementModal();
+      this.$nextTick(() => {
+        this.$refs.addRequirementName?.focus();
+      });
+    }
+  },
+  closeAddRequirementModal(options = {}) {
+    const { silent = false, preserveForm = false, force = false } = options;
+    if (!this.addRequirementModal.open && !force) {
+      return;
+    }
+    this.addRequirementModal.open = false;
+    this.showAddRequirementModal = false;
+    if (!preserveForm) {
+      this.resetAddRequirementForm();
+    }
+    if (!silent) {
+      const store = this.$store?.app;
+      if (store && store.showAddRequirementModal !== false) {
+        store.showAddRequirementModal = false;
+      }
+    }
+  },
+  resetAddRequirementForm() {
+    this.addRequirementModal.form = {
+      name: '',
+      color: '#e2e8f0',
+      defaultExpiryDays: ''
+    };
+    this.addRequirementModal.saving = false;
+    this.addRequirementModal.errors = {};
+  },
+  validateAddRequirementForm() {
+    const errors = {};
+    const name = typeof this.addRequirementModal.form.name === 'string'
+      ? this.addRequirementModal.form.name.trim()
+      : '';
+    if (!name) {
+      errors.name = 'Name is required.';
+    }
+    const expiryValue = this.addRequirementModal.form.defaultExpiryDays;
+    if (expiryValue !== '' && expiryValue !== null && expiryValue !== undefined) {
+      const parsed = Number.parseInt(expiryValue, 10);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        errors.defaultExpiryDays = 'Enter a non-negative number of days.';
+      }
+    }
+    return {
+      valid: Object.keys(errors).length === 0,
+      errors,
+      name
+    };
+  },
+  async submitAddRequirementForm() {
+    if (!this.db || this.addRequirementModal.saving) {
+      return;
+    }
+
+    const { valid, errors, name } = this.validateAddRequirementForm();
+    this.addRequirementModal.errors = errors;
+    if (!valid) {
+      return;
+    }
+
+    const color = typeof this.addRequirementModal.form.color === 'string'
+      ? this.addRequirementModal.form.color.trim()
+      : '';
+    const expiryValue = this.addRequirementModal.form.defaultExpiryDays;
+    const parsedExpiry = expiryValue === '' || expiryValue === null || expiryValue === undefined
+      ? null
+      : Number.parseInt(expiryValue, 10);
+    const timestamp = new Date().toISOString();
+    const requirement = {
+      id: generateId(),
+      name,
+      color: color || null,
+      defaultExpiryDays: Number.isFinite(parsedExpiry) ? parsedExpiry : null,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+
+    this.addRequirementModal.saving = true;
+    try {
+      await this.initActivityLog();
+      const command = new AddRequirement(this.db, {
+        requirement,
+        initialStatus: 'Pending',
+        respectTemplates: false
+      });
+      await command.execute();
+      await this.loadData();
+      this.applyFilters();
+      this.closeAddRequirementModal();
+
+      const store = this.$store?.app;
+      const successMessage = `${requirement.name} added`;
+      if (store && typeof store.showToast === 'function') {
+        store.showToast({ type: 'success', message: successMessage });
+      }
+      let activityEntry = null;
+      if (this.activityLog && typeof this.activityLog.record === 'function') {
+        try {
+          activityEntry = await this.activityLog.record({
+            actionType: 'AddRequirement',
+            actor: 'user',
+            targets: [{ type: 'requirement', id: requirement.id }],
+            metadata: {
+              requirement,
+              initialStatus: 'Pending'
+            },
+            supportsUndo: false
+          });
+        } catch (error) {
+          console.error('Failed to record requirement creation activity', error);
+        }
+      }
+      const timelineStore = this.$store?.activityLog;
+      if (timelineStore && typeof timelineStore.record === 'function') {
+        timelineStore.record({
+          type: 'Requirement',
+          actionType: 'AddRequirement',
+          summary: successMessage,
+          timestamp: activityEntry?.timestamp ?? Date.now(),
+          metadata: {
+            requirementId: requirement.id,
+            defaultExpiryDays: requirement.defaultExpiryDays
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to add requirement', error);
+      this.addRequirementModal.errors = {
+        ...this.addRequirementModal.errors,
+        form: 'Unable to add requirement. Please try again.'
+      };
+      const store = this.$store?.app;
+      if (store && typeof store.showToast === 'function') {
+        store.showToast({ type: 'error', message: 'Failed to add requirement.' });
+      }
+    } finally {
+      this.addRequirementModal.saving = false;
     }
   },
   openAddEmployee() {
@@ -1242,9 +1447,9 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     this.loading = true;
     try {
-      const [employees, requirements, employeeRequirements] = await Promise.all([
+      const [employees, requirementsRaw, employeeRequirements] = await Promise.all([
         this.db.table('employees').toArray(),
-        this.db.table('requirements').orderBy('name').toArray(),
+        this.db.table('requirements').toArray(),
         this.db.table('employeeRequirements').toArray()
       ]);
       employees.sort((a, b) => {
@@ -1254,6 +1459,23 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       });
       this.employees = employees;
       this.updateStoreEmployees();
+      const requirements = Array.isArray(requirementsRaw) ? [...requirementsRaw] : [];
+      requirements.sort((a, b) => {
+        const aTime = Date.parse(a?.createdAt ?? '');
+        const bTime = Date.parse(b?.createdAt ?? '');
+        const aValid = Number.isFinite(aTime);
+        const bValid = Number.isFinite(bTime);
+        if (aValid && bValid && aTime !== bTime) {
+          return aTime - bTime;
+        }
+        if (aValid && !bValid) {
+          return -1;
+        }
+        if (!aValid && bValid) {
+          return 1;
+        }
+        return normalizeLower(a?.name).localeCompare(normalizeLower(b?.name));
+      });
       this.requirements = requirements;
       this.ensureBulkRequirement();
       this.employeeRequirements = employeeRequirements;
