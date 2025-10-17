@@ -1969,9 +1969,21 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     if (!this.db) return;
     const table = this.db.employeeRequirements;
     if (!table) return;
-    const row = await table.where({ employeeId: empId, requirementId: reqId }).first();
-    if (!row) return;
+    let row = await table.where({ employeeId: empId, requirementId: reqId }).first();
     const timestamp = new Date().toISOString();
+    if (!row) {
+      row = {
+        id: generateId(),
+        employeeId: empId,
+        requirementId: reqId,
+        createdAt: timestamp,
+        status: 'Pending',
+        completedOn: null,
+        completedAt: null,
+        expiresOn: null,
+        notes: null
+      };
+    }
     row.status = checked ? 'Completed' : 'Pending';
     if (checked) {
       if (!row.completedOn) {
