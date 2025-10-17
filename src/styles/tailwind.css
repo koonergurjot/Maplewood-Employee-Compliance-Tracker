@@ -69,6 +69,7 @@ body.dark .border-l { border-left-color: rgba(148, 163, 184, 0.35); }
   cursor: pointer;
   transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
+.btn-back { @apply inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-indigo-600 active:scale-[.98]; }
 .btn:hover { box-shadow: 0 8px 16px rgba(15, 23, 42, 0.12); transform: translateY(-1px); }
 .btn:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.5); outline-offset: 2px; }
 .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
