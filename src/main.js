@@ -9,6 +9,7 @@ import addEmployeeModalTemplate from './v2/add-employee-modal.html?raw';
 import addRequirementModalTemplate from './v2/add-requirement-modal.html?raw';
 import bulkActionsTemplate from './v2/bulk-actions.html?raw';
 import activityTimelineTemplate from './v2/activity-timeline.html?raw';
+import { activityTimeline as activityTimelineComponent } from './v2/activity-timeline.js';
 import employeeProfileTemplate from './v2/employee-profile.html?raw';
 import {
   approveImport as approveSupabaseImport,
@@ -4064,6 +4065,7 @@ function bootApp() {
 
   window.Alpine = Alpine;
 
+  registerV2Component('activityTimeline', activityTimelineComponent);
   registerV2Component('v2DashboardApp', v2DashboardAppDefinition);
 
   Alpine.start();
