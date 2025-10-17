@@ -725,6 +725,8 @@ const v2DashboardAppDefinition = () => ({
     fileName: '',
     dryRunLoading: false,
     commitLoading: false,
+    commitLocalLoading: false,
+    submitLoading: false,
     summary: null,
     mapping: null,
     mappingRows: [],
@@ -733,6 +735,8 @@ const v2DashboardAppDefinition = () => ({
     previewTotal: 0,
     error: '',
     commitDisabled: true,
+    commitLocalDisabled: true,
+    submitDisabled: true,
     headerRowNumber: null
   },
   init() {
@@ -986,7 +990,12 @@ const v2DashboardAppDefinition = () => ({
       return;
     }
 
-    if (this.importDrawer.dryRunLoading || this.importDrawer.commitLoading) {
+    if (
+      this.importDrawer.dryRunLoading
+      || this.importDrawer.commitLoading
+      || this.importDrawer.commitLocalLoading
+      || this.importDrawer.submitLoading
+    ) {
       return;
     }
 
@@ -1003,6 +1012,10 @@ const v2DashboardAppDefinition = () => ({
     this.importDrawer.dryRunLoading = false;
     this.importDrawer.commitLoading = false;
     this.importDrawer.commitDisabled = true;
+    this.importDrawer.commitLocalLoading = false;
+    this.importDrawer.submitLoading = false;
+    this.importDrawer.commitLocalDisabled = true;
+    this.importDrawer.submitDisabled = true;
     this.importDrawer.headerRowNumber = null;
 
     this.updateImportDrawerCommitState();
@@ -1040,6 +1053,8 @@ const v2DashboardAppDefinition = () => ({
     this.importDrawer.fileName = '';
     this.importDrawer.dryRunLoading = false;
     this.importDrawer.commitLoading = false;
+    this.importDrawer.commitLocalLoading = false;
+    this.importDrawer.submitLoading = false;
     this.importDrawer.summary = null;
     this.importDrawer.mapping = null;
     this.importDrawer.mappingRows = [];
@@ -1048,6 +1063,9 @@ const v2DashboardAppDefinition = () => ({
     this.importDrawer.previewTotal = 0;
     this.importDrawer.error = '';
     this.importDrawer.headerRowNumber = null;
+    this.importDrawer.commitDisabled = true;
+    this.importDrawer.commitLocalDisabled = true;
+    this.importDrawer.submitDisabled = true;
     this.updateImportDrawerCommitState();
     if (this.$refs.importFileInput) {
       this.$refs.importFileInput.value = '';
@@ -1055,8 +1073,11 @@ const v2DashboardAppDefinition = () => ({
   },
   updateImportDrawerCommitState() {
     const state = this.importDrawer;
-    const disabled = !state.file || !state.summary || state.dryRunLoading || state.commitLoading;
-    state.commitDisabled = disabled;
+    const hasSummary = !!state.summary && typeof state.summary === 'object';
+    const baseDisabled = !state.file || !hasSummary || state.dryRunLoading;
+    state.commitDisabled = baseDisabled || state.commitLoading;
+    state.commitLocalDisabled = baseDisabled || state.commitLocalLoading || state.submitLoading;
+    state.submitDisabled = baseDisabled || state.submitLoading || state.commitLocalLoading;
   },
   downloadSampleCSV() {
     if (this.importDrawer.mode === 'seniority') {
@@ -1681,6 +1702,12 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.importDrawer.previewTotal = 0;
     this.importDrawer.error = '';
     this.importDrawer.headerRowNumber = null;
+    this.importDrawer.commitLoading = false;
+    this.importDrawer.commitLocalLoading = false;
+    this.importDrawer.submitLoading = false;
+    this.importDrawer.commitDisabled = true;
+    this.importDrawer.commitLocalDisabled = true;
+    this.importDrawer.submitDisabled = true;
     this.updateImportDrawerCommitState();
     if (file) {
       await this.runImportDryRun(file);
@@ -1733,6 +1760,9 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
   },
   async commitImport() {
+    if (this.importDrawer.mode === 'seniority') {
+      return this.commitImportLocally();
+    }
     if (this.importDrawer.commitDisabled) {
       return;
     }
@@ -1785,6 +1815,113 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       this.setImportDrawerError(message);
     } finally {
       this.importDrawer.commitLoading = false;
+      this.updateImportDrawerCommitState();
+    }
+  },
+  async commitImportLocally() {
+    if (this.importDrawer.mode !== 'seniority') {
+      return this.commitImport();
+    }
+    if (this.importDrawer.commitLocalDisabled) {
+      return;
+    }
+    const commitFn =
+      window.importEmployeesSeniorityCommit
+        || window.importSeniorityCommit
+        || window.importEmployeesCommit;
+    if (typeof commitFn !== 'function') {
+      this.setImportDrawerError('Seniority importer is unavailable. Please reload the page.');
+      return;
+    }
+    this.importDrawer.commitLocalLoading = true;
+    this.updateImportDrawerCommitState();
+    try {
+      const result = await commitFn();
+      const summary = this.normalizeImportSummary(result || {});
+      await this.loadData();
+      this.closeImportDrawer();
+      const store = this.$store?.app;
+      const message = `Seniority import committed locally: ${summary.added} added, ${summary.updated} updated, ${summary.skipped} skipped.`;
+      if (store && typeof store.showToast === 'function') {
+        store.showToast({ type: 'success', message });
+      }
+      const total = summary.added + summary.updated;
+      const approvedBy = (window.APP_FLAGS?.currentUserName && String(window.APP_FLAGS.currentUserName).trim())
+        || 'Admin';
+      await this.recordActivity({
+        type: 'import',
+        summary: `Imported ${total} employees (seniority). ${summary.updated} updated. ${summary.added} added.`,
+        details: {
+          ...summary,
+          source: 'seniority',
+          total,
+          approvedBy,
+          approvedAt: new Date().toISOString(),
+          action: 'localCommit'
+        }
+      });
+    } catch (error) {
+      console.error('Seniority import commit failed', error);
+      const message = error?.message ? String(error.message) : 'Local commit failed. Check the console for details.';
+      this.setImportDrawerError(message);
+    } finally {
+      this.importDrawer.commitLocalLoading = false;
+      this.updateImportDrawerCommitState();
+    }
+  },
+  async submitImportForApproval() {
+    if (this.importDrawer.mode !== 'seniority') {
+      return;
+    }
+    if (this.importDrawer.submitDisabled) {
+      return;
+    }
+    const submitFn =
+      window.importEmployeesSenioritySubmitForApproval
+        || window.importSenioritySubmitForApproval
+        || window.submitSeniorityImportForApproval;
+    if (typeof submitFn !== 'function') {
+      this.setImportDrawerError('Pending import workflow is unavailable. Please reload the page.');
+      return;
+    }
+    this.importDrawer.submitLoading = true;
+    this.updateImportDrawerCommitState();
+    try {
+      const result = await submitFn({
+        fileName: this.importDrawer.fileName,
+        headerRowNumber: this.importDrawer.headerRowNumber
+      });
+      const summarySource = result && typeof result === 'object' && result.summary ? result.summary : result;
+      const summary = this.normalizeImportSummary(summarySource || {});
+      this.closeImportDrawer();
+      const store = this.$store?.app;
+      const message = `Seniority import submitted for approval: ${summary.added} added, ${summary.updated} updated, ${summary.skipped} skipped.`;
+      if (store && typeof store.showToast === 'function') {
+        store.showToast({ type: 'success', message });
+      }
+      const total = summary.added + summary.updated;
+      const submittedBy = (window.APP_FLAGS?.currentUserName && String(window.APP_FLAGS.currentUserName).trim())
+        || 'Admin';
+      await this.recordActivity({
+        type: 'importPending',
+        summary: `Submitted ${total} seniority updates for approval. ${summary.updated} updated. ${summary.added} added.`,
+        details: {
+          ...summary,
+          source: 'seniority',
+          total,
+          approval: {
+            status: 'pending',
+            submittedBy,
+            submittedAt: new Date().toISOString()
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Submit for approval failed', error);
+      const message = error?.message ? String(error.message) : 'Submit for approval failed. Check the console for details.';
+      this.setImportDrawerError(message);
+    } finally {
+      this.importDrawer.submitLoading = false;
       this.updateImportDrawerCommitState();
     }
   },
