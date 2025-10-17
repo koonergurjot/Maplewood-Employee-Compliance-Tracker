@@ -18,6 +18,17 @@ test('pending requirements within at-risk window but outside expiring-soon windo
   assert.equal(state.atRisk, true, 'should be considered at risk');
 });
 
+test('expiring this week uses a fixed seven-day window even when expiring soon is extended', () => {
+  const tenDaysOut = daysFromToday(10);
+  const state = evaluateRequirementState(
+    { status: 'Pending', expiresOn: tenDaysOut },
+    { expiringSoonDays: 14 }
+  );
+
+  assert.equal(state.expiringSoon, true, 'should be considered expiring soon within extended window');
+  assert.equal(state.expiringThisWeek, false, 'should not be treated as expiring this week');
+});
+
 test('analytics summary counts at-risk assignments even when not expiring soon', () => {
   const requirement = { id: 'req-1', name: 'Test Requirement' };
   const employee = { id: 'emp-1', role: 'Nurse' };
