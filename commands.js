@@ -1,6 +1,6 @@
 // Command implementations used by the activity log.
 
-import { generateId as sharedGenerateId } from './db.js';
+import { generateId as sharedGenerateId, getDexie } from './db.js';
 
 const clone = (value) => {
   if (value === undefined || value === null) return value;
@@ -102,9 +102,14 @@ export async function deleteEmployee({ db, employeeId, activityLog }) {
           throw new Error('Missing where function');
         }
 
+        const DexieInstance = getDexie();
+        if (!DexieInstance || typeof DexieInstance.maxKey === 'undefined') {
+          throw new Error('Dexie maxKey unavailable');
+        }
+
         await employeeRequirementsStore
           .where('[employeeId+requirementId]')
-          .startsWith([employeeId])
+          .between([employeeId], [employeeId, DexieInstance.maxKey])
           .delete();
       };
 
@@ -154,7 +159,8 @@ export async function deleteEmployee({ db, employeeId, activityLog }) {
           await deleteByIndex();
         }
       } catch (error) {
-        if (!useFilterFallback && (error?.name === 'InvalidStateError' || error?.name === 'DataError')) {
+        if (!useFilterFallback) {
+          console.warn('Falling back to filter-based employee requirement delete', error);
           await deleteByFilter();
         } else {
           throw error;
@@ -295,15 +301,18 @@ export class DeleteEmployee {
       const loadEmployeeRequirements = async () => {
         try {
           if (typeof employeeRequirementsTable?.where === 'function') {
+            const DexieInstance = getDexie();
+            if (!DexieInstance || typeof DexieInstance.maxKey === 'undefined') {
+              throw new Error('Dexie maxKey unavailable');
+            }
+
             return await employeeRequirementsTable
               .where('[employeeId+requirementId]')
-              .startsWith([this.employeeId])
+              .between([this.employeeId], [this.employeeId, DexieInstance.maxKey])
               .toArray();
           }
         } catch (error) {
-          if (error?.name !== 'InvalidStateError' && error?.name !== 'DataError') {
-            throw error;
-          }
+          console.warn('Falling back to filter-based employee requirement load', error);
         }
 
         if (typeof employeeRequirementsTable?.filter === 'function') {
