@@ -1,13 +1,16 @@
 <div
   id="import-drawer-root"
   x-cloak
-  class="fixed inset-0 flex pointer-events-none"
+  class="fixed inset-0 flex"
+  :class="importDrawer.open ? 'pointer-events-auto' : 'pointer-events-none'"
 >
   <div
     x-cloak
     x-show="importDrawer.open"
     x-transition.opacity.duration.150ms
-    class="fixed inset-0 z-40 bg-black/40 pointer-events-none"
+    class="fixed inset-0 z-40 bg-black/40 pointer-events-auto"
+    aria-hidden="true"
+    @click.stop.prevent="closeImportDrawer()"
   ></div>
   <section
     x-cloak
