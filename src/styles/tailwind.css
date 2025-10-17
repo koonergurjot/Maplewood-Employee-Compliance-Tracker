@@ -15,6 +15,13 @@
 .flex-wrap { flex-wrap: wrap; }
 .pointer-events-none { pointer-events: none; }
 .pointer-events-auto { pointer-events: auto; }
+.aria-hidden {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.aria-hidden * {
+  visibility: hidden !important;
+}
 .gap-4 { gap: 1rem; }
 .gap-3 { gap: 0.75rem; }
 .gap-2 { gap: 0.5rem; }

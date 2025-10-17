@@ -314,8 +314,70 @@ document.addEventListener('keydown', event => {
 function createAppStore() {
   const store = {
     APP_FLAGS: { ...window.APP_FLAGS },
-    showImportModal: false,
-    showAddEmployeeModal: false,
+    overlay: {
+      current: null,
+      _lastInvoker: null,
+      open(name, options = {}) {
+        if (!name) {
+          return;
+        }
+
+        const invoker = options?.invoker;
+        const isFocusableInvoker = invoker && typeof invoker.focus === 'function' ? invoker : null;
+        const activeElement = (() => {
+          if (typeof document === 'undefined') {
+            return null;
+          }
+          const active = document.activeElement;
+          if (!active || typeof active.focus !== 'function') {
+            return null;
+          }
+          return active;
+        })();
+
+        if (this.current !== name) {
+          this._lastInvoker = isFocusableInvoker || activeElement || null;
+          this.current = name;
+          return;
+        }
+
+        if (isFocusableInvoker) {
+          this._lastInvoker = isFocusableInvoker;
+        }
+      },
+      close(name) {
+        if (name && this.current && name !== this.current) {
+          return;
+        }
+
+        this.current = null;
+
+        const target = this._lastInvoker;
+        this._lastInvoker = null;
+
+        if (!target || typeof target.focus !== 'function') {
+          return;
+        }
+
+        const focusTarget = () => {
+          try {
+            target.focus({ preventScroll: false });
+          } catch (error) {
+            try {
+              target.focus();
+            } catch (nestedError) {
+              void nestedError;
+            }
+          }
+        };
+
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(() => focusTarget());
+        } else {
+          setTimeout(() => focusTarget(), 0);
+        }
+      }
+    },
     showAddRequirementModal: false,
     employees: [],
     filteredEmployees: [],
@@ -849,22 +911,26 @@ const v2DashboardAppDefinition = () => ({
       }
     };
     this.$watch(
-      () => this.$store?.app?.showImportModal,
+      () => this.$store?.app?.overlay?.current,
       value => {
-        if (value) {
+        if (value === 'import') {
           this.openImportDrawer();
-        } else if (value === false && this.importDrawer.open) {
+        } else if (this.importDrawer.open && value !== 'import') {
           this.closeImportDrawer({ silent: true });
         }
-      }
-    );
-    this.$watch(
-      () => this.$store?.app?.showAddEmployeeModal,
-      value => {
-        if (value) {
+
+        if (value === 'add') {
           this.openAddEmployeeModal();
-        } else if (value === false && this.showAddEmployeeModal) {
+        } else if (this.showAddEmployeeModal && value !== 'add') {
           this.closeAddEmployeeModal({ silent: true });
+        }
+
+        if (value === 'profile') {
+          if (!this.profilePanel.open && this.profilePanel.employeeId) {
+            this.openProfile(this.profilePanel.employeeId);
+          }
+        } else if (this.profilePanel.open) {
+          this.closeProfile({ silent: true });
         }
       }
     );
@@ -1046,12 +1112,12 @@ const v2DashboardAppDefinition = () => ({
     });
   },
   openImportDrawer() {
+    const store = this.$store?.app;
+    if (store?.overlay && typeof store.overlay.open === 'function') {
+      store.overlay.open('import');
+    }
     const wasOpen = !!this.importDrawer.open;
     this.importDrawer.open = true;
-    const store = this.$store?.app;
-    if (store && store.showImportModal !== true) {
-      store.showImportModal = true;
-    }
     this.hydrateImportDrawer();
     if (!wasOpen) {
       this.$nextTick(() => {
@@ -1119,9 +1185,9 @@ const v2DashboardAppDefinition = () => ({
       this.resetImportDrawerState();
     }
     if (!silent) {
-      const store = this.$store?.app;
-      if (store && store.showImportModal !== false) {
-        store.showImportModal = false;
+      const overlay = this.$store?.app?.overlay;
+      if (overlay && typeof overlay.close === 'function') {
+        overlay.close('import');
       }
     }
   },
@@ -1679,9 +1745,9 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       this.resetAddEmployeeForm();
     }
     this.showAddEmployeeModal = true;
-    const store = this.$store?.app;
-    if (store && store.showAddEmployeeModal !== true) {
-      store.showAddEmployeeModal = true;
+    const overlay = this.$store?.app?.overlay;
+    if (overlay && typeof overlay.open === 'function') {
+      overlay.open('add');
     }
     this.hydrateAddEmployeeModal();
     this.$nextTick(() => {
@@ -1702,9 +1768,9 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       this.resetAddEmployeeForm();
     }
     if (!silent) {
-      const store = this.$store?.app;
-      if (store && store.showAddEmployeeModal !== false) {
-        store.showAddEmployeeModal = false;
+      const overlay = this.$store?.app?.overlay;
+      if (overlay && typeof overlay.close === 'function') {
+        overlay.close('add');
       }
     }
   },
@@ -1991,6 +2057,10 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.profilePanel.saving = false;
     this.profilePanel.error = '';
     this.profilePanel.form = this.buildProfileForm(employee);
+    const overlay = this.$store?.app?.overlay;
+    if (overlay && typeof overlay.open === 'function') {
+      overlay.open('profile');
+    }
     const wasOpen = !!this.profilePanel.open;
     this.profilePanel.open = true;
     this.hydrateEmployeeProfile();
@@ -2003,11 +2073,18 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       });
     }
   },
-  closeProfile() {
-    if (!this.profilePanel.open) {
+  closeProfile(options = {}) {
+    const { silent = false, force = false } = options;
+    if (!this.profilePanel.open && !force) {
       return;
     }
     this.profilePanel.open = false;
+    if (!silent) {
+      const overlay = this.$store?.app?.overlay;
+      if (overlay && typeof overlay.close === 'function') {
+        overlay.close('profile');
+      }
+    }
     this.profilePanel.employeeId = null;
     this.resetProfileForm();
   },

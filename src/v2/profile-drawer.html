@@ -2,6 +2,8 @@
   id="employee-profile-root"
   x-cloak
   class="fixed inset-0 z-50 flex items-stretch justify-end pointer-events-none"
+  :class="{ 'aria-hidden': !$store.app.overlay || $store.app.overlay.current !== 'profile' }"
+  :aria-hidden="!$store.app.overlay || $store.app.overlay.current !== 'profile'"
 >
   <div
     x-cloak

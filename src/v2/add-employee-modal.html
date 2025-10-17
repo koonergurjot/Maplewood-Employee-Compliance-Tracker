@@ -1,4 +1,10 @@
-<div id="add-employee-modal-root" x-cloak class="fixed inset-0 pointer-events-none">
+<div
+  id="add-employee-modal-root"
+  x-cloak
+  class="fixed inset-0 pointer-events-none"
+  :class="{ 'aria-hidden': !$store.app.overlay || $store.app.overlay.current !== 'add' }"
+  :aria-hidden="!$store.app.overlay || $store.app.overlay.current !== 'add'"
+>
   <div
     x-cloak
     x-show="showAddEmployeeModal"
