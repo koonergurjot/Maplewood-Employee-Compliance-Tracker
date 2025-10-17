@@ -1,99 +1,26 @@
 @media print {
-  :root {
-    color-scheme: light;
-  }
-
-  body,
-  #app-v2,
-  main,
-  .card {
-    background: #fff !important;
-    color: #000 !important;
-    box-shadow: none !important;
-  }
-
-  body {
-    margin: 0.5in;
-    font-size: 12pt;
-  }
-
   header,
   .toolbar,
-  .filters-card,
-  .filters-grid,
   .btn,
-  button,
-  .export-menu,
-  .drawer,
-  .drawer-backdrop,
   [x-cloak],
-  [data-drawer],
-  [role="dialog"],
-  nav,
-  footer {
+  [x-show] {
     display: none !important;
   }
 
-  a,
-  .link,
-  .text-muted,
-  .cell-sub {
-    color: #000 !important;
-  }
-
   table {
-    width: 100% !important;
-    border-collapse: collapse !important;
-    table-layout: fixed;
-    font-size: 11pt;
-  }
-
-  thead {
-    display: table-header-group;
-  }
-
-  tbody tr {
-    page-break-inside: avoid;
+    border-collapse: collapse;
+    width: 100%;
   }
 
   th,
   td {
-    border: 1px solid #000 !important;
-    padding: 6px 8px !important;
-    background: #fff !important;
-    color: #000 !important;
-    vertical-align: top;
+    border: 1px solid #000;
+    padding: 4px;
   }
 
-  th {
-    font-weight: 700 !important;
-  }
-
-  .cell {
-    gap: 0.25rem;
-  }
-
-  .badge,
-  .status-chip {
+  .badge {
     background: none !important;
     color: #000 !important;
     border: none !important;
-    box-shadow: none !important;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-weight: 700;
-    letter-spacing: normal;
-    text-transform: none;
-    font-family: 'Segoe UI', 'Noto Sans Symbols', sans-serif;
-  }
-
-  .badge span,
-  .badge strong,
-  .badge em,
-  .status-chip span,
-  .status-chip strong,
-  .status-chip em {
-    color: inherit !important;
   }
 }
