@@ -381,16 +381,29 @@ body.dark .inline-header, body.dark .inline-footer { border-color: var(--border-
   @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
 }
 .badge-green {
-  @apply bg-emerald-100 text-emerald-700;
+  @apply bg-emerald-100 text-emerald-800;
 }
 .badge-amber {
-  @apply bg-amber-100 text-amber-700;
+  @apply bg-amber-200 text-amber-900;
 }
 .badge-rose {
-  @apply bg-rose-100 text-rose-700;
+  @apply bg-rose-200 text-rose-900;
 }
 .badge-slate {
-  @apply bg-slate-100 text-slate-700;
+  @apply bg-slate-200 text-slate-900;
+}
+
+body.dark .badge-green {
+  @apply bg-emerald-200 text-emerald-900;
+}
+body.dark .badge-amber {
+  @apply bg-amber-300 text-amber-900;
+}
+body.dark .badge-rose {
+  @apply bg-rose-300 text-rose-900;
+}
+body.dark .badge-slate {
+  @apply bg-slate-300 text-slate-900;
 }
 
 .card {
