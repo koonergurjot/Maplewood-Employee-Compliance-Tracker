@@ -172,14 +172,23 @@ const employeesStore = {
     if (!link) {
       return 'Pending';
     }
+
+    const normalizedStatus = normalizeStatus(link.status);
+    if (normalizedStatus && normalizedStatus !== 'Pending' && normalizedStatus !== 'Completed') {
+      return normalizedStatus;
+    }
+
     const now = new Date();
     const expiresOn = link.expiresOn ? new Date(link.expiresOn) : null;
-    if (expiresOn && !Number.isNaN(expiresOn.getTime()) && expiresOn < now) {
+    const hasValidExpiry = expiresOn && !Number.isNaN(expiresOn.getTime());
+    if (hasValidExpiry && expiresOn < now) {
       return 'Expired';
     }
-    if (link.completedOn) {
+
+    if (normalizedStatus === 'Completed' || link.completedOn) {
       return 'Complete';
     }
+
     return 'Pending';
   },
   async recordActivity(employeeId, requirementId, completedOn) {
