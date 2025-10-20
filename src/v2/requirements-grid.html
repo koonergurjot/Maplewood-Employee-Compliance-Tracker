@@ -18,138 +18,66 @@
     </div>
   </template>
 
-  <div
-    class="grid-scroll"
-    role="grid"
-    aria-label="Employee requirements grid"
-    x-show="!loading && filteredEmployees.length"
-    x-ref="requirementsGrid"
-    :aria-rowcount="filteredEmployees.length"
-    :aria-colcount="gridInfoColumnCount() + gridOrderedRequirements().length"
-    @keydown.arrow-right.prevent="focusNextCell()"
-    @keydown.arrow-left.prevent="focusPrevCell()"
-    @keydown.arrow-up.prevent="focusUpCell()"
-    @keydown.arrow-down.prevent="focusDownCell()"
-    @focusin="handleGridFocusIn"
-  >
-    <table class="min-w-full text-sm text-slate-700 requirements-table" role="presentation">
-      <thead class="text-xs uppercase tracking-wide text-slate-500" role="rowgroup">
-        <tr role="row">
-          <template x-for="(infoColumn, infoColIndex) in gridInfoColumns()" :key="infoColumn.key">
-            <th
-              scope="col"
-              role="columnheader"
-              class="px-4 py-3 text-left whitespace-nowrap"
-              :class="infoColumn.headerClass"
-              :aria-colindex="infoColIndex + 1"
-              x-text="infoColumn.label"
-            ></th>
-          </template>
-          <template x-for="(req, colIndex) in gridOrderedRequirements()" :key="req.id">
-            <th
-              role="columnheader"
-              scope="col"
-              class="px-4 py-3 text-left whitespace-nowrap requirement-header"
-              :aria-colindex="gridInfoColumnCount() + colIndex + 1"
-              x-text="req.name"
-            ></th>
+  <div class="grid-scroll" role="region" aria-label="Scrollable requirements table" x-show="!loading && filteredEmployees.length">
+    <table class="min-w-full text-sm text-slate-700 requirements-table" :class="{'compact': $store.ui.compact}">
+      <thead class="text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th scope="col" class="sticky-header sticky left-0 px-4 py-3 text-left">Employee</th>
+          <template x-for="req in gridOrderedRequirements()" :key="req.id">
+            <th class="sticky-header px-4 py-3 text-left whitespace-nowrap" x-text="req.name"></th>
           </template>
         </tr>
       </thead>
-      <tbody class="divide-y divide-slate-200" role="rowgroup">
-        <template x-for="(employee, rowIndex) in filteredEmployees" :key="employee.id">
-          <tr class="bg-white" role="row">
-            <template x-for="(infoColumn, infoColIndex) in gridInfoColumns()" :key="infoColumn.key">
-              <template x-if="infoColumn.cellType === 'th'">
-                <th
-                  scope="row"
-                  role="rowheader"
-                  class="px-4 py-3 align-top"
-                  :class="infoColumn.cellClass"
-                  :tabindex="gridCellTabIndex(rowIndex, infoColIndex)"
-                  :data-row-index="rowIndex"
-                  :data-col-index="infoColIndex"
-                  :aria-rowindex="rowIndex + 1"
-                  :aria-colindex="infoColIndex + 1"
-                  @focus="setGridActiveCell(rowIndex, infoColIndex)"
-                >
-                  <template x-if="infoColumn.key === 'name'">
-                    <div class="flex items-start gap-3">
-                      <div class="relative h-8 w-8 shrink-0 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-semibold">
-                        <span x-text="(employee.firstName?.[0]||'') + (employee.lastName?.[0]||'')"></span>
-                        <svg viewBox="0 0 24 24" class="absolute -bottom-1 -right-1 h-5 w-5">
-                          <circle cx="12" cy="12" r="10" stroke-width="3" fill="none" class="stroke-slate-200"></circle>
-                          <circle
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke-width="3"
-                            fill="none"
-                            :style="`stroke-dasharray:${(employeeCompliancePercent(employee.id)/100)*62.83} 62.83;transition:stroke-dasharray .25s`"
-                            :class="employeeCompliancePercent(employee.id)>=90?'stroke-emerald-500':employeeCompliancePercent(employee.id)>=70?'stroke-amber-500':'stroke-rose-500'"
-                          ></circle>
-                        </svg>
-                      </div>
-                      <div class="min-w-0 flex-1 space-y-1">
-                        <div class="font-medium text-slate-900" x-text="employee.fullName || (employee.firstName+' '+employee.lastName)"></div>
-                        <div class="text-xs text-slate-500">
-                          <span x-text="employee.role || '—'"></span>
-                          <span class="mx-1 text-slate-400" aria-hidden="true">•</span>
-                          <span x-text="employee.status || '—'"></span>
-                        </div>
-                      </div>
-                      <div class="flex items-center gap-2">
-                        <button
-                          type="button"
-                          class="text-slate-400 hover:text-slate-600"
-                          @click.stop="openProfile(employee.id)"
-                          title="Employee details"
-                        >
-                          ⋯
-                        </button>
-                        <button
-                          type="button"
-                          class="text-xs font-medium text-rose-600 hover:text-rose-700"
-                          title="Delete employee"
-                          @click.stop="confirmAndDeleteEmployee(employee.id)"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  </template>
-                  <template x-if="infoColumn.key !== 'name'">
-                    <span class="employee-info-meta" x-text="gridInfoCellText(employee, infoColumn.key)"></span>
-                  </template>
-                </th>
-              </template>
-              <template x-if="infoColumn.cellType !== 'th'">
-                <td
-                  role="gridcell"
-                  class="px-4 py-3 align-top"
-                  :class="infoColumn.cellClass"
-                  :tabindex="gridCellTabIndex(rowIndex, infoColIndex)"
-                  :data-row-index="rowIndex"
-                  :data-col-index="infoColIndex"
-                  :aria-rowindex="rowIndex + 1"
-                  :aria-colindex="infoColIndex + 1"
-                  @focus="setGridActiveCell(rowIndex, infoColIndex)"
-                >
-                  <span class="employee-info-meta" x-text="gridInfoCellText(employee, infoColumn.key)"></span>
-                </td>
-              </template>
-            </template>
-            <template x-for="(req, colIndex) in gridOrderedRequirements()" :key="req.id">
-              <td
-                class="px-4 py-3 align-top"
-                role="gridcell"
-                :tabindex="gridCellTabIndex(rowIndex, gridInfoColumnCount() + colIndex)"
-                :data-row-index="rowIndex"
-                :data-col-index="gridInfoColumnCount() + colIndex"
-                :aria-rowindex="rowIndex + 1"
-                :aria-colindex="gridInfoColumnCount() + colIndex + 1"
-                @focus="setGridActiveCell(rowIndex, gridInfoColumnCount() + colIndex)"
-              >
+      <tbody class="divide-y divide-slate-200">
+        <template x-for="employee in filteredEmployees" :key="employee.id">
+          <tr class="bg-white">
+            <th scope="row" class="sticky left-0 bg-white px-4 py-3 align-top">
+              <div class="flex items-start gap-3">
+                <div class="relative h-8 w-8 shrink-0 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-semibold">
+                  <span x-text="(employee.firstName?.[0]||'') + (employee.lastName?.[0]||'')"></span>
+                  <svg viewBox="0 0 24 24" class="absolute -bottom-1 -right-1 h-5 w-5">
+                    <circle cx="12" cy="12" r="10" stroke-width="3" fill="none" class="stroke-slate-200"></circle>
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke-width="3"
+                      fill="none"
+                      :style="`stroke-dasharray:${(employeeCompliancePercent(employee.id)/100)*62.83} 62.83;transition:stroke-dasharray .25s`"
+                      :class="employeeCompliancePercent(employee.id)>=90?'stroke-emerald-500':employeeCompliancePercent(employee.id)>=70?'stroke-amber-500':'stroke-rose-500'"
+                    ></circle>
+                  </svg>
+                </div>
+                <div class="min-w-0 flex-1 space-y-1">
+                  <div class="font-medium text-slate-900" x-text="employee.fullName || (employee.firstName+' '+employee.lastName)"></div>
+                  <div class="text-xs text-slate-500">
+                    <span x-text="employee.role || '—'"></span>
+                    <span class="mx-1 text-slate-400" aria-hidden="true">•</span>
+                    <span x-text="employee.status || '—'"></span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    class="text-slate-400 hover:text-slate-600"
+                    @click.stop="openProfile(employee.id)"
+                    title="Employee details"
+                  >
+                    ⋯
+                  </button>
+                  <button
+                    type="button"
+                    class="text-xs font-medium text-rose-600 hover:text-rose-700"
+                    title="Delete employee"
+                    @click.stop="confirmAndDeleteEmployee(employee.id)"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </th>
+            <template x-for="req in gridOrderedRequirements()" :key="req.id">
+              <td class="px-4 py-3 align-top">
                 <div x-data="requirementCell(employee.id, req.id)" x-init="init()" class="flex items-center gap-2">
                   <input
                     type="checkbox"

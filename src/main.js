@@ -86,6 +86,7 @@ import {
   generateId,
   mapPositionStatus,
   getDb,
+  getDexie,
   listEmployees,
   listRequirements,
   getEmployeeRequirement,
@@ -120,6 +121,19 @@ const DEFAULT_FILTER_STATE = {
   search: '',
   analytics: null
 };
+
+const UI_COMPACT_KEY = 'maplewood:ui:compact';
+const hasLocalStorage = typeof localStorage !== 'undefined';
+
+Alpine.store('ui', {
+  compact: hasLocalStorage && localStorage.getItem(UI_COMPACT_KEY) === '1',
+  persist() {
+    if (!hasLocalStorage) {
+      return;
+    }
+    localStorage.setItem(UI_COMPACT_KEY, this.compact ? '1' : '0');
+  }
+});
 
 let seniorityImporterModulePromise = null;
 
@@ -2048,6 +2062,43 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       }
     }
   },
+  promptAdd(kind) {
+    const configMap = {
+      role: { lookupKey: 'roles', label: 'role', formKey: 'role' },
+      status: { lookupKey: 'statuses', label: 'status', formKey: 'status' },
+      position: { lookupKey: 'employmentTypes', label: 'employment type', formKey: 'employmentType' },
+      employmentType: { lookupKey: 'employmentTypes', label: 'employment type', formKey: 'employmentType' }
+    };
+    const config = configMap[kind];
+    if (!config) {
+      return;
+    }
+    const promptLabel = config.label || kind;
+    const input = typeof window !== 'undefined' ? window.prompt(`Add new ${promptLabel}…`) : null;
+    if (!input) {
+      return;
+    }
+    const value = typeof input === 'string' ? input.trim() : '';
+    if (!value) {
+      return;
+    }
+    const lookups = this.employeeLookups || {};
+    const currentOptions = Array.isArray(lookups[config.lookupKey]) ? lookups[config.lookupKey] : [];
+    const normalizedValue = value.toLowerCase();
+    const alreadyExists = currentOptions.some(option =>
+      typeof option === 'string' && option.trim().toLowerCase() === normalizedValue
+    );
+    const updatedOptions = alreadyExists ? currentOptions : [...currentOptions, value].sort((a, b) => a.localeCompare(b));
+    const nextLookups = { ...lookups, [config.lookupKey]: updatedOptions };
+    this.employeeLookups = nextLookups;
+    if (config.lookupKey === 'roles') {
+      this.roleOptions = updatedOptions;
+    }
+    this.form[config.formKey] = value;
+    if (config.lookupKey === 'employmentTypes') {
+      this.form.positionStatus = mapPositionStatus(value) || this.form.positionStatus;
+    }
+  },
   resetAddEmployeeForm() {
     const lookups = this.employeeLookups || {
       roles: DEFAULT_ROLE_LOOKUPS,
@@ -2300,9 +2351,92 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       return;
     }
 
+    const cascadeDeleteLocally = async () => {
+      const resolveStore = tableName => {
+        if (typeof this.db.table === 'function') {
+          try {
+            return this.db.table(tableName);
+          } catch (error) {
+            console.warn(`Failed to access ${tableName} via table()`, error);
+          }
+        }
+        return this.db[tableName];
+      };
+
+      try {
+        await this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async () => {
+          const employeesStore = resolveStore('employees');
+          const employeeRequirementsStore = resolveStore('employeeRequirements');
+
+          if (employeeRequirementsStore) {
+            let cascadeHandled = false;
+            if (typeof employeeRequirementsStore.where === 'function') {
+              const DexieInstance = getDexie();
+              if (DexieInstance && typeof DexieInstance.maxKey !== 'undefined') {
+                try {
+                  await employeeRequirementsStore
+                    .where('[employeeId+requirementId]')
+                    .between([employeeId], [employeeId, DexieInstance.maxKey], true, true)
+                    .delete();
+                  cascadeHandled = true;
+                } catch (deleteError) {
+                  console.warn('Compound index cascade delete failed; falling back to filter', deleteError);
+                }
+              }
+            }
+
+            if (!cascadeHandled) {
+              if (typeof employeeRequirementsStore.filter === 'function') {
+                const collection = employeeRequirementsStore.filter(record => record?.employeeId === employeeId);
+                if (typeof collection.delete === 'function') {
+                  await collection.delete();
+                } else {
+                  const matches = await collection.toArray();
+                  const ids = matches
+                    .map(record => record?.id)
+                    .filter(id => id != null);
+                  if (ids.length > 0) {
+                    if (typeof employeeRequirementsStore.bulkDelete === 'function') {
+                      await employeeRequirementsStore.bulkDelete(ids);
+                    } else if (typeof employeeRequirementsStore.delete === 'function') {
+                      await Promise.all(ids.map(id => employeeRequirementsStore.delete(id)));
+                    }
+                  }
+                }
+              } else if (typeof employeeRequirementsStore.toArray === 'function') {
+                const records = await employeeRequirementsStore.toArray();
+                const ids = records
+                  .filter(record => record?.employeeId === employeeId)
+                  .map(record => record?.id)
+                  .filter(id => id != null);
+                if (ids.length > 0) {
+                  if (typeof employeeRequirementsStore.bulkDelete === 'function') {
+                    await employeeRequirementsStore.bulkDelete(ids);
+                  } else if (typeof employeeRequirementsStore.delete === 'function') {
+                    await Promise.all(ids.map(id => employeeRequirementsStore.delete(id)));
+                  }
+                }
+              }
+            }
+          }
+
+          if (employeesStore?.delete) {
+            await employeesStore.delete(employeeId);
+          }
+        });
+      } catch (transactionError) {
+        console.warn('Failed to cascade delete employee locally', transactionError);
+      }
+    };
+
+    await cascadeDeleteLocally();
+
     this.employees = this.employees.filter(emp => emp?.id !== employeeId);
     this.filteredEmployees = this.filteredEmployees.filter(emp => emp?.id !== employeeId);
     this.selectedEmployees = this.selectedEmployees.filter(id => id !== employeeId);
+
+    this.employeeRequirements = this.employeeRequirements.filter(record => record?.employeeId !== employeeId);
+    this.refreshRequirementMap();
 
     if (this.profilePanel.employeeId === employeeId) {
       this.closeProfile();

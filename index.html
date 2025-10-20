@@ -167,6 +167,8 @@
     x-cloak
     :class="{ dark: darkMode }"
     x-effect="document.body.classList.toggle('dark', darkMode)"
+    @app:open-import.window="openImportDrawer()"
+    @app:download-sample.window="downloadSampleCSV()"
   >
     <main class="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
       <header
@@ -206,7 +208,7 @@
 
       <template x-if="loadError">
         <section class="card" role="alert">
-          <div class="space-y-2" style="padding:1.25rem 1.5rem;">
+          <div class="space-y-2 pad-card">
             <h2 class="text-lg font-semibold">Unable to load data</h2>
             <p class="text-sm text-muted" x-text="loadError"></p>
           </div>
@@ -260,9 +262,13 @@
               </label>
               </div>
               <div class="filters-footer">
-                <div class="filters-actions" style="display:flex;align-items:center;gap:0.75rem;">
+                <div class="filters-actions flex-center">
                   <button type="button" class="btn ghost" @click="resetFilters">Reset filters</button>
                   <button type="button" class="btn ghost" @click="copyFiltersLink">Copy link</button>
+                  <label class="toggle">
+                    <input type="checkbox" x-model="$store.ui.compact" @change="$store.ui.persist()">
+                    <span>Compact mode</span>
+                  </label>
                 </div>
                 <div class="filters-meta" x-show="filters.roles.length || filters.status !== 'all' || filters.compliance !== 'all' || filters.expiringSoon || filters.search || filters.analytics">
                   <span class="text-muted">Filters active</span>
@@ -281,7 +287,7 @@
           x-html="partials.activityTimeline"
           class="activity-timeline"
         >
-          <div class="space-y-3" style="padding:1.25rem 1.5rem;">
+          <div class="space-y-3 pad-card">
             <h2 class="text-lg font-semibold leading-tight">Recent activity</h2>
             <p class="text-sm text-muted">Updates you make will appear here.</p>
           </div>
