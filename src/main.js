@@ -86,6 +86,7 @@ import {
   generateId,
   mapPositionStatus,
   getDb,
+  getDexie,
   listEmployees,
   listRequirements,
   getEmployeeRequirement,
@@ -2199,9 +2200,92 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       return;
     }
 
+    const cascadeDeleteLocally = async () => {
+      const resolveStore = tableName => {
+        if (typeof this.db.table === 'function') {
+          try {
+            return this.db.table(tableName);
+          } catch (error) {
+            console.warn(`Failed to access ${tableName} via table()`, error);
+          }
+        }
+        return this.db[tableName];
+      };
+
+      try {
+        await this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async () => {
+          const employeesStore = resolveStore('employees');
+          const employeeRequirementsStore = resolveStore('employeeRequirements');
+
+          if (employeeRequirementsStore) {
+            let cascadeHandled = false;
+            if (typeof employeeRequirementsStore.where === 'function') {
+              const DexieInstance = getDexie();
+              if (DexieInstance && typeof DexieInstance.maxKey !== 'undefined') {
+                try {
+                  await employeeRequirementsStore
+                    .where('[employeeId+requirementId]')
+                    .between([employeeId], [employeeId, DexieInstance.maxKey], true, true)
+                    .delete();
+                  cascadeHandled = true;
+                } catch (deleteError) {
+                  console.warn('Compound index cascade delete failed; falling back to filter', deleteError);
+                }
+              }
+            }
+
+            if (!cascadeHandled) {
+              if (typeof employeeRequirementsStore.filter === 'function') {
+                const collection = employeeRequirementsStore.filter(record => record?.employeeId === employeeId);
+                if (typeof collection.delete === 'function') {
+                  await collection.delete();
+                } else {
+                  const matches = await collection.toArray();
+                  const ids = matches
+                    .map(record => record?.id)
+                    .filter(id => id != null);
+                  if (ids.length > 0) {
+                    if (typeof employeeRequirementsStore.bulkDelete === 'function') {
+                      await employeeRequirementsStore.bulkDelete(ids);
+                    } else if (typeof employeeRequirementsStore.delete === 'function') {
+                      await Promise.all(ids.map(id => employeeRequirementsStore.delete(id)));
+                    }
+                  }
+                }
+              } else if (typeof employeeRequirementsStore.toArray === 'function') {
+                const records = await employeeRequirementsStore.toArray();
+                const ids = records
+                  .filter(record => record?.employeeId === employeeId)
+                  .map(record => record?.id)
+                  .filter(id => id != null);
+                if (ids.length > 0) {
+                  if (typeof employeeRequirementsStore.bulkDelete === 'function') {
+                    await employeeRequirementsStore.bulkDelete(ids);
+                  } else if (typeof employeeRequirementsStore.delete === 'function') {
+                    await Promise.all(ids.map(id => employeeRequirementsStore.delete(id)));
+                  }
+                }
+              }
+            }
+          }
+
+          if (employeesStore?.delete) {
+            await employeesStore.delete(employeeId);
+          }
+        });
+      } catch (transactionError) {
+        console.warn('Failed to cascade delete employee locally', transactionError);
+      }
+    };
+
+    await cascadeDeleteLocally();
+
     this.employees = this.employees.filter(emp => emp?.id !== employeeId);
     this.filteredEmployees = this.filteredEmployees.filter(emp => emp?.id !== employeeId);
     this.selectedEmployees = this.selectedEmployees.filter(id => id !== employeeId);
+
+    this.employeeRequirements = this.employeeRequirements.filter(record => record?.employeeId !== employeeId);
+    this.refreshRequirementMap();
 
     if (this.profilePanel.employeeId === employeeId) {
       this.closeProfile();
