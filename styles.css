@@ -157,6 +157,12 @@ body {
   flex-direction: row;
 }
 
+.flex-center {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .flex-row-reverse {
   flex-direction: row-reverse;
 }
@@ -353,6 +359,10 @@ body {
 
 .p-6 {
   padding: 1.5rem;
+}
+
+.pad-card {
+  padding: 1.25rem 1.5rem;
 }
 
 /* Sizing */
@@ -703,6 +713,14 @@ body {
   z-index: 50;
 }
 
+.z-55 {
+  z-index: 55;
+}
+
+.z-60 {
+  z-index: 60;
+}
+
 /* Display */
 .block {
   display: block;
@@ -1043,6 +1061,30 @@ body {
   gap: 0.5rem 0.75rem;
 }
 
+/* Requirements grid layout */
+.grid-scroll {
+  overflow: auto;
+  width: 100%;
+  height: calc(100vh - 220px);
+}
+
+.requirements-table thead th.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.sticky.left-0 {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background: var(--bg, #fff);
+}
+
+.dark .sticky.left-0 {
+  background: var(--bg-dark, rgba(15, 23, 42, 0.95));
+}
+
 .status-legend__item {
   display: inline-flex;
   align-items: center;
@@ -1080,5 +1122,10 @@ body {
 .status-legend__swatch--not-required {
   background-color: var(--status-optional-bg);
   border-color: rgba(107, 114, 128, 0.45);
+}
+
+.requirements-table.compact td,
+.requirements-table.compact th {
+  padding: 6px 8px;
 }
 

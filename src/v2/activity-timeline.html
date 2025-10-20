@@ -14,7 +14,18 @@
   </template>
 
   <template x-if="!error && !loading && !entries.length">
-    <p class="text-slate-400 text-sm italic">No activity yet.</p>
+    <div
+      class="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-6 text-center text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-200"
+    >
+      <h3 class="text-base font-semibold text-slate-900 dark:text-slate-100">No activity yet</h3>
+      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        Import employees to start capturing updates or download the sample CSV to explore the format.
+      </p>
+      <div class="mt-4 flex justify-center gap-2">
+        <button type="button" class="btn btn-primary" @click="$dispatch('app:open-import')">Open Import</button>
+        <button type="button" class="btn" @click="$dispatch('app:download-sample')">Download Sample CSV</button>
+      </div>
+    </div>
   </template>
 
   <template x-for="entry in entries" :key="entry.id">

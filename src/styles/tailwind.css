@@ -124,16 +124,30 @@ body.dark .input { border-color: var(--border-soft-dark); background: rgba(15, 2
 .toggle-label { font-size: 0.875rem; color: inherit; }
 .grid-container { border: 1px solid var(--border-soft); border-radius: 1rem; overflow: hidden; }
 body.dark .grid-container { border-color: var(--border-soft-dark); }
-.grid-scroll { overflow: auto; max-height: 70vh; }
+.grid-scroll {
+  overflow: auto;
+  width: 100%;
+  height: calc(100vh - 220px);
+}
 .requirements-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 640px; }
 .requirements-table th, .requirements-table td { padding: 0.75rem; border-bottom: 1px solid var(--border-soft); background: var(--bg-card); }
 body.dark .requirements-table th, body.dark .requirements-table td { border-color: var(--border-soft-dark); background: var(--bg-card-dark); }
 .sticky-header { position: sticky; top: 0; z-index: 12; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); }
 body.dark .sticky-header { background: rgba(15, 23, 42, 0.9); }
-.requirements-table thead .sticky-header { z-index: 20; }
-.requirements-table thead .sticky-col.sticky-header { z-index: 25; }
-.requirements-table thead .sticky-select.sticky-header { z-index: 30; }
-.requirements-table thead .sticky-divider.sticky-header { z-index: 22; }
+.requirements-table thead th.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.sticky.left-0 {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.95);
+}
+body.dark .sticky.left-0 {
+  background: rgba(15, 23, 42, 0.95);
+}
 .sticky-col {
   position: sticky;
   left: var(--selection-col-width, 0);
@@ -381,16 +395,29 @@ body.dark .inline-header, body.dark .inline-footer { border-color: var(--border-
   @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
 }
 .badge-green {
-  @apply bg-emerald-100 text-emerald-700;
+  @apply bg-emerald-100 text-emerald-800;
 }
 .badge-amber {
-  @apply bg-amber-100 text-amber-700;
+  @apply bg-amber-200 text-amber-900;
 }
 .badge-rose {
-  @apply bg-rose-100 text-rose-700;
+  @apply bg-rose-200 text-rose-900;
 }
 .badge-slate {
-  @apply bg-slate-100 text-slate-700;
+  @apply bg-slate-200 text-slate-900;
+}
+
+body.dark .badge-green {
+  @apply bg-emerald-200 text-emerald-900;
+}
+body.dark .badge-amber {
+  @apply bg-amber-300 text-amber-900;
+}
+body.dark .badge-rose {
+  @apply bg-rose-300 text-rose-900;
+}
+body.dark .badge-slate {
+  @apply bg-slate-300 text-slate-900;
 }
 
 .card {

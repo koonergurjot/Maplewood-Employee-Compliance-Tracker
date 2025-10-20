@@ -93,12 +93,31 @@ export async function deleteEmployee({ db, employeeId, activityLog }) {
   }
 
   const deleteWithinTransaction = async (useFilterFallback = false) => {
-    await db.transaction('rw', db.employees, db.employeeRequirements, async transaction => {
-      const employeesStore = transaction.table('employees');
-      const employeeRequirementsStore = transaction.table('employeeRequirements');
+    await db.transaction('rw', db.employees, db.employeeRequirements, async () => {
+      const resolveStore = tableName => {
+        if (typeof db.table === 'function') {
+          try {
+            return db.table(tableName);
+          } catch (error) {
+            console.warn(`Failed to access ${tableName} via table()`, error);
+          }
+        }
+        return db[tableName];
+      };
+
+      const employeesStore = resolveStore('employees');
+      const employeeRequirementsStore = resolveStore('employeeRequirements');
+
+      if (!employeesStore || typeof employeesStore.delete !== 'function') {
+        throw new Error('Employees store is unavailable');
+      }
+
+      if (!employeeRequirementsStore) {
+        throw new Error('Employee requirements store is unavailable');
+      }
 
       const deleteByIndex = async () => {
-        if (typeof employeeRequirementsStore?.where !== 'function') {
+        if (typeof employeeRequirementsStore.where !== 'function') {
           throw new Error('Missing where function');
         }
 
@@ -109,33 +128,40 @@ export async function deleteEmployee({ db, employeeId, activityLog }) {
 
         await employeeRequirementsStore
           .where('[employeeId+requirementId]')
-          .between([employeeId], [employeeId, DexieInstance.maxKey])
+          .between([employeeId], [employeeId, DexieInstance.maxKey], true, true)
           .delete();
       };
 
       const deleteByFilter = async () => {
-        if (typeof employeeRequirementsStore?.filter === 'function') {
-          const matches = await employeeRequirementsStore
-            .filter(record => record?.employeeId === employeeId)
-            .toArray();
+        if (typeof employeeRequirementsStore.filter === 'function') {
+          const collection = employeeRequirementsStore.filter(
+            record => record?.employeeId === employeeId
+          );
+
+          if (typeof collection.delete === 'function') {
+            await collection.delete();
+            return;
+          }
+
+          const matches = await collection.toArray();
           const ids = matches
             .map(record => record?.id)
             .filter(id => id != null);
 
           if (ids.length > 0) {
-            if (typeof employeeRequirementsStore?.bulkDelete === 'function') {
+            if (typeof employeeRequirementsStore.bulkDelete === 'function') {
               await employeeRequirementsStore.bulkDelete(ids);
               return;
             }
 
-            if (typeof employeeRequirementsStore?.delete === 'function') {
+            if (typeof employeeRequirementsStore.delete === 'function') {
               await Promise.all(ids.map(id => employeeRequirementsStore.delete(id)));
               return;
             }
           }
         }
 
-        if (typeof employeeRequirementsStore?.toArray === 'function') {
+        if (typeof employeeRequirementsStore.toArray === 'function') {
           const records = await employeeRequirementsStore.toArray();
           const ids = records
             .filter(record => record?.employeeId === employeeId)
@@ -143,9 +169,9 @@ export async function deleteEmployee({ db, employeeId, activityLog }) {
             .filter(id => id != null);
 
           if (ids.length > 0) {
-            if (typeof employeeRequirementsStore?.bulkDelete === 'function') {
+            if (typeof employeeRequirementsStore.bulkDelete === 'function') {
               await employeeRequirementsStore.bulkDelete(ids);
-            } else if (typeof employeeRequirementsStore?.delete === 'function') {
+            } else if (typeof employeeRequirementsStore.delete === 'function') {
               await Promise.all(ids.map(id => employeeRequirementsStore.delete(id)));
             }
           }

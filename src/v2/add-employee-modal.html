@@ -99,20 +99,31 @@
               <span>Role</span>
               <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
             </div>
-            <select
-              class="input"
-              name="role"
-              id="add-employee-role"
-              x-model="form.role"
-              x-ref="addEmployeeRole"
-              :aria-invalid="Boolean(formErrors.role)"
-              required
-              @change="formErrors.role && delete formErrors.role"
-            >
-              <template x-for="role in employeeLookups.roles" :key="role">
-                <option :value="role" x-text="role"></option>
-              </template>
-            </select>
+            <div class="flex gap-2">
+              <select
+                class="input flex-1"
+                name="role"
+                id="add-employee-role"
+                x-model="form.role"
+                x-ref="addEmployeeRole"
+                :aria-invalid="Boolean(formErrors.role)"
+                required
+                @change="formErrors.role && delete formErrors.role"
+              >
+                <template x-for="role in employeeLookups.roles" :key="role">
+                  <option :value="role" x-text="role"></option>
+                </template>
+              </select>
+              <button
+                type="button"
+                class="btn btn-icon"
+                aria-label="Add role option"
+                title="Add role option"
+                @click="promptAdd('role')"
+              >
+                +
+              </button>
+            </div>
             <p class="text-xs text-red-600" x-show="formErrors.role" x-text="formErrors.role"></p>
           </label>
           <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200" for="add-employee-status">
@@ -120,20 +131,31 @@
               <span>Status</span>
               <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
             </div>
-            <select
-              class="input"
-              name="status"
-              id="add-employee-status"
-              x-model="form.status"
-              x-ref="addEmployeeStatus"
-              :aria-invalid="Boolean(formErrors.status)"
-              required
-              @change="formErrors.status && delete formErrors.status"
-            >
-              <template x-for="status in employeeLookups.statuses" :key="status">
-                <option :value="status" x-text="status"></option>
-              </template>
-            </select>
+            <div class="flex gap-2">
+              <select
+                class="input flex-1"
+                name="status"
+                id="add-employee-status"
+                x-model="form.status"
+                x-ref="addEmployeeStatus"
+                :aria-invalid="Boolean(formErrors.status)"
+                required
+                @change="formErrors.status && delete formErrors.status"
+              >
+                <template x-for="status in employeeLookups.statuses" :key="status">
+                  <option :value="status" x-text="status"></option>
+                </template>
+              </select>
+              <button
+                type="button"
+                class="btn btn-icon"
+                aria-label="Add status option"
+                title="Add status option"
+                @click="promptAdd('status')"
+              >
+                +
+              </button>
+            </div>
             <p class="text-xs text-red-600" x-show="formErrors.status" x-text="formErrors.status"></p>
           </label>
         </div>
@@ -143,20 +165,31 @@
               <span>Employment type</span>
               <span class="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-500/20 dark:text-red-200">Required</span>
             </div>
-            <select
-              class="input"
-              name="employmentType"
-              id="add-employee-employment-type"
-              x-model="form.employmentType"
-              x-ref="addEmployeeEmploymentType"
-              :aria-invalid="Boolean(formErrors.employmentType)"
-              required
-              @change="formErrors.employmentType && delete formErrors.employmentType"
-            >
-              <template x-for="type in employeeLookups.employmentTypes" :key="type">
-                <option :value="type" x-text="type"></option>
-              </template>
-            </select>
+            <div class="flex gap-2">
+              <select
+                class="input flex-1"
+                name="employmentType"
+                id="add-employee-employment-type"
+                x-model="form.employmentType"
+                x-ref="addEmployeeEmploymentType"
+                :aria-invalid="Boolean(formErrors.employmentType)"
+                required
+                @change="formErrors.employmentType && delete formErrors.employmentType"
+              >
+                <template x-for="type in employeeLookups.employmentTypes" :key="type">
+                  <option :value="type" x-text="type"></option>
+                </template>
+              </select>
+              <button
+                type="button"
+                class="btn btn-icon"
+                aria-label="Add employment type option"
+                title="Add employment type option"
+                @click="promptAdd('position')"
+              >
+                +
+              </button>
+            </div>
             <p class="text-xs text-red-600" x-show="formErrors.employmentType" x-text="formErrors.employmentType"></p>
           </label>
           <label class="flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200" for="add-employee-seniority-hours">
