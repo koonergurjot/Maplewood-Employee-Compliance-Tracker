@@ -245,7 +245,18 @@
                 </ul>
               </template>
               <template x-if="!profileAssignments().length">
-                <p class="text-sm text-slate-500 dark:text-slate-400">No requirements are assigned to this employee yet.</p>
+                <div
+                  class="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-6 text-center text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-200"
+                >
+                  <h4 class="text-base font-semibold text-slate-900 dark:text-slate-100">No requirements yet</h4>
+                  <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Import employees to assign requirements or download the sample CSV to get started quickly.
+                  </p>
+                  <div class="mt-4 flex justify-center gap-2">
+                    <button type="button" class="btn btn-primary" @click="openImportDrawer()">Open Import</button>
+                    <button type="button" class="btn" @click="downloadSampleCSV()">Download Sample CSV</button>
+                  </div>
+                </div>
               </template>
             </section>
           </div>
