@@ -1897,6 +1897,43 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       }
     }
   },
+  promptAdd(kind) {
+    const configMap = {
+      role: { lookupKey: 'roles', label: 'role', formKey: 'role' },
+      status: { lookupKey: 'statuses', label: 'status', formKey: 'status' },
+      position: { lookupKey: 'employmentTypes', label: 'employment type', formKey: 'employmentType' },
+      employmentType: { lookupKey: 'employmentTypes', label: 'employment type', formKey: 'employmentType' }
+    };
+    const config = configMap[kind];
+    if (!config) {
+      return;
+    }
+    const promptLabel = config.label || kind;
+    const input = typeof window !== 'undefined' ? window.prompt(`Add new ${promptLabel}…`) : null;
+    if (!input) {
+      return;
+    }
+    const value = typeof input === 'string' ? input.trim() : '';
+    if (!value) {
+      return;
+    }
+    const lookups = this.employeeLookups || {};
+    const currentOptions = Array.isArray(lookups[config.lookupKey]) ? lookups[config.lookupKey] : [];
+    const normalizedValue = value.toLowerCase();
+    const alreadyExists = currentOptions.some(option =>
+      typeof option === 'string' && option.trim().toLowerCase() === normalizedValue
+    );
+    const updatedOptions = alreadyExists ? currentOptions : [...currentOptions, value].sort((a, b) => a.localeCompare(b));
+    const nextLookups = { ...lookups, [config.lookupKey]: updatedOptions };
+    this.employeeLookups = nextLookups;
+    if (config.lookupKey === 'roles') {
+      this.roleOptions = updatedOptions;
+    }
+    this.form[config.formKey] = value;
+    if (config.lookupKey === 'employmentTypes') {
+      this.form.positionStatus = mapPositionStatus(value) || this.form.positionStatus;
+    }
+  },
   resetAddEmployeeForm() {
     const lookups = this.employeeLookups || {
       roles: DEFAULT_ROLE_LOOKUPS,
