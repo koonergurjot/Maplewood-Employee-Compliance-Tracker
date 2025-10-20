@@ -108,6 +108,9 @@ const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
 const CLOUD_LAST_SYNC_STORAGE_KEY = 'maplewood:cloud:lastSync';
 
+const GRID_COLUMNS_STORAGE_KEY = 'maplewood:v2:grid-columns';
+const GRID_COLUMNS_SETTING_ID = 'gridColumns';
+
 const DEFAULT_APP_FLAGS = { USE_V2_MAIN: true };
 const V2_COMPONENT_REGISTRY_KEY = '__V2_ALPINE_COMPONENTS__';
 const ACTIVITY_TIMELINE_LIMIT = 100;
@@ -120,6 +123,84 @@ const DEFAULT_FILTER_STATE = {
   search: '',
   analytics: null
 };
+
+function defaultGridPreferences() {
+  return {
+    infoColumns: ['name'],
+    visibleRequirements: []
+  };
+}
+
+function normalizeGridPreferences(preferences) {
+  const base = defaultGridPreferences();
+  if (!preferences || typeof preferences !== 'object') {
+    return {
+      infoColumns: [...base.infoColumns],
+      visibleRequirements: []
+    };
+  }
+
+  const rawInfo = Array.isArray(preferences.infoColumns) ? preferences.infoColumns : [];
+  const infoColumns = ['name'];
+  const seenInfo = new Set(infoColumns);
+  for (const entry of rawInfo) {
+    if (typeof entry !== 'string') {
+      continue;
+    }
+    const key = entry.trim();
+    if (!key || key === 'name' || seenInfo.has(key)) {
+      continue;
+    }
+    seenInfo.add(key);
+    infoColumns.push(key);
+  }
+
+  const rawRequirements = Array.isArray(preferences.visibleRequirements)
+    ? preferences.visibleRequirements
+    : [];
+  const normalizedRequirements = [];
+  const seenRequirements = new Set();
+
+  for (let index = 0; index < rawRequirements.length; index += 1) {
+    const entry = rawRequirements[index];
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const id = entry.id ?? entry.requirementId ?? entry.key;
+    if (typeof id === 'undefined' || id === null || seenRequirements.has(id)) {
+      continue;
+    }
+    seenRequirements.add(id);
+    const visible = entry.visible !== false;
+    let order = entry.order;
+    if (typeof order === 'string' && order.trim()) {
+      const parsed = Number(order);
+      if (Number.isFinite(parsed)) {
+        order = parsed;
+      }
+    }
+    order = Number.isFinite(order) ? order : normalizedRequirements.length;
+    normalizedRequirements.push({ id, visible, order });
+  }
+
+  normalizedRequirements.sort((a, b) => {
+    const aOrder = Number.isFinite(a.order) ? a.order : Number.MAX_SAFE_INTEGER;
+    const bOrder = Number.isFinite(b.order) ? b.order : Number.MAX_SAFE_INTEGER;
+    if (aOrder === bOrder) {
+      return 0;
+    }
+    return aOrder - bOrder;
+  });
+
+  normalizedRequirements.forEach((entry, index) => {
+    entry.order = index;
+  });
+
+  return {
+    infoColumns,
+    visibleRequirements: normalizedRequirements
+  };
+}
 
 let seniorityImporterModulePromise = null;
 
@@ -730,6 +811,9 @@ const v2DashboardAppDefinition = () => ({
   requirements: [],
   employeeRequirements: [],
   employeeRequirementMap: new Map(),
+  gridPreferences: defaultGridPreferences(),
+  _gridPreferencesHydrating: false,
+  _gridPreferencesReady: false,
   analytics: {
     generatedAt: null,
     atRisk: [],
@@ -838,13 +922,25 @@ const v2DashboardAppDefinition = () => ({
     style: ''
   },
   gridColumnOrder() {
-    const requirementIds = Array.isArray(this.requirements)
-      ? this.requirements
-          .filter(requirement => typeof requirement?.id !== 'undefined' && requirement.id !== null)
-          .map(requirement => requirement.id)
-      : [];
+    const hasInfoColumns =
+      Array.isArray(this.gridPreferences?.infoColumns) && this.gridPreferences.infoColumns.length > 0;
+    const infoOrder = hasInfoColumns ? this.gridPreferences.infoColumns : ['name'];
+    const orderedRequirements = this.gridOrderedRequirements();
+    const requirementIds = [];
+    const seen = new Set();
+    for (const requirement of orderedRequirements) {
+      if (!requirement) {
+        continue;
+      }
+      const key = requirement.id ?? requirement.key;
+      if (typeof key === 'undefined' || key === null || seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      requirementIds.push(key);
+    }
     return {
-      info: ['name'],
+      info: infoOrder,
       requirements: requirementIds
     };
   },
@@ -865,12 +961,15 @@ const v2DashboardAppDefinition = () => ({
     const columns = [];
     let infoIndex = 1;
     for (const key of infoOrder) {
+      if (typeof key !== 'string' || !key) {
+        continue;
+      }
       if (key === 'name') {
         columns.push({
           key,
           label: this.gridInfoColumnLabel(key),
-          headerClass: 'sticky-col sticky-header sticky-col-name employee-header',
-          cellClass: 'sticky-col sticky-col-name employee-info-cell',
+          headerClass: 'sticky-col sticky-header sticky-col-name employee-header z-10',
+          cellClass: 'sticky-col sticky-col-name employee-info-cell z-10',
           cellType: 'th'
         });
         continue;
@@ -925,34 +1024,211 @@ const v2DashboardAppDefinition = () => ({
   },
   gridOrderedRequirements(requirements = this.requirements) {
     const source = Array.isArray(requirements) ? requirements.filter(Boolean) : [];
-    const orderDefinition = this.gridColumnOrder();
-    const order = Array.isArray(orderDefinition?.requirements) ? orderDefinition.requirements : [];
-    if (!order.length) {
-      return source;
-    }
+    const preferenceEntries = Array.isArray(this.gridPreferences?.visibleRequirements)
+      ? [...this.gridPreferences.visibleRequirements]
+      : [];
+    preferenceEntries.sort((a, b) => {
+      const aOrder = Number.isFinite(a?.order) ? a.order : Number.MAX_SAFE_INTEGER;
+      const bOrder = Number.isFinite(b?.order) ? b.order : Number.MAX_SAFE_INTEGER;
+      if (aOrder === bOrder) {
+        return 0;
+      }
+      return aOrder - bOrder;
+    });
     const requirementMap = new Map();
-    const visited = new Set();
     for (const requirement of source) {
-      if (!requirement) continue;
-      const key = requirement.id ?? requirement.key;
+      const key = requirement?.id ?? requirement?.key;
+      if (typeof key === 'undefined' || key === null) {
+        continue;
+      }
       requirementMap.set(key, requirement);
     }
     const ordered = [];
-    for (const id of order) {
-      if (visited.has(id)) continue;
-      const match = requirementMap.get(id);
-      if (match) {
-        ordered.push(match);
-        visited.add(id);
+    const visited = new Set();
+    const hidden = new Set();
+    for (const entry of preferenceEntries) {
+      if (!entry || typeof entry !== 'object') {
+        continue;
       }
+      const id = entry.id ?? entry.requirementId ?? entry.key;
+      if (typeof id === 'undefined' || id === null || visited.has(id)) {
+        continue;
+      }
+      visited.add(id);
+      if (!requirementMap.has(id)) {
+        continue;
+      }
+      if (entry.visible === false) {
+        hidden.add(id);
+        continue;
+      }
+      ordered.push(requirementMap.get(id));
     }
     for (const requirement of source) {
-      const key = requirement.id ?? requirement.key;
-      if (visited.has(key)) continue;
+      const key = requirement?.id ?? requirement?.key;
+      if (typeof key === 'undefined' || key === null) {
+        continue;
+      }
+      if (visited.has(key)) {
+        continue;
+      }
+      if (hidden.has(key)) {
+        continue;
+      }
       ordered.push(requirement);
       visited.add(key);
     }
     return ordered;
+  },
+  normalizeGridPreferences(preferences) {
+    return normalizeGridPreferences(preferences);
+  },
+  hydrateGridPreferencesFromLocalStorage() {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(GRID_COLUMNS_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      const normalized = this.normalizeGridPreferences(parsed);
+      this._gridPreferencesHydrating = true;
+      this.gridPreferences = normalized;
+      this._gridPreferencesHydrating = false;
+    } catch (error) {
+      console.warn('Failed to load grid column preferences from localStorage', error);
+    }
+  },
+  async hydrateGridPreferencesFromDatabase() {
+    if (!this.db) {
+      return;
+    }
+    const settingsTable = this.db.settings;
+    if (!settingsTable || typeof settingsTable.get !== 'function') {
+      return;
+    }
+    try {
+      const record = await settingsTable.get(GRID_COLUMNS_SETTING_ID);
+      if (!record) {
+        return;
+      }
+      const payload = record?.value && typeof record.value === 'object' ? record.value : record;
+      const normalized = this.normalizeGridPreferences(payload);
+      this._gridPreferencesHydrating = true;
+      this.gridPreferences = normalized;
+      this._gridPreferencesHydrating = false;
+      this.writeGridPreferencesToLocalStorage(normalized);
+    } catch (error) {
+      console.warn('Failed to load grid column preferences from database', error);
+    }
+  },
+  writeGridPreferencesToLocalStorage(preferences) {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+    try {
+      window.localStorage.setItem(GRID_COLUMNS_STORAGE_KEY, JSON.stringify(preferences));
+    } catch (error) {
+      console.warn('Failed to persist grid column preferences to localStorage', error);
+    }
+  },
+  writeGridPreferencesToDatabase(preferences) {
+    const settingsTable = this.db?.settings;
+    if (!settingsTable || typeof settingsTable.put !== 'function') {
+      return;
+    }
+    Promise.resolve(settingsTable.put({ id: GRID_COLUMNS_SETTING_ID, value: preferences })).catch(error => {
+      console.warn('Failed to persist grid column preferences to database', error);
+    });
+  },
+  persistGridPreferences(preferences = this.gridPreferences, options = {}) {
+    const { skipSet = false, skipNormalize = false } = options;
+    const normalized = skipNormalize ? preferences : this.normalizeGridPreferences(preferences);
+    if (!skipSet) {
+      const currentSerialized = JSON.stringify(this.gridPreferences || {});
+      const nextSerialized = JSON.stringify(normalized || {});
+      if (currentSerialized !== nextSerialized) {
+        this._gridPreferencesHydrating = true;
+        this.gridPreferences = normalized;
+        this._gridPreferencesHydrating = false;
+      }
+    }
+    this.writeGridPreferencesToLocalStorage(normalized);
+    this.writeGridPreferencesToDatabase(normalized);
+  },
+  applyGridColumnPreferences() {
+    const normalized = this.normalizeGridPreferences(this.gridPreferences);
+    const requirementMap = new Map();
+    if (Array.isArray(this.requirements)) {
+      for (const requirement of this.requirements) {
+        if (!requirement) {
+          continue;
+        }
+        const id = requirement.id ?? requirement.key;
+        if (typeof id === 'undefined' || id === null || requirementMap.has(id)) {
+          continue;
+        }
+        requirementMap.set(id, true);
+      }
+    }
+    const sortedPreferences = Array.isArray(normalized.visibleRequirements)
+      ? [...normalized.visibleRequirements].sort((a, b) => {
+          const aOrder = Number.isFinite(a?.order) ? a.order : Number.MAX_SAFE_INTEGER;
+          const bOrder = Number.isFinite(b?.order) ? b.order : Number.MAX_SAFE_INTEGER;
+          if (aOrder === bOrder) {
+            return 0;
+          }
+          return aOrder - bOrder;
+        })
+      : [];
+    const nextVisible = [];
+    const seen = new Set();
+    for (const entry of sortedPreferences) {
+      if (!entry || typeof entry !== 'object') {
+        continue;
+      }
+      const id = entry.id ?? entry.requirementId ?? entry.key;
+      if (typeof id === 'undefined' || id === null || !requirementMap.has(id) || seen.has(id)) {
+        continue;
+      }
+      nextVisible.push({
+        id,
+        visible: entry.visible !== false,
+        order: nextVisible.length
+      });
+      seen.add(id);
+    }
+    for (const id of requirementMap.keys()) {
+      if (seen.has(id)) {
+        continue;
+      }
+      nextVisible.push({
+        id,
+        visible: true,
+        order: nextVisible.length
+      });
+      seen.add(id);
+    }
+    const nextPreferences = {
+      infoColumns: normalized.infoColumns,
+      visibleRequirements: nextVisible
+    };
+    const currentSerialized = JSON.stringify(this.gridPreferences || {});
+    const nextSerialized = JSON.stringify(nextPreferences);
+    const changed = currentSerialized !== nextSerialized;
+    if (changed) {
+      this._gridPreferencesHydrating = true;
+      this.gridPreferences = nextPreferences;
+      this._gridPreferencesHydrating = false;
+    }
+    if (!this._gridPreferencesReady) {
+      this._gridPreferencesReady = true;
+    }
+    if (changed) {
+      this.persistGridPreferences(nextPreferences, { skipSet: true, skipNormalize: true });
+    }
   },
   editorForm: {
     status: 'Pending',
@@ -1007,6 +1283,17 @@ const v2DashboardAppDefinition = () => ({
     this.filters = normalizedFilters;
     this.persistFilters(this.filters);
     this.updateUrlFilters(this.filters);
+    this.hydrateGridPreferencesFromLocalStorage();
+    this.$watch(
+      () => this.gridPreferences,
+      value => {
+        if (!this._gridPreferencesReady || this._gridPreferencesHydrating) {
+          return;
+        }
+        this.persistGridPreferences(value);
+      },
+      { deep: true }
+    );
     this.$watch(
       'filters',
       value => {
@@ -1019,18 +1306,22 @@ const v2DashboardAppDefinition = () => ({
     this.initializeDarkMode();
     this.exporter = {
       exportFilteredCSV: (employees, requirements, employeeRequirements) => {
+        const sourceRequirements = Array.isArray(requirements) ? requirements : this.requirements;
         const rows = Array.isArray(employeeRequirements) && employeeRequirements.every(entry => Array.isArray(entry?.requirements))
           ? employeeRequirements
-          : this._exportRowsCache || this.buildExportRows(employees, requirements, employeeRequirements);
+          : this._exportRowsCache || this.buildExportRows(employees, sourceRequirements, employeeRequirements);
         this._exportRowsCache = null;
-        return exportFilteredCSV(employees, requirements, rows, this.gridColumnOrder());
+        const visibleRequirements = this.gridOrderedRequirements(sourceRequirements);
+        return exportFilteredCSV(employees, visibleRequirements, rows, this.gridColumnOrder());
       },
       exportFilteredJSON: (employees, requirements, employeeRequirements) => {
+        const sourceRequirements = Array.isArray(requirements) ? requirements : this.requirements;
         const rows = Array.isArray(employeeRequirements) && employeeRequirements.every(entry => Array.isArray(entry?.requirements))
           ? employeeRequirements
-          : this._exportRowsCache || this.buildExportRows(employees, requirements, employeeRequirements);
+          : this._exportRowsCache || this.buildExportRows(employees, sourceRequirements, employeeRequirements);
         this._exportRowsCache = null;
-        return exportFilteredJSON(employees, requirements, rows, this.gridColumnOrder());
+        const visibleRequirements = this.gridOrderedRequirements(sourceRequirements);
+        return exportFilteredJSON(employees, visibleRequirements, rows, this.gridColumnOrder());
       }
     };
     this.$watch(
@@ -1079,6 +1370,7 @@ const v2DashboardAppDefinition = () => ({
       this.lastCloudSync = this.readLastCloudSync();
       this.db = await openDatabase();
       await ensureSeedRequirements(this.db);
+      await this.hydrateGridPreferencesFromDatabase();
       if (this.cloudAvailable) {
         try {
           await this.syncFromCloud();
@@ -2600,6 +2892,7 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       if (requirementsStoreInstance) {
         requirementsStoreInstance.all = [...requirements];
       }
+      this.applyGridColumnPreferences();
       this.ensureBulkRequirement();
       this.employeeRequirements = employeeRequirements;
       this.refreshRequirementMap();
