@@ -895,12 +895,21 @@ const v2DashboardAppDefinition = () => ({
     }
     return columns;
   },
+  gridInfoColumnCount() {
+    const orderDefinition = this.gridColumnOrder();
+    const infoOrder = Array.isArray(orderDefinition?.info) ? orderDefinition.info : [];
+    if (infoOrder.length) {
+      return infoOrder.length;
+    }
+    return this.gridInfoColumns().length;
+  },
   gridRowCount() {
     return Array.isArray(this.filteredEmployees) ? this.filteredEmployees.length : 0;
   },
   gridColumnCount() {
+    const infoColumnCount = this.gridInfoColumnCount();
     const requirementCount = this.gridOrderedRequirements().length;
-    return 1 + requirementCount;
+    return infoColumnCount + requirementCount;
   },
   gridClampCell(row, col) {
     const rowCount = this.gridRowCount();
