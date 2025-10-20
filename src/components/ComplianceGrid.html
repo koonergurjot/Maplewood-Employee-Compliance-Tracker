@@ -16,7 +16,7 @@
       <div class="sticky top-0 z-30 col-start-1 row-start-1 bg-white border-b border-slate-200">
         <div class="h-12 flex items-center px-3 font-medium">Employee</div>
       </div>
-      <template x-for="(req, i) in requirements" :key="req.key">
+      <template x-for="(req, i) in requirements" :key="req.id">
         <div class="sticky top-0 z-20 bg-white border-b border-slate-200 h-12 flex items-center justify-center text-sm font-medium"
              :style="`grid-column: ${i+2};`" x-text="req.label"></div>
       </template>
@@ -35,12 +35,12 @@
           </div>
 
           <!-- Requirement cells -->
-          <template x-for="req in requirements" :key="emp.id + '_' + req.key">
+          <template x-for="req in requirements" :key="emp.id + '_' + req.id">
             <button class="border-b border-slate-200 h-12 w-full flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-sky-400"
-                    @click="toggle(emp.id, req.key)" :title="emp.name + ' • ' + req.label">
+                    @click="toggle($event, emp.id, req.id)" :title="emp.name + ' • ' + req.label">
               <span class="px-2 py-0.5 rounded-full text-xs"
-                    :class="statusClass(state[emp.id]?.[req.key] ?? 'pending')"
-                    x-text="labelFor(state[emp.id]?.[req.key] ?? 'pending')"></span>
+                    :class="cellClass(emp.id, req.id)"
+                    x-text="cellLabel(emp.id, req.id)"></span>
             </button>
           </template>
         </template>
