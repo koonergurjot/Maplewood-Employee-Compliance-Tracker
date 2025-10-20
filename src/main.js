@@ -86,6 +86,7 @@ import {
   generateId,
   mapPositionStatus,
   getDb,
+  getDexie,
   listEmployees,
   listRequirements,
   getEmployeeRequirement,
@@ -120,6 +121,19 @@ const DEFAULT_FILTER_STATE = {
   search: '',
   analytics: null
 };
+
+const UI_COMPACT_KEY = 'maplewood:ui:compact';
+const hasLocalStorage = typeof localStorage !== 'undefined';
+
+Alpine.store('ui', {
+  compact: hasLocalStorage && localStorage.getItem(UI_COMPACT_KEY) === '1',
+  persist() {
+    if (!hasLocalStorage) {
+      return;
+    }
+    localStorage.setItem(UI_COMPACT_KEY, this.compact ? '1' : '0');
+  }
+});
 
 let seniorityImporterModulePromise = null;
 
@@ -838,6 +852,10 @@ const v2DashboardAppDefinition = () => ({
     requirementId: null,
     style: ''
   },
+  gridActiveCell: {
+    row: 0,
+    col: 0
+  },
   gridColumnOrder() {
     const requirementIds = Array.isArray(this.requirements)
       ? this.requirements
@@ -891,6 +909,134 @@ const v2DashboardAppDefinition = () => ({
       infoIndex += 1;
     }
     return columns;
+  },
+  gridInfoColumnCount() {
+    const orderDefinition = this.gridColumnOrder();
+    const infoOrder = Array.isArray(orderDefinition?.info) ? orderDefinition.info : [];
+    if (infoOrder.length) {
+      return infoOrder.length;
+    }
+    return this.gridInfoColumns().length;
+  },
+  gridRowCount() {
+    return Array.isArray(this.filteredEmployees) ? this.filteredEmployees.length : 0;
+  },
+  gridColumnCount() {
+    const infoColumnCount = this.gridInfoColumnCount();
+    const requirementCount = this.gridOrderedRequirements().length;
+    return infoColumnCount + requirementCount;
+  },
+  gridClampCell(row, col) {
+    const rowCount = this.gridRowCount();
+    const colCount = this.gridColumnCount();
+    if (rowCount <= 0 || colCount <= 0) {
+      return { row: 0, col: 0, valid: false };
+    }
+    const maxRow = rowCount - 1;
+    const maxCol = colCount - 1;
+    const nextRow = Math.min(Math.max(Number(row) || 0, 0), maxRow);
+    const nextCol = Math.min(Math.max(Number(col) || 0, 0), maxCol);
+    return { row: nextRow, col: nextCol, valid: true };
+  },
+  gridCellTabIndex(row, col) {
+    return this.gridActiveCell.row === row && this.gridActiveCell.col === col ? 0 : -1;
+  },
+  setGridActiveCell(row, col, options = {}) {
+    const { focus = false } = options;
+    const clamped = this.gridClampCell(row, col);
+    this.gridActiveCell = { row: clamped.row, col: clamped.col };
+    if (focus && clamped.valid) {
+      this.$nextTick(() => {
+        const cell = this.findGridCell(clamped.row, clamped.col);
+        if (cell) {
+          cell.focus();
+        }
+      });
+    }
+  },
+  ensureGridActiveCellInBounds({ focus = false } = {}) {
+    const clamped = this.gridClampCell(this.gridActiveCell.row, this.gridActiveCell.col);
+    if (!clamped.valid) {
+      this.gridActiveCell = { row: 0, col: 0 };
+      return;
+    }
+    this.setGridActiveCell(clamped.row, clamped.col, { focus });
+  },
+  findGridCell(row, col) {
+    const grid = this.$refs?.requirementsGrid;
+    if (!grid) {
+      return null;
+    }
+    return grid.querySelector(`[data-row-index="${row}"][data-col-index="${col}"]`);
+  },
+  focusGridCell(row, col) {
+    this.setGridActiveCell(row, col, { focus: true });
+  },
+  focusNextCell() {
+    if (this.gridRowCount() === 0 || this.gridColumnCount() === 0) {
+      return;
+    }
+    const maxRow = this.gridRowCount() - 1;
+    const maxCol = this.gridColumnCount() - 1;
+    let { row, col } = this.gridActiveCell;
+    if (col < maxCol) {
+      col += 1;
+    } else if (row < maxRow) {
+      row += 1;
+      col = 0;
+    } else {
+      row = maxRow;
+      col = maxCol;
+    }
+    this.focusGridCell(row, col);
+  },
+  focusPrevCell() {
+    if (this.gridRowCount() === 0 || this.gridColumnCount() === 0) {
+      return;
+    }
+    const maxCol = this.gridColumnCount() - 1;
+    let { row, col } = this.gridActiveCell;
+    if (col > 0) {
+      col -= 1;
+    } else if (row > 0) {
+      row -= 1;
+      col = maxCol;
+    } else {
+      row = 0;
+      col = 0;
+    }
+    this.focusGridCell(row, col);
+  },
+  focusUpCell() {
+    if (this.gridRowCount() === 0 || this.gridColumnCount() === 0) {
+      return;
+    }
+    const targetRow = Math.max(this.gridActiveCell.row - 1, 0);
+    this.focusGridCell(targetRow, this.gridActiveCell.col);
+  },
+  focusDownCell() {
+    if (this.gridRowCount() === 0 || this.gridColumnCount() === 0) {
+      return;
+    }
+    const maxRow = this.gridRowCount() - 1;
+    const targetRow = Math.min(this.gridActiveCell.row + 1, maxRow);
+    this.focusGridCell(targetRow, this.gridActiveCell.col);
+  },
+  handleGridFocusIn(event) {
+    const rawTarget = event?.target;
+    if (!rawTarget || typeof rawTarget.closest !== 'function') {
+      return;
+    }
+    const target = rawTarget.closest('[data-row-index][data-col-index]');
+    if (!target) {
+      return;
+    }
+    const row = Number.parseInt(target.getAttribute('data-row-index'), 10);
+    const col = Number.parseInt(target.getAttribute('data-col-index'), 10);
+    if (Number.isNaN(row) || Number.isNaN(col)) {
+      return;
+    }
+    this.setGridActiveCell(row, col);
   },
   gridInfoCellText(employee, key) {
     if (!employee) {
@@ -964,6 +1110,7 @@ const v2DashboardAppDefinition = () => ({
   lastCloudSync: '',
   importDrawer: {
     open: false,
+    pcFullscreen: false,
     mode: 'employees',
     file: null,
     fileName: '',
@@ -1068,6 +1215,25 @@ const v2DashboardAppDefinition = () => ({
         }
       }
     );
+    this.$watch(
+      () => this.filteredEmployees.length,
+      () => {
+        this.ensureGridActiveCellInBounds();
+      }
+    );
+    this.$watch(
+      () => this.requirements.length,
+      () => {
+        this.ensureGridActiveCellInBounds();
+      }
+    );
+    this.$watch(
+      () => this.gridColumnCount(),
+      () => {
+        this.ensureGridActiveCellInBounds();
+      }
+    );
+    this.ensureGridActiveCellInBounds();
     this.resetAddRequirementForm();
     this.resetAddEmployeeForm();
     this.bootstrap();
@@ -1348,6 +1514,7 @@ const v2DashboardAppDefinition = () => ({
     this.importDrawer.commitDisabled = true;
     this.importDrawer.commitLocalDisabled = true;
     this.importDrawer.submitDisabled = true;
+    this.importDrawer.pcFullscreen = false;
     this.updateImportDrawerCommitState();
     if (this.$refs.importFileInput) {
       this.$refs.importFileInput.value = '';
@@ -1898,6 +2065,43 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       }
     }
   },
+  promptAdd(kind) {
+    const configMap = {
+      role: { lookupKey: 'roles', label: 'role', formKey: 'role' },
+      status: { lookupKey: 'statuses', label: 'status', formKey: 'status' },
+      position: { lookupKey: 'employmentTypes', label: 'employment type', formKey: 'employmentType' },
+      employmentType: { lookupKey: 'employmentTypes', label: 'employment type', formKey: 'employmentType' }
+    };
+    const config = configMap[kind];
+    if (!config) {
+      return;
+    }
+    const promptLabel = config.label || kind;
+    const input = typeof window !== 'undefined' ? window.prompt(`Add new ${promptLabel}…`) : null;
+    if (!input) {
+      return;
+    }
+    const value = typeof input === 'string' ? input.trim() : '';
+    if (!value) {
+      return;
+    }
+    const lookups = this.employeeLookups || {};
+    const currentOptions = Array.isArray(lookups[config.lookupKey]) ? lookups[config.lookupKey] : [];
+    const normalizedValue = value.toLowerCase();
+    const alreadyExists = currentOptions.some(option =>
+      typeof option === 'string' && option.trim().toLowerCase() === normalizedValue
+    );
+    const updatedOptions = alreadyExists ? currentOptions : [...currentOptions, value].sort((a, b) => a.localeCompare(b));
+    const nextLookups = { ...lookups, [config.lookupKey]: updatedOptions };
+    this.employeeLookups = nextLookups;
+    if (config.lookupKey === 'roles') {
+      this.roleOptions = updatedOptions;
+    }
+    this.form[config.formKey] = value;
+    if (config.lookupKey === 'employmentTypes') {
+      this.form.positionStatus = mapPositionStatus(value) || this.form.positionStatus;
+    }
+  },
   resetAddEmployeeForm() {
     const lookups = this.employeeLookups || {
       roles: DEFAULT_ROLE_LOOKUPS,
@@ -2150,9 +2354,92 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       return;
     }
 
+    const cascadeDeleteLocally = async () => {
+      const resolveStore = tableName => {
+        if (typeof this.db.table === 'function') {
+          try {
+            return this.db.table(tableName);
+          } catch (error) {
+            console.warn(`Failed to access ${tableName} via table()`, error);
+          }
+        }
+        return this.db[tableName];
+      };
+
+      try {
+        await this.db.transaction('rw', this.db.employees, this.db.employeeRequirements, async () => {
+          const employeesStore = resolveStore('employees');
+          const employeeRequirementsStore = resolveStore('employeeRequirements');
+
+          if (employeeRequirementsStore) {
+            let cascadeHandled = false;
+            if (typeof employeeRequirementsStore.where === 'function') {
+              const DexieInstance = getDexie();
+              if (DexieInstance && typeof DexieInstance.maxKey !== 'undefined') {
+                try {
+                  await employeeRequirementsStore
+                    .where('[employeeId+requirementId]')
+                    .between([employeeId], [employeeId, DexieInstance.maxKey], true, true)
+                    .delete();
+                  cascadeHandled = true;
+                } catch (deleteError) {
+                  console.warn('Compound index cascade delete failed; falling back to filter', deleteError);
+                }
+              }
+            }
+
+            if (!cascadeHandled) {
+              if (typeof employeeRequirementsStore.filter === 'function') {
+                const collection = employeeRequirementsStore.filter(record => record?.employeeId === employeeId);
+                if (typeof collection.delete === 'function') {
+                  await collection.delete();
+                } else {
+                  const matches = await collection.toArray();
+                  const ids = matches
+                    .map(record => record?.id)
+                    .filter(id => id != null);
+                  if (ids.length > 0) {
+                    if (typeof employeeRequirementsStore.bulkDelete === 'function') {
+                      await employeeRequirementsStore.bulkDelete(ids);
+                    } else if (typeof employeeRequirementsStore.delete === 'function') {
+                      await Promise.all(ids.map(id => employeeRequirementsStore.delete(id)));
+                    }
+                  }
+                }
+              } else if (typeof employeeRequirementsStore.toArray === 'function') {
+                const records = await employeeRequirementsStore.toArray();
+                const ids = records
+                  .filter(record => record?.employeeId === employeeId)
+                  .map(record => record?.id)
+                  .filter(id => id != null);
+                if (ids.length > 0) {
+                  if (typeof employeeRequirementsStore.bulkDelete === 'function') {
+                    await employeeRequirementsStore.bulkDelete(ids);
+                  } else if (typeof employeeRequirementsStore.delete === 'function') {
+                    await Promise.all(ids.map(id => employeeRequirementsStore.delete(id)));
+                  }
+                }
+              }
+            }
+          }
+
+          if (employeesStore?.delete) {
+            await employeesStore.delete(employeeId);
+          }
+        });
+      } catch (transactionError) {
+        console.warn('Failed to cascade delete employee locally', transactionError);
+      }
+    };
+
+    await cascadeDeleteLocally();
+
     this.employees = this.employees.filter(emp => emp?.id !== employeeId);
     this.filteredEmployees = this.filteredEmployees.filter(emp => emp?.id !== employeeId);
     this.selectedEmployees = this.selectedEmployees.filter(id => id !== employeeId);
+
+    this.employeeRequirements = this.employeeRequirements.filter(record => record?.employeeId !== employeeId);
+    this.refreshRequirementMap();
 
     if (this.profilePanel.employeeId === employeeId) {
       this.closeProfile();
