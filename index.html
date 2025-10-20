@@ -222,7 +222,7 @@
               <div class="filters-grid">
                 <label class="filter-field" aria-label="Filter by role">
                 <span class="filter-label">Role</span>
-                <select multiple size="4" class="input" x-model="filters.roles" @change="applyFilters">
+                <select multiple size="4" class="input" x-model="filters.roles" @change="onFiltersChanged">
                   <template x-if="!roleOptions.length">
                     <option disabled value="">No roles available</option>
                   </template>
@@ -233,7 +233,7 @@
               </label>
               <label class="filter-field" aria-label="Filter by employee status">
                 <span class="filter-label">Status</span>
-                <select class="input" x-model="filters.status" @change="applyFilters">
+                <select class="input" x-model="filters.status" @change="onFiltersChanged">
                   <template x-for="option in statusOptions" :key="option.value">
                     <option :value="option.value" x-text="option.label"></option>
                   </template>
@@ -241,7 +241,7 @@
               </label>
               <label class="filter-field" aria-label="Filter by compliance percentage">
                 <span class="filter-label">Compliance %</span>
-                <select class="input" x-model="filters.compliance" @change="applyFilters">
+                <select class="input" x-model="filters.compliance" @change="onFiltersChanged">
                   <template x-for="option in complianceOptions" :key="option.value">
                     <option :value="option.value" x-text="option.label"></option>
                   </template>
@@ -250,13 +250,13 @@
               <label class="filter-field" aria-label="Filter by expiration window">
                 <span class="filter-label">Expiring soon</span>
                 <div class="toggle-row">
-                  <input id="expiring-toggle" type="checkbox" class="toggle" x-model="filters.expiringSoon" @change="applyFilters" />
+                  <input id="expiring-toggle" type="checkbox" class="toggle" x-model="filters.expiringSoon" @change="onFiltersChanged" />
                   <label class="toggle-label" for="expiring-toggle">Within 30 days</label>
                 </div>
               </label>
               <label class="filter-field filter-wide" aria-label="Search employees">
                 <span class="filter-label">Search</span>
-                <input type="search" class="input" placeholder="Search by name" x-model="filters.search" @input.debounce.200ms="applyFilters" />
+                <input type="search" class="input" placeholder="Search by name" x-model="filters.search" @input.debounce.200ms="onFiltersChanged" />
               </label>
               </div>
               <div class="filters-footer">

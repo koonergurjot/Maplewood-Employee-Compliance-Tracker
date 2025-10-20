@@ -18,10 +18,27 @@
     </div>
   </template>
 
-  <div class="grid-scroll" role="region" aria-label="Scrollable requirements table" x-show="!loading && filteredEmployees.length">
-    <table class="min-w-full text-sm text-slate-700 requirements-table">
+  <div
+    class="grid-scroll"
+    role="region"
+    aria-label="Scrollable requirements table"
+    x-show="!loading && filteredEmployees.length"
+    x-init="handleGridWindowChange(filteredEmployees.map(employee => employee.id))"
+    @grid-window-changed.window="handleGridWindowChange($event.detail?.visibleIds || [])"
+  >
+    <table class="min-w-full text-sm text-slate-700 requirements-table has-selection-column">
       <thead class="text-xs uppercase tracking-wide text-slate-500">
         <tr>
+          <th scope="col" class="sticky-select sticky-header checkbox-cell">
+            <input
+              type="checkbox"
+              class="checkbox-input"
+              x-ref="selectAllCheckbox"
+              :checked="areAllVisibleSelected()"
+              @change="toggleSelectAll($event.target.checked)"
+              aria-label="Select all visible employees"
+            />
+          </th>
           <th scope="col" class="sticky left-0 z-10 bg-white px-4 py-3 text-left">Employee</th>
           <template x-for="req in gridOrderedRequirements()" :key="req.id">
             <th class="px-4 py-3 text-left whitespace-nowrap" x-text="req.name"></th>
@@ -30,7 +47,17 @@
       </thead>
       <tbody class="divide-y divide-slate-200">
         <template x-for="employee in filteredEmployees" :key="employee.id">
-          <tr class="bg-white">
+          <tr class="bg-white" :class="{ 'row-selected': isEmployeeSelected(employee.id) }">
+            <td class="checkbox-cell sticky-select">
+              <input
+                type="checkbox"
+                class="checkbox-input"
+                :checked="isEmployeeSelected(employee.id)"
+                @change="toggleEmployeeSelection(employee.id, $event.target.checked)"
+                @click.stop
+                :aria-label="`Select ${employee.fullName || (employee.firstName + ' ' + employee.lastName)}`"
+              />
+            </td>
             <th scope="row" class="sticky left-0 z-10 bg-white px-4 py-3 align-top">
               <div class="flex items-start gap-3">
                 <div class="relative h-8 w-8 shrink-0 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-semibold">

@@ -748,6 +748,9 @@ const v2DashboardAppDefinition = () => ({
   },
   filteredEmployees: [],
   selectedEmployees: [],
+  visibleEmployeeWindow: [],
+  _visibleEmployeeWindowKey: '',
+  _selectAllSyncHandle: null,
   bulk: {
     requirementId: '',
     action: '',
@@ -1012,6 +1015,7 @@ const v2DashboardAppDefinition = () => ({
       value => {
         this.persistFilters(value);
         this.updateUrlFilters(value);
+        this.requestSelectAllSync();
       },
       { deep: true }
     );
@@ -1178,6 +1182,7 @@ const v2DashboardAppDefinition = () => ({
         container.dataset.alpineInitialized = 'true';
       }
       this.hydrateBulkActions();
+      this.requestSelectAllSync();
     });
   },
   hydrateImportDrawer() {
@@ -2152,6 +2157,10 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.employees = this.employees.filter(emp => emp?.id !== employeeId);
     this.filteredEmployees = this.filteredEmployees.filter(emp => emp?.id !== employeeId);
     this.selectedEmployees = this.selectedEmployees.filter(id => id !== employeeId);
+    this.setVisibleEmployeeWindow(
+      this.filteredEmployees.map(emp => emp?.id).filter(id => id !== null && typeof id !== 'undefined')
+    );
+    this.requestSelectAllSync();
 
     if (this.profilePanel.employeeId === employeeId) {
       this.closeProfile();
@@ -2834,9 +2843,13 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     const requirement = this.requirements.find(req => req.id === this.bulk.requirementId);
     return requirement ? requirement.name : 'Select a requirement';
   },
+  onFiltersChanged() {
+    this.applyFilters();
+  },
   syncSelectedEmployees() {
     if (!Array.isArray(this.selectedEmployees) || this.selectedEmployees.length === 0) {
       this.selectedEmployees = [];
+      this.requestSelectAllSync();
       return;
     }
     const visibleIds = new Set(this.filteredEmployees.map(employee => employee.id));
@@ -2844,6 +2857,53 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     if (next.length !== this.selectedEmployees.length) {
       this.selectedEmployees = next;
     }
+    this.requestSelectAllSync();
+  },
+  currentVisibleEmployeeIds() {
+    if (Array.isArray(this.visibleEmployeeWindow) && this.visibleEmployeeWindow.length) {
+      return this.visibleEmployeeWindow;
+    }
+    return this.filteredEmployees
+      .map(employee => employee?.id)
+      .filter(id => id !== null && typeof id !== 'undefined');
+  },
+  setVisibleEmployeeWindow(ids) {
+    const normalized = Array.isArray(ids)
+      ? Array.from(new Set(ids.filter(id => id !== null && typeof id !== 'undefined')))
+      : [];
+    const key = normalized.join('|');
+    if (key === this._visibleEmployeeWindowKey) {
+      return;
+    }
+    this._visibleEmployeeWindowKey = key;
+    this.visibleEmployeeWindow = normalized;
+    this.requestSelectAllSync();
+  },
+  handleGridWindowChange(ids) {
+    if (Array.isArray(ids) && ids.length) {
+      this.setVisibleEmployeeWindow(ids);
+    } else if (this.visibleEmployeeWindow.length) {
+      this.setVisibleEmployeeWindow([]);
+    }
+  },
+  requestSelectAllSync() {
+    if (this._selectAllSyncHandle) {
+      clearTimeout(this._selectAllSyncHandle);
+    }
+    this._selectAllSyncHandle = setTimeout(() => {
+      this._selectAllSyncHandle = null;
+      this.$nextTick(() => this.syncSelectAllCheckbox());
+    }, 50);
+  },
+  syncSelectAllCheckbox() {
+    const checkbox = this.$refs?.selectAllCheckbox;
+    if (!checkbox) {
+      return;
+    }
+    const allSelected = this.areAllVisibleSelected();
+    const someSelected = this.hasSomeVisibleSelected();
+    checkbox.checked = allSelected;
+    checkbox.indeterminate = !allSelected && someSelected;
   },
   isEmployeeSelected(employeeId) {
     return this.selectedEmployees.includes(employeeId);
@@ -2856,9 +2916,10 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     } else if (this.isEmployeeSelected(employeeId)) {
       this.selectedEmployees = this.selectedEmployees.filter(id => id !== employeeId);
     }
+    this.requestSelectAllSync();
   },
   toggleSelectAll(checked) {
-    const visibleIds = this.filteredEmployees.map(employee => employee.id);
+    const visibleIds = this.currentVisibleEmployeeIds();
     if (checked) {
       const unique = new Set([...this.selectedEmployees, ...visibleIds]);
       this.selectedEmployees = Array.from(unique);
@@ -2866,18 +2927,21 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       const visibleSet = new Set(visibleIds);
       this.selectedEmployees = this.selectedEmployees.filter(id => !visibleSet.has(id));
     }
+    this.requestSelectAllSync();
   },
   areAllVisibleSelected() {
-    if (!this.filteredEmployees.length) {
+    const visibleIds = this.currentVisibleEmployeeIds();
+    if (!visibleIds.length) {
       return false;
     }
-    return this.filteredEmployees.every(employee => this.isEmployeeSelected(employee.id));
+    return visibleIds.every(id => this.isEmployeeSelected(id));
   },
   hasSomeVisibleSelected() {
-    if (!this.filteredEmployees.length) {
+    const visibleIds = this.currentVisibleEmployeeIds();
+    if (!visibleIds.length) {
       return false;
     }
-    return this.filteredEmployees.some(employee => this.isEmployeeSelected(employee.id));
+    return visibleIds.some(id => this.isEmployeeSelected(id));
   },
   clearSelectedEmployees() {
     if (!this.selectedEmployees.length) {
@@ -2885,6 +2949,7 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     }
     this.selectedEmployees = [];
     this.resetBulkForm({ preserveRequirement: true });
+    this.requestSelectAllSync();
   },
   resetBulkForm(options = {}) {
     const { preserveRequirement = false } = options;
@@ -3503,6 +3568,10 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       }
       return true;
     });
+    const visibleIds = this.filteredEmployees
+      .map(employee => employee?.id)
+      .filter(id => id !== null && typeof id !== 'undefined');
+    this.setVisibleEmployeeWindow(visibleIds);
     this.updateStoreFilteredEmployees();
     this.syncSelectedEmployees();
   },
