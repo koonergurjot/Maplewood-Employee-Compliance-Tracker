@@ -59,7 +59,7 @@
                 <div class="flex items-center gap-2">
                   <button
                     type="button"
-                    class="text-slate-400 hover:text-slate-600"
+                    class="action-chip action-chip--icon focus-ring text-slate-500 hover:text-slate-700"
                     @click.stop="openProfile(employee.id)"
                     title="Employee details"
                   >
@@ -67,7 +67,7 @@
                   </button>
                   <button
                     type="button"
-                    class="text-xs font-medium text-rose-600 hover:text-rose-700"
+                    class="action-chip action-chip--danger focus-ring text-xs font-medium text-rose-600 hover:text-rose-700"
                     title="Delete employee"
                     @click.stop="confirmAndDeleteEmployee(employee.id)"
                   >
@@ -77,7 +77,7 @@
               </div>
             </th>
             <template x-for="req in gridOrderedRequirements()" :key="req.id">
-              <td class="px-4 py-3 align-top">
+              <td class="px-4 py-3 align-top requirement-cell">
                 <div x-data="requirementCell(employee.id, req.id)" x-init="init()" class="flex items-center gap-2">
                   <input
                     type="checkbox"

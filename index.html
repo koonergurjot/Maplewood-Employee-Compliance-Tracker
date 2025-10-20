@@ -156,6 +156,107 @@
       background: rgba(239, 68, 68, 0.95);
       border-bottom-right-radius: 0.5rem;
     }
+
+    .filters-card .filter-interactive {
+      border-radius: 0.75rem;
+      transition: box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+    }
+
+    .filters-card .filter-interactive:hover {
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    }
+
+    .dark .filters-card .filter-interactive:hover {
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.55);
+    }
+
+    .filters-card .filter-interactive:focus-visible {
+      background-color: #fff;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35), 0 6px 20px rgba(15, 23, 42, 0.15);
+    }
+
+    .dark .filters-card .filter-interactive:focus-visible {
+      background-color: rgba(15, 23, 42, 0.85);
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.5), 0 8px 24px rgba(15, 23, 42, 0.7);
+    }
+
+    .requirements-table td.requirement-cell {
+      transition: background-color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .requirements-table td.requirement-cell:hover {
+      background-color: rgba(15, 23, 42, 0.04);
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+    }
+
+    .requirements-table td.requirement-cell:focus-within {
+      background-color: rgba(37, 99, 235, 0.12);
+      box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.25);
+    }
+
+    .dark .requirements-table td.requirement-cell:hover {
+      background-color: rgba(148, 163, 184, 0.16);
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.35);
+    }
+
+    .dark .requirements-table td.requirement-cell:focus-within {
+      background-color: rgba(59, 130, 246, 0.2);
+      box-shadow: inset 0 0 0 2px rgba(96, 165, 250, 0.5);
+    }
+
+    .action-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.25rem;
+      border-radius: 0.75rem;
+      padding: 0.35rem 0.65rem;
+      transition: background-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+    }
+
+    .action-chip--icon {
+      padding: 0.35rem;
+      width: 2rem;
+      height: 2rem;
+    }
+
+    .action-chip:hover {
+      background-color: rgba(15, 23, 42, 0.05);
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+    }
+
+    .dark .action-chip:hover {
+      background-color: rgba(148, 163, 184, 0.16);
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.6);
+    }
+
+    .action-chip:focus-visible {
+      background-color: rgba(37, 99, 235, 0.12);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35), 0 6px 18px rgba(15, 23, 42, 0.18);
+    }
+
+    .dark .action-chip:focus-visible {
+      background-color: rgba(96, 165, 250, 0.18);
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.5), 0 8px 22px rgba(15, 23, 42, 0.75);
+    }
+
+    .action-chip--danger:hover {
+      background-color: rgba(248, 113, 113, 0.14);
+    }
+
+    .dark .action-chip--danger:hover {
+      background-color: rgba(248, 113, 113, 0.2);
+    }
+
+    .action-chip--danger:focus-visible {
+      background-color: rgba(248, 113, 113, 0.2);
+      box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.45), 0 8px 22px rgba(244, 63, 94, 0.32);
+    }
+
+    .dark .action-chip--danger:focus-visible {
+      background-color: rgba(248, 113, 113, 0.25);
+      box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.6), 0 10px 26px rgba(15, 23, 42, 0.78);
+    }
   </style>
 </head>
 <body x-data="AppStore()" data-app="compliance-tracker">
@@ -222,7 +323,7 @@
               <div class="filters-grid">
                 <label class="filter-field" aria-label="Filter by role">
                 <span class="filter-label">Role</span>
-                <select multiple size="4" class="input" x-model="filters.roles" @change="applyFilters">
+                <select multiple size="4" class="input focus-ring filter-interactive" x-model="filters.roles" @change="applyFilters">
                   <template x-if="!roleOptions.length">
                     <option disabled value="">No roles available</option>
                   </template>
@@ -233,7 +334,7 @@
               </label>
               <label class="filter-field" aria-label="Filter by employee status">
                 <span class="filter-label">Status</span>
-                <select class="input" x-model="filters.status" @change="applyFilters">
+                <select class="input focus-ring filter-interactive" x-model="filters.status" @change="applyFilters">
                   <template x-for="option in statusOptions" :key="option.value">
                     <option :value="option.value" x-text="option.label"></option>
                   </template>
@@ -241,7 +342,7 @@
               </label>
               <label class="filter-field" aria-label="Filter by compliance percentage">
                 <span class="filter-label">Compliance %</span>
-                <select class="input" x-model="filters.compliance" @change="applyFilters">
+                <select class="input focus-ring filter-interactive" x-model="filters.compliance" @change="applyFilters">
                   <template x-for="option in complianceOptions" :key="option.value">
                     <option :value="option.value" x-text="option.label"></option>
                   </template>
@@ -250,19 +351,19 @@
               <label class="filter-field" aria-label="Filter by expiration window">
                 <span class="filter-label">Expiring soon</span>
                 <div class="toggle-row">
-                  <input id="expiring-toggle" type="checkbox" class="toggle" x-model="filters.expiringSoon" @change="applyFilters" />
+                  <input id="expiring-toggle" type="checkbox" class="toggle focus-ring" x-model="filters.expiringSoon" @change="applyFilters" />
                   <label class="toggle-label" for="expiring-toggle">Within 30 days</label>
                 </div>
               </label>
               <label class="filter-field filter-wide" aria-label="Search employees">
                 <span class="filter-label">Search</span>
-                <input type="search" class="input" placeholder="Search by name" x-model="filters.search" @input.debounce.200ms="applyFilters" />
+                <input type="search" class="input focus-ring filter-interactive" placeholder="Search by name" x-model="filters.search" @input.debounce.200ms="applyFilters" />
               </label>
               </div>
               <div class="filters-footer">
                 <div class="filters-actions" style="display:flex;align-items:center;gap:0.75rem;">
-                  <button type="button" class="btn ghost" @click="resetFilters">Reset filters</button>
-                  <button type="button" class="btn ghost" @click="copyFiltersLink">Copy link</button>
+                  <button type="button" class="btn ghost focus-ring filter-interactive" @click="resetFilters">Reset filters</button>
+                  <button type="button" class="btn ghost focus-ring filter-interactive" @click="copyFiltersLink">Copy link</button>
                 </div>
                 <div class="filters-meta" x-show="filters.roles.length || filters.status !== 'all' || filters.compliance !== 'all' || filters.expiringSoon || filters.search || filters.analytics">
                   <span class="text-muted">Filters active</span>
