@@ -1109,6 +1109,7 @@ const v2DashboardAppDefinition = () => ({
   lastCloudSync: '',
   importDrawer: {
     open: false,
+    pcFullscreen: false,
     mode: 'employees',
     file: null,
     fileName: '',
@@ -1512,6 +1513,7 @@ const v2DashboardAppDefinition = () => ({
     this.importDrawer.commitDisabled = true;
     this.importDrawer.commitLocalDisabled = true;
     this.importDrawer.submitDisabled = true;
+    this.importDrawer.pcFullscreen = false;
     this.updateImportDrawerCommitState();
     if (this.$refs.importFileInput) {
       this.$refs.importFileInput.value = '';
