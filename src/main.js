@@ -8,7 +8,7 @@ import addEmployeeModalTemplate from './v2/add-employee-modal.html?raw';
 import addRequirementModalTemplate from './v2/add-requirement-modal.html?raw';
 import bulkActionsTemplate from './v2/bulk-actions.html?raw';
 import activityTimelineTemplate from './v2/activity-timeline.html?raw';
-import employeeProfileTemplate from './v2/employee-profile.html?raw';
+import profileDrawerTemplate from './v2/profile-drawer.html?raw';
 import {
   approveImport as approveSupabaseImport,
   getClient as getSupabaseClient,
@@ -4555,11 +4555,13 @@ async function bootApp() {
   Alpine.start();
 
   registerServiceWorker();
-}
 
   try {
     const importerModule = await loadSeniorityImporterModule();
-    if (importerModule && typeof importerModule.registerSeniorityImporter === 'function') {
+    if (
+      importerModule &&
+      typeof importerModule.registerSeniorityImporter === 'function'
+    ) {
       const getDb = initialDatabase ? () => initialDatabase : () => openDatabase();
       importerModule.registerSeniorityImporter({
         getDb,
@@ -4569,7 +4571,7 @@ async function bootApp() {
   } catch (error) {
     console.error('Failed to configure seniority importer', error);
   }
-}
+  }
 
 bootApp()
   .then(() => {
