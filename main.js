@@ -2273,7 +2273,7 @@ const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev
               store.selectedEmployeeIds = [];
             }
 
-            const friendlyMessage = 'We couldn\'t access the local dashboard database. Private browsing or low device storage can block offline data. Reload in a standard window or free up space, then try again.';
+            const friendlyMessage = "We couldn't access the local dashboard database. Private browsing or low device storage can block offline data. Reload in a standard window or free up space, then try again.";
             this.loadError = friendlyMessage;
 
             showFallback();
