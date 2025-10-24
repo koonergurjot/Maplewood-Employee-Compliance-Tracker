@@ -40,3 +40,15 @@ test('falls back to complete when requirement has been completed', () => {
 
   assert.equal(label, 'Complete');
 });
+
+test('returns complete for completed requirements even if expired', () => {
+  const { link, options } = withNow({
+    status: 'Pending',
+    expiresOn: '2024-01-20',
+    completedOn: '2024-01-15'
+  });
+
+  const label = statusLabelForLink(link, options);
+
+  assert.equal(label, 'Complete');
+});

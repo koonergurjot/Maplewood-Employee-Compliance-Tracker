@@ -26,13 +26,12 @@ export function statusLabelForLink(link, options = {}) {
   }
 
   const now = normalizeNow(options.now);
+  if (link.completedOn || status === 'Completed') {
+    return 'Complete';
+  }
   const expiresOn = parseDate(link.expiresOn);
   if (expiresOn && expiresOn < now) {
     return 'Expired';
-  }
-
-  if (link.completedOn) {
-    return 'Complete';
   }
 
   return 'Pending';
