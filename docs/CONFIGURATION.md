@@ -1,6 +1,6 @@
 # Configuration
 
-This project does not require a build step. To customize behavior, adjust the options in `onboarding.js` and `commands.js`.
+Before adjusting any configuration, make sure the production bundle is created with the required Vite build (`npm run build`). To deploy that output or learn more about hosting options, see the [deployment guide](./DEPLOYMENT.md). Once the build is in place, you can customize runtime behavior through the options in `onboarding.js` and `commands.js`.
 
 ## Prerequisites
 
