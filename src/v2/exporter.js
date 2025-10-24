@@ -1,3 +1,5 @@
+import { normalizeStatus } from '../logic/analytics.js';
+
 const DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   year: 'numeric',
   month: '2-digit',
@@ -26,18 +28,53 @@ function formatDate(value) {
   }
 }
 
-function formatRequirementCell(record) {
+export function formatRequirementStatus(record, options = {}) {
+  const referenceDate =
+    options.now instanceof Date && !Number.isNaN(options.now.getTime())
+      ? options.now
+      : new Date();
+
   if (!record) {
     return 'Pending';
   }
-  const expiresOn = record.expiresOn ? new Date(record.expiresOn) : null;
-  if (expiresOn && !Number.isNaN(expiresOn.getTime()) && expiresOn < new Date()) {
+
+  const rawStatus = typeof record.status === 'string' ? record.status.trim() : '';
+  const loweredStatus = rawStatus.toLowerCase();
+
+  if (loweredStatus === 'notrequired' || loweredStatus === 'not required') {
+    return 'Not Required';
+  }
+
+  const normalizedStatus = normalizeStatus(rawStatus);
+
+  if (normalizedStatus === 'Exempt') {
+    return 'Exempt';
+  }
+
+  const expiresOn =
+    record.expiresOn instanceof Date
+      ? record.expiresOn
+      : record.expiresOn
+        ? new Date(record.expiresOn)
+        : null;
+
+  if (expiresOn && !Number.isNaN(expiresOn.getTime()) && expiresOn < referenceDate) {
     return 'Expired';
   }
-  if (record.completedOn) {
+
+  if (normalizedStatus === 'Completed' || record.completedOn) {
     return 'Complete';
   }
+
+  if (normalizedStatus && normalizedStatus !== 'Pending' && normalizedStatus !== 'NotCompleted') {
+    return normalizedStatus;
+  }
+
   return 'Pending';
+}
+
+function formatRequirementCell(record, options) {
+  return formatRequirementStatus(record, options);
 }
 
 function toCsvValue(value) {
