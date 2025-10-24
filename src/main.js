@@ -103,6 +103,7 @@ import {
   evaluateRequirementState,
   normalizeStatus
 } from './logic/analytics.js';
+import { statusLabelForLink } from './logic/status-label.js';
 
 const DEFAULT_ROLE_LOOKUPS = ['LPN', 'RCA', 'Rec', 'Receptionist', 'ADP Rec', 'ADP LPN', 'Other'];
 const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
@@ -183,18 +184,7 @@ const employeesStore = {
     return record || null;
   },
   statusLabel(link) {
-    if (!link) {
-      return 'Pending';
-    }
-    const now = new Date();
-    const expiresOn = link.expiresOn ? new Date(link.expiresOn) : null;
-    if (expiresOn && !Number.isNaN(expiresOn.getTime()) && expiresOn < now) {
-      return 'Expired';
-    }
-    if (link.completedOn) {
-      return 'Complete';
-    }
-    return 'Pending';
+    return statusLabelForLink(link);
   },
   async recordActivity(employeeId, requirementId, completedOn) {
     try {
