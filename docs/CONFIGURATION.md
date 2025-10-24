@@ -36,7 +36,7 @@ Existing workbooks will contain legacy `NotCompleted` rows for requirements that
 
 1. (Optional) Export your data for backup via **Export → JSON**.
 2. Select the affected employees in the grid (or rely on the automatic role match) and open **Settings → Column Settings → Role Templates**.
-3. Choose the relevant template and apply it. All matching employee/requirement pairs are normalised—excluded items become `NotRequired`, while previously excluded items that are now required revert to `NotCompleted` so progress can be tracked.
+3. Choose the relevant template and apply it. All matching employee/requirement pairs are normalized—excluded items become `NotRequired`, while previously excluded items that are now required revert to `NotCompleted` so progress can be tracked.
 4. Repeat for each role-specific template until the dashboard KPIs reflect the desired scope.
 
 ## Backups
