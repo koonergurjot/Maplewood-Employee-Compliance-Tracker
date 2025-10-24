@@ -13,7 +13,7 @@ The app is fully client-side and uses no environment variables. If deploying to 
 
 ## Customizing Columns
 
-Mappings for spreadsheet columns are defined in `autoMapColumns.test.js`. Update the arrays to support additional formats.
+Mappings for spreadsheet columns are defined alongside the importer logic in `main.js` (see the `autoMapColumns` helper). Update that canonical mapping to support additional formats.
 
 ## Requirement Templates
 
