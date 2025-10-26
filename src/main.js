@@ -4262,8 +4262,6 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
     this.setEmployeeRequirement(row);
     this.refreshAnalytics();
     this.applyFilters();
-    await this.loadData();
-    this.applyFilters();
     const requirement = this.requirementById(reqId);
     const employee = this.employees.find(emp => emp.id === empId);
     const employeeName = employee
@@ -4480,6 +4478,9 @@ Mehak,BRAICH,LPN,Active,Part-Time,988
       this.employeeRequirements.push({ ...record });
     }
     this.employeeRequirementMap.set(key, { ...(this.employeeRequirementMap.get(key) || {}), ...record });
+    const employeesStoreInstance = Alpine.store('employees');
+    employeesStoreInstance?.cacheRequirementLink?.(record);
+    this._exportRowsCache = null;
   }
 });
 
