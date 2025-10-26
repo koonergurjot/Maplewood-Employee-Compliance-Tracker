@@ -306,6 +306,9 @@
   <button
     type="button"
     class="debug-hitbox-toggle"
+    hidden
+    aria-hidden="true"
+    tabindex="-1"
     x-data="{ active: false }"
     x-init="
       const sync = (event) => { active = !!(event.detail && event.detail.enabled); };

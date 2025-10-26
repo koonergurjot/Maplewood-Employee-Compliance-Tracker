@@ -110,7 +110,7 @@ const DEFAULT_STATUS_LOOKUPS = ['Active', 'Inactive'];
 const DEFAULT_EMPLOYMENT_TYPE_LOOKUPS = ['FT', 'PT', 'Casual'];
 const CLOUD_LAST_SYNC_STORAGE_KEY = 'maplewood:cloud:lastSync';
 
-const DEFAULT_APP_FLAGS = { USE_V2_MAIN: true };
+const DEFAULT_APP_FLAGS = { USE_V2_MAIN: true, ENABLE_DEBUG_HITBOXES: false };
 const V2_COMPONENT_REGISTRY_KEY = '__V2_ALPINE_COMPONENTS__';
 const ACTIVITY_TIMELINE_LIMIT = 100;
 const FILTERS_STORAGE_KEY = 'filters';
@@ -382,6 +382,88 @@ const existingFlags =
     : {};
 const appFlagsTarget = { ...DEFAULT_APP_FLAGS, ...existingFlags };
 
+const DEBUG_HITBOXES_FLAG_KEY = 'ENABLE_DEBUG_HITBOXES';
+let debugHitboxesModulePromise = null;
+
+function isDebugHitboxesFlagEnabled() {
+  const source = typeof window !== 'undefined' && window.APP_FLAGS ? window.APP_FLAGS : appFlagsTarget;
+  return Boolean(source && source[DEBUG_HITBOXES_FLAG_KEY]);
+}
+
+function getDebugHitboxToggleElement() {
+  if (typeof document === 'undefined' || typeof document.querySelector !== 'function') {
+    return null;
+  }
+  return document.querySelector('.debug-hitbox-toggle');
+}
+
+function disableActiveDebugHitboxes() {
+  if (typeof document !== 'undefined' && document.body && document.body.classList) {
+    document.body.classList.remove('debug-hitboxes');
+  }
+
+  if (
+    typeof window !== 'undefined' &&
+    window.__debugHitboxes &&
+    typeof window.__debugHitboxes.toggle === 'function'
+  ) {
+    try {
+      window.__debugHitboxes.toggle(false);
+    } catch (error) {
+      console.warn('Failed to disable debug hitboxes', error);
+    }
+  }
+}
+
+function ensureDebugHitboxesModuleLoaded() {
+  if (
+    debugHitboxesModulePromise ||
+    typeof window === 'undefined' ||
+    typeof document === 'undefined'
+  ) {
+    return debugHitboxesModulePromise;
+  }
+
+  debugHitboxesModulePromise = import('./debug-hitboxes.js')
+    .catch(error => {
+      console.error('Failed to load debug hitboxes module', error);
+      debugHitboxesModulePromise = null;
+    });
+
+  return debugHitboxesModulePromise;
+}
+
+function syncDebugHitboxToggleVisibility(enabled) {
+  const toggle = getDebugHitboxToggleElement();
+  if (!toggle) {
+    return;
+  }
+
+  toggle.hidden = !enabled;
+
+  if (!enabled) {
+    toggle.setAttribute('aria-hidden', 'true');
+    toggle.setAttribute('tabindex', '-1');
+  } else {
+    toggle.removeAttribute('aria-hidden');
+    toggle.removeAttribute('tabindex');
+  }
+}
+
+function syncDebugHitboxesFeature() {
+  const enabled = isDebugHitboxesFlagEnabled();
+  syncDebugHitboxToggleVisibility(enabled);
+
+  if (enabled) {
+    const promise = ensureDebugHitboxesModuleLoaded();
+    if (promise && typeof promise.then === 'function') {
+      promise.catch(() => {});
+    }
+  } else {
+    disableActiveDebugHitboxes();
+  }
+}
+
 if (typeof window !== 'undefined') {
   window.APP_FLAGS = new Proxy(appFlagsTarget, {
     set(target, property, value) {
@@ -392,6 +474,17 @@ if (typeof window !== 'undefined') {
         })
       );
       return true;
+    }
+  });
+
+  syncDebugHitboxesFeature();
+}
+
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener('app-flags:changed', (event) => {
+    const property = event?.detail?.property;
+    if (!property || property === DEBUG_HITBOXES_FLAG_KEY) {
+      syncDebugHitboxesFeature();
     }
   });
 }
