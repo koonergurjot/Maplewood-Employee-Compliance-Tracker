@@ -1570,35 +1570,160 @@ import { warnOnce } from './src/compat/deprecations.js';
     return { importedCount: employees.length, skippedRows };
   }
 
-  async function parseFile(file){
-    const name = file.name.toLowerCase();
+  function isWorkerCloneError(error){
+    if (!error) return false;
+
+    if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'DataCloneError'){
+      return true;
+    }
+
+    const code = typeof error.code === 'number' ? error.code : null;
+    if (code === 25){
+      return true;
+    }
+
+    const name = typeof error.name === 'string' ? error.name : '';
+    if (name === 'DataCloneError'){
+      return true;
+    }
+
+    const message = typeof error.message === 'string' ? error.message : '';
+    if (!message) return false;
+    if (/DataCloneError/i.test(message)) return true;
+    if (/could not be cloned/i.test(message)) return true;
+    if (/can not be cloned/i.test(message)) return true;
+    return false;
+  }
+
+  async function parseFile(file, options = {}){
+    const name = typeof file?.name === 'string' ? file.name.toLowerCase() : '';
+    const config = typeof options === 'object' && options !== null ? options : {};
+    const progressCallback = typeof config.onProgress === 'function' ? config.onProgress : null;
+    const chunkCallback = typeof config.onChunk === 'function' ? config.onChunk : null;
+
+    const invokeProgress = (percent, detail) => {
+      if (!progressCallback) return;
+      try {
+        progressCallback(percent, detail);
+      } catch (callbackError) {
+        console.warn('Parse progress callback failed', callbackError);
+      }
+    };
+
+    const invokeChunk = (payload) => {
+      if (!chunkCallback) return;
+      try {
+        chunkCallback(payload);
+      } catch (callbackError) {
+        console.warn('Parse chunk callback failed', callbackError);
+      }
+    };
+
     if (name.endsWith('.json')){
       const text = await file.text();
       const payload = JSON.parse(text);
       if (Array.isArray(payload.employees)) {
-        // Already in our shape
+        invokeProgress(100, { stage: 'parse', kind: 'json', rows: payload.employees.length, complete: true });
         return { rows: payload.employees, headers: extractHeaders(payload.employees), kind: 'json' };
       }
       if (Array.isArray(payload)){
+        invokeProgress(100, { stage: 'parse', kind: 'json', rows: payload.length, complete: true });
         return { rows: payload, headers: extractHeaders(payload), kind: 'json' };
       }
       throw new Error('JSON file must contain an array or {employees: []}');
     }
-    // CSV path
+
     if (!Papa){
       throw new Error('PapaParse not loaded; CSV import unavailable.');
     }
-    return new Promise((resolve, reject)=>{
+
+    const totalBytes = typeof file?.size === 'number' && Number.isFinite(file.size) ? file.size : null;
+
+    const parseCsv = (useWorker) => new Promise((resolve, reject) => {
+      const aggregatedRows = [];
+      let capturedHeaders = null;
+      let lastPercent = -1;
+
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        complete: (res)=> {
-          const headers = Array.isArray(res.meta?.fields) ? res.meta.fields : extractHeaders(res.data);
-          resolve({ rows: res.data, headers, kind: 'csv' });
+        worker: Boolean(useWorker),
+        chunk: (results) => {
+          const rows = Array.isArray(results.data) ? results.data : [];
+          if (rows.length){
+            aggregatedRows.push(...rows);
+          }
+
+          if (!capturedHeaders && Array.isArray(results.meta?.fields) && results.meta.fields.length){
+            capturedHeaders = results.meta.fields;
+          }
+
+          invokeChunk({ rows, meta: results.meta, worker: Boolean(useWorker) });
+
+          if (!progressCallback) return;
+
+          const cursor = typeof results?.meta?.cursor === 'number' ? results.meta.cursor : null;
+          let percent = null;
+
+          if (cursor != null && totalBytes){
+            percent = Math.round(Math.min(1, cursor / totalBytes) * 100);
+          } else if (lastPercent < 0) {
+            percent = 0;
+          }
+
+          if (percent != null && percent !== lastPercent){
+            lastPercent = percent;
+            invokeProgress(percent, {
+              stage: 'parse',
+              worker: Boolean(useWorker),
+              cursor,
+              totalBytes,
+              chunkRows: rows.length
+            });
+          }
         },
-        error: (err)=> reject(err)
+        complete: (res) => {
+          if (!capturedHeaders && Array.isArray(res.meta?.fields) && res.meta.fields.length){
+            capturedHeaders = res.meta.fields;
+          }
+
+          const finalRows = aggregatedRows.length ? aggregatedRows : (Array.isArray(res.data) ? res.data : []);
+          const headers = capturedHeaders || extractHeaders(finalRows);
+
+          invokeProgress(100, {
+            stage: 'parse',
+            worker: Boolean(useWorker),
+            totalBytes,
+            rows: finalRows.length,
+            complete: true
+          });
+
+          resolve({ rows: finalRows, headers, kind: 'csv' });
+        },
+        error: (err) => {
+          reject(err);
+        }
       });
     });
+
+    try {
+      return await parseCsv(true);
+    } catch (error) {
+      if (!isWorkerCloneError(error)){
+        throw error;
+      }
+
+      console.warn('Falling back to non-worker CSV parsing due to worker support issue.', error);
+      showToastMessage(
+        'Background parsing is not supported in this browser. Retrying without workers; performance may be reduced.',
+        'warning',
+        { duration: 6000 }
+      );
+
+      invokeProgress(0, { stage: 'parse', worker: false, fallback: true, reset: true });
+
+      return await parseCsv(false);
+    }
   }
 
   async function handleImport(input){
@@ -1607,15 +1732,94 @@ import { warnOnce } from './src/compat/deprecations.js';
     const store = getAppStore();
     const usingStoreProgress = Boolean(store && typeof store.setProgress === 'function' && typeof store.showToast === 'function');
     const progressReporter = usingStoreProgress ? null : (!isAlpineReady() ? createLegacyProgressReporter() : null);
+    const progressSession = (() => {
+      let reporterStarted = false;
+      let sessionActive = false;
+
+      const clampPercent = (value) => {
+        if (typeof value !== 'number' || !Number.isFinite(value)){
+          return 0;
+        }
+        return Math.max(0, Math.min(100, Math.round(value)));
+      };
+
+      const resolveMessage = (stage, options = {}) => {
+        if (options && typeof options.message === 'string' && options.message.trim()){
+          return options.message.trim();
+        }
+        const normalized = (stage || '').toString().toLowerCase();
+        if (normalized === 'parse'){
+          return 'Parsing file…';
+        }
+        return 'Importing…';
+      };
+
+      const ensureReporterStarted = () => {
+        if (!progressReporter || reporterStarted) return;
+        if (typeof progressReporter.start === 'function'){
+          progressReporter.start();
+          reporterStarted = true;
+        }
+      };
+
+      const updateReporter = (percent) => {
+        if (!progressReporter || typeof progressReporter.update !== 'function') return;
+        progressReporter.update(clampPercent(percent));
+      };
+
+      return {
+        start(stage, options = {}){
+          if (usingStoreProgress){
+            store.showToast({
+              type: 'progress',
+              message: resolveMessage(stage, options),
+              percent: 0
+            });
+            sessionActive = true;
+            return;
+          }
+          if (!progressReporter) return;
+          ensureReporterStarted();
+          updateReporter(0);
+          sessionActive = true;
+        },
+        update(stage, percent, options = {}){
+          if (usingStoreProgress){
+            store.showToast({
+              type: 'progress',
+              message: resolveMessage(stage, options),
+              percent: clampPercent(percent)
+            });
+            sessionActive = true;
+            return;
+          }
+          if (!progressReporter) return;
+          ensureReporterStarted();
+          updateReporter(percent);
+          sessionActive = true;
+        },
+        finish(){
+          if (usingStoreProgress && sessionActive){
+            if (typeof store.hideToast === 'function'){
+              store.hideToast();
+            }
+          } else if (progressReporter && typeof progressReporter.finish === 'function' && (sessionActive || reporterStarted)){
+            progressReporter.finish();
+          }
+          reporterStarted = false;
+          sessionActive = false;
+        }
+      };
+    })();
+
     const finalizeProgress = () => {
-      if(progressReporter && typeof progressReporter.finish === 'function'){
-        progressReporter.finish();
-      }
+      progressSession.finish();
     };
 
     let rows;
     let headers;
     let kind = 'csv';
+    let parsedRowCount = 0;
 
     const preflight = await runImportEnvironmentPreflight();
     if (!preflight.ok){
@@ -1652,8 +1856,32 @@ import { warnOnce } from './src/compat/deprecations.js';
       return;
     }
 
+    const getParseProgressMessage = () => {
+      if (parsedRowCount > 0){
+        return `Parsing file… (${parsedRowCount.toLocaleString()} rows processed)`;
+      }
+      return 'Parsing file…';
+    };
+
     try {
-      const parsed = await parseFile(file);
+      progressSession.start('parse', { message: getParseProgressMessage() });
+      const parsed = await parseFile(file, {
+        onChunk: (chunkInfo) => {
+          const chunkRows = Array.isArray(chunkInfo?.rows) ? chunkInfo.rows.length : 0;
+          if (chunkRows > 0){
+            parsedRowCount += chunkRows;
+          }
+        },
+        onProgress: (percent, detail) => {
+          if (detail && detail.reset){
+            parsedRowCount = 0;
+            progressSession.start('parse', { message: getParseProgressMessage() });
+            return;
+          }
+          progressSession.update('parse', percent, { message: getParseProgressMessage() });
+        }
+      });
+      progressSession.finish();
       rows = parsed.rows;
       headers = parsed.headers;
       kind = parsed.kind || kind;
@@ -1683,18 +1911,10 @@ import { warnOnce } from './src/compat/deprecations.js';
     updateMissingColumnsBanner([]);
 
     const handleProgress = (percent) => {
-      if(usingStoreProgress){
-        store.setProgress(percent);
-      } else if(progressReporter && typeof progressReporter.update === 'function'){
-        progressReporter.update(percent);
-      }
+      progressSession.update('import', percent);
     };
 
-    if(usingStoreProgress){
-      store.setProgress(0);
-    } else if(progressReporter && typeof progressReporter.start === 'function'){
-      progressReporter.start();
-    }
+    progressSession.start('import');
 
     try {
       const result = await importFromRows(rows, mapping, headers, { onProgress: handleProgress });
