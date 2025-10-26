@@ -1,6 +1,7 @@
 /** @type {import('@playwright/test').PlaywrightTestConfig} */
 const config = {
   testDir: 'tests',
+  testMatch: '**/*.spec.{ts,js}',
   timeout: 60000,
   use: {
     browserName: 'webkit',
