@@ -1,50 +1,19 @@
-let AsyncFunction = null;
+/**
+ * Browser compatibility audit
+ * ---------------------------
+ *
+ * We previously monkey patched `Function.prototype.call` because we thought
+ * WebKit returned `undefined` when invoking async functions via `.call()`.
+ * Manual verification (including the Playwright WebKit regression test added
+ * in tests/function-call.spec.ts) shows modern WebKit already follows the
+ * ECMAScript specification: async functions invoked with `.call()` return a
+ * Promise and synchronous functions continue to return their direct values.
+ *
+ * The only compatibility requirement we now track is to ensure `.call()` keeps
+ * those native semantics so synchronous utilities (for example the
+ * object-hasOwnProperty pattern used in the importer) do not become
+ * accidentally asynchronous.  No runtime shim is required anymore, and this
+ * module remains as documentation for that decision.
+ */
 
-try {
-  AsyncFunction = new Function('return Object.getPrototypeOf(async function () {}).constructor;')();
-} catch (error) {
-  AsyncFunction = null;
-}
-
-if (
-  typeof AsyncFunction === 'function' &&
-  AsyncFunction !== Function &&
-  !Function.prototype.__maplewoodPatchedCall
-) {
-  const originalCall = Function.prototype.call;
-
-  if (typeof originalCall === 'function') {
-    const functionToString = Function.prototype.toString;
-    const isAsyncFunction = fn => typeof fn === 'function' && fn instanceof AsyncFunction;
-    const isNativeFunction = fn => {
-      if (typeof fn !== 'function') {
-        return false;
-      }
-      try {
-        const source = Reflect.apply(functionToString, fn, []);
-        return /\[native code\]/.test(source);
-      } catch (error) {
-        return false;
-      }
-    };
-
-    Object.defineProperty(Function.prototype, '__maplewoodPatchedCall', {
-      value: true,
-      configurable: true
-    });
-
-    Function.prototype.call = function patchedFunctionCall(context, ...args) {
-      const result = Reflect.apply(originalCall, this, [context, ...args]);
-
-      if (isNativeFunction(this)) {
-        return result;
-      }
-
-      if (isAsyncFunction(this)) {
-        return Promise.resolve(result);
-      }
-
-      return Promise.resolve(result);
-    };
-  }
-}
+export {};
